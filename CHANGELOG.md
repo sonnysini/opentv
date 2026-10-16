@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.0 — 16 October 2026
+
+- **Big VOD catalogues no longer crash the app.** The Xtream film/series lists are streamed straight
+  into the database in batches instead of being parsed whole in memory, home rows are built with
+  bounded SQL queries, and titles the provider dropped are pruned. Tested with ~70k films and ~7.5k
+  series on a Fire TV Stick (heap stays around 150–200 MB).
+- **Gradual background catalogue sync.** The VOD catalogue refreshes 30 s after start when stale
+  (12 h), one sync at a time, with a bandwidth cap so live TV keeps playing; Films/Series show a live
+  "updating catalogue" counter.
+- **Switch whole categories off.** Settings → Categories (Live / Films / Series tabs, on-screen
+  filter, bulk on/off). A switched-off category is skipped at sync and removed from the library.
+- **"Italian only" and "International sport" switches** for live categories, rule-based so they
+  also apply to categories the provider adds later; a category switched back on by hand wins.
+- **What's on now in the player.** The channel banner shows the current programme (times, title,
+  progress, short synopsis) and what's on next, on open and on every channel change.
+
 ## 0.11.8
 
 - **Edit a saved provider.** Settings → Providers now has an **Edit** button on each provider, so you
