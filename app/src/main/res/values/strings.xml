@@ -428,6 +428,7 @@
     <string name="vod_no_movies_provider">This provider didn\'t return any movies.</string>
     <string name="vod_no_movies_add">Add a provider to see its movies here.</string>
     <string name="vod_loading_shows">Loading shows</string>
+    <string name="vod_sync_progress">Updating catalogue… %1$s movies · %2$s shows</string>
     <string name="vod_no_shows">No shows</string>
     <string name="vod_no_shows_provider">This provider didn\'t return any shows.</string>
     <string name="vod_no_shows_add">Add a provider to see its shows here.</string>
@@ -503,4 +504,17 @@
     <string name="settings_tmdb_save">Save key</string>
     <string name="settings_tmdb_saved">TMDB key saved</string>
     <string name="settings_tmdb_active">Active</string>
+    <string name="settings_categories_title">Categories</string>
+    <string name="settings_categories_subtitle">Switch off whole categories you never watch</string>
+    <string name="categories_desc">A switched-off category is not downloaded at all: less memory, a faster guide and faster syncs. Switching one back on downloads it again in the background.</string>
+    <string name="categories_filter_hint">Type to filter…</string>
+    <string name="categories_off_count">%1$d of %2$d off</string>
+    <string name="categories_all_off">Switch off all (%1$d)</string>
+    <string name="categories_all_on">Switch on all (%1$d)</string>
+    <string name="categories_none">No categories yet — they appear after the first sync.</string>
+    <string name="categories_no_match">No category matches the filter.</string>
+    <string name="categories_italian_only">Italian only</string>
+    <string name="categories_italian_only_desc">Switches off every foreign-language live category (by flag or name), including ones the provider adds later. You can still switch one back on below.</string>
+    <string name="categories_foreign_sport">International sport</string>
+    <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — events with foreign commentary.</string>
 </resources>

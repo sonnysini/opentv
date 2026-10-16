@@ -65,6 +65,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -101,6 +102,7 @@ import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
 import app.opentv.core.requestIgnoreBatteryOptimizations
 import app.opentv.data.model.Channel
+import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
@@ -113,6 +115,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -178,6 +182,9 @@ fun PlayerScreen(
     var resizeMode by remember { mutableIntStateOf(settings.playerResizeMode.value) }
 
     var controlsVisible by remember { mutableStateOf(true) }
+    // What's on the current channel right now and next, from the guide. Null when it has no guide.
+    var onAir by remember { mutableStateOf<OnAir?>(null) }
+    var clock by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var panel by remember { mutableStateOf(Panel.NONE) }
     var channelListVisible by remember { mutableStateOf(false) }
     var interaction by remember { mutableIntStateOf(0) }
@@ -274,6 +281,33 @@ fun PlayerScreen(
         val channel = graph.catalogRepository.channel(id) ?: return@LaunchedEffect
         variants = graph.catalogRepository.variants(channel)
         tuneTo(variants.firstOrNull { it.id == channel.id } ?: channel)
+    }
+
+    // Now/next for the channel on screen. Walks the channel's guide ids like the guide does (first
+    // one with programmes wins) and reloads when the current programme ends.
+    LaunchedEffect(currentId) {
+        onAir = null
+        val id = currentId ?: return@LaunchedEffect
+        val channel = variants.firstOrNull { it.id == id } ?: graph.catalogRepository.channel(id) ?: return@LaunchedEffect
+        while (true) {
+            val now = System.currentTimeMillis()
+            val upcoming = channel.epgCandidates.firstNotNullOfOrNull { epgId ->
+                runCatching { graph.epgRepository.upcoming(epgId, now, 2) }.getOrNull()?.takeIf { it.isNotEmpty() }
+            }.orEmpty()
+            val current = upcoming.firstOrNull()?.takeIf { it.startUtcMillis <= now }
+            val next = if (current != null) upcoming.getOrNull(1) else upcoming.firstOrNull()
+            onAir = if (current == null && next == null) null else OnAir(current, next)
+            val changeAt = (current?.endUtcMillis ?: next?.startUtcMillis) ?: (now + EPG_RETRY_MILLIS)
+            delay((changeAt - now).coerceIn(1_000L, EPG_RETRY_MILLIS))
+        }
+    }
+
+    // Keep the progress bar moving while the panel is on screen.
+    LaunchedEffect(controlsVisible) {
+        while (controlsVisible) {
+            clock = System.currentTimeMillis()
+            delay(15_000L)
+        }
     }
 
     // Sleep timer: when the armed deadline passes, stop and leave the player. Re-arming from
@@ -522,6 +556,11 @@ fun PlayerScreen(
                     Spacer(Modifier.height(12.dp))
                 }
 
+                onAir?.let { info ->
+                    OnAirPanel(info, clock)
+                    Spacer(Modifier.height(16.dp))
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (controller.isSeekable) {
                         BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
@@ -649,6 +688,74 @@ fun PlayerScreen(
         )
     }
 }
+
+/** The guide's current and following programme for the channel on screen; either may be missing. */
+private data class OnAir(val now: Programme?, val next: Programme?)
+
+/** "What's on" block in the player bar: title, times and progress, a short synopsis, then what's next. */
+@Composable
+private fun OnAirPanel(info: OnAir, clock: Long) {
+    Column(Modifier.widthIn(max = 900.dp)) {
+        info.now?.let { now ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${clockText(now.startUtcMillis)}–${clockText(now.endUtcMillis)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    now.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            val progress = if (now.durationMillis > 0) {
+                ((clock - now.startUtcMillis).toFloat() / now.durationMillis).coerceIn(0f, 1f)
+            } else 0f
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = 0.25f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(progress)
+                        .height(4.dp)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+            now.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    desc,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.8f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        info.next?.let { next ->
+            if (info.now != null) Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.guide_next_prefix, clockText(next.startUtcMillis), next.title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.65f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun clockText(utcMillis: Long): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(utcMillis))
 
 @Composable
 private fun ChannelListRow(
@@ -899,6 +1006,7 @@ private fun BarChip(
 }
 
 private const val CONTROLS_TIMEOUT_MILLIS = 5_000L
+private const val EPG_RETRY_MILLIS = 5 * 60_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 
 /** Maps a remote's number keys (top row and numeric keypad) to a digit, or null for other keys. */

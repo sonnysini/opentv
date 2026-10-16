@@ -18,6 +18,7 @@ import coil.memory.MemoryCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class OpenTvApp : Application(), ImageLoaderFactory {
@@ -96,6 +97,18 @@ class OpenTvApp : Application(), ImageLoaderFactory {
             appScope.launch { runCatching { app.opentv.sync.NasSync(graph).sync() } }
         }
 
+        // Movies + series in the background, a little after launch so the guide and the first
+        // channel get the bandwidth first. Only past the TTL, and rate-capped: by the time the user
+        // opens Movies the library is (being) filled in, without a wait or a hiccup on live TV.
+        appScope.launch {
+            delay(VOD_AUTOSTART_DELAY_MILLIS)
+            runCatching {
+                if (graph.catalogRepository.vodStale(System.currentTimeMillis())) {
+                    graph.catalogRepository.syncVodCatalogue(graph.sourceRepository.enabled(), System.currentTimeMillis())
+                }
+            }
+        }
+
         appScope.launch {
             val prefs = getSharedPreferences("opentv", MODE_PRIVATE)
             val seen = prefs.getInt("normalizer_version", 0)
@@ -111,3 +124,6 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         }
     }
 }
+
+/** How long after launch the background VOD sync waits before starting. */
+private const val VOD_AUTOSTART_DELAY_MILLIS = 30_000L

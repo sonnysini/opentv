@@ -71,7 +71,7 @@ class Converters {
         SeriesRule::class,
         Reminder::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -272,6 +272,24 @@ abstract class OpenTvDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v11 → v12: VOD pruning. Movies and series gain `lastSeenMillis`, the sync stamp that lets
+         * a refresh delete titles the provider dropped (channels already work this way). Without it
+         * the tables only ever grew. DEFAULT 0 matches the entity's @ColumnInfo(defaultValue), so
+         * existing rows count as "not yet seen" and the first full sync re-stamps them. Also indexes
+         * addedMillis/rating so the capped home rows stop sorting the whole library.
+         */
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `movies` ADD COLUMN `lastSeenMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `series` ADD COLUMN `lastSeenMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_movies_addedMillis` ON `movies` (`addedMillis`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_movies_rating` ON `movies` (`rating`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_series_addedMillis` ON `series` (`addedMillis`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_series_rating` ON `series` (`rating`)")
+            }
+        }
+
         fun build(context: Context): OpenTvDatabase =
             Room.databaseBuilder(context, OpenTvDatabase::class.java, "opentv.db")
                 // WAL keeps guide writes from blocking guide reads, so a background EPG
@@ -279,7 +297,7 @@ abstract class OpenTvDatabase : RoomDatabase() {
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addMigrations(
                     MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                    MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+                    MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
                 )
                 /*
                  * Pre-1.0 policy: schema changes drop and rebuild the database. Everything

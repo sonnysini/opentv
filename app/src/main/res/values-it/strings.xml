@@ -375,6 +375,7 @@
     <string name="vod_no_movies_provider">Questo provider non ha restituito alcun film.</string>
     <string name="vod_no_movies_add">Aggiungi un provider per vedere qui i suoi film.</string>
     <string name="vod_loading_shows">Caricamento serie</string>
+    <string name="vod_sync_progress">Aggiornamento catalogo… %1$s film · %2$s serie</string>
     <string name="vod_no_shows">Nessuna serie</string>
     <string name="vod_no_shows_provider">Questo provider non ha restituito alcuna serie.</string>
     <string name="vod_no_shows_add">Aggiungi un provider per vedere qui le sue serie.</string>
@@ -436,4 +437,17 @@
     <string name="settings_tmdb_save">Salva chiave</string>
     <string name="settings_tmdb_saved">Chiave TMDB salvata</string>
     <string name="settings_tmdb_active">Attiva</string>
+    <string name="settings_categories_title">Categorie</string>
+    <string name="settings_categories_subtitle">Spegni le categorie intere che non guardi mai</string>
+    <string name="categories_desc">Una categoria spenta non viene proprio scaricata: meno memoria, guida e sincronizzazione più veloci. Se la riaccendi viene riscaricata in background.</string>
+    <string name="categories_filter_hint">Scrivi per filtrare…</string>
+    <string name="categories_off_count">%1$d spente su %2$d</string>
+    <string name="categories_all_off">Spegni tutte (%1$d)</string>
+    <string name="categories_all_on">Accendi tutte (%1$d)</string>
+    <string name="categories_none">Ancora nessuna categoria: compaiono dopo la prima sincronizzazione.</string>
+    <string name="categories_no_match">Nessuna categoria corrisponde al filtro.</string>
+    <string name="categories_italian_only">Solo italiano</string>
+    <string name="categories_italian_only_desc">Spegne tutte le categorie live in altre lingue (da bandiera o nome), anche quelle che il provider aggiunge dopo. Puoi sempre riaccenderne una qui sotto.</string>
+    <string name="categories_foreign_sport">Sport internazionale</string>
+    <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>
 </resources>

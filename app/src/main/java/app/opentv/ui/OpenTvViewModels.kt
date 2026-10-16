@@ -191,6 +191,8 @@ class SourcesViewModel(app: Application) : AndroidViewModel(app) {
                     is CatalogRepository.SyncResult.Failed -> problems++
                 }
             }
+            // VOD in the background, off the refresh spinner (it can take minutes on big providers).
+            launch { runCatching { graph.catalogRepository.syncVodCatalogue(graph.sourceRepository.enabled(), now) } }
             val summary = graph.epgRepository.syncAll(now, force = true)
             problems += summary.feedsFailed
             runCatching { graph.recordingEngine.rescanSeriesRules() }
@@ -864,15 +866,12 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Recomputes the computed home rows (Recommended + by-genre) from a SINGLE scan of the library.
+     * Recomputes the computed home rows (Recommended + by-genre) with bounded queries.
      *
      * The reactive rows (recently-added, continue-watching) keep themselves current, so this only
-     * covers the computed feeds. On a 20k-title library the old version was the lag: it read the
-     * whole movie table three times over (recommended + movie genres, plus a profile-change reload)
-     * and again on every tab re-open. Now [allMovies]/[allSeries] are read once and reused for the
-     * recommended row and every genre row, off the main thread, and a `(profile, movieCount,
-     * seriesCount)` guard skips the work entirely unless the profile changed or the catalogue grew —
-     * so re-opening Movies/Shows is free and a post-sync refresh still fills the rows in.
+     * covers the computed feeds. A `(profile, movieCount, seriesCount)` guard skips the work
+     * entirely unless the profile changed or the catalogue size moved — so re-opening Movies/Shows
+     * is free and a post-sync refresh still fills the rows in.
      */
     fun loadHomeFeeds() {
         viewModelScope.launch {
@@ -889,18 +888,16 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
                     prev.movieCount == movieCount && prev.seriesCount == seriesCount
                 ) return@withLock
 
-                // One scan of each library (repo switches to IO), reused across every computed row.
-                val allMovies = runCatching { graph.catalogRepository.allMovies() }.getOrDefault(emptyList())
-                val allSeries = runCatching { graph.catalogRepository.allSeries() }.getOrDefault(emptyList())
-
+                // Each row is a bounded query (repo switches to IO) — the library is never loaded
+                // whole, which is what crashed low-RAM boxes on 300k-title providers.
                 _recommendedMovies.value = runCatching {
-                    graph.catalogRepository.recommendedMoviesFrom(allMovies, profileId)
+                    graph.catalogRepository.recommendedMovies(profileId)
                 }.getOrDefault(emptyList())
                 _movieGenreRows.value = runCatching {
-                    graph.catalogRepository.moviesByGenreFrom(allMovies)
+                    graph.catalogRepository.moviesByGenre()
                 }.getOrDefault(emptyList())
                 _seriesGenreRows.value = runCatching {
-                    graph.catalogRepository.seriesByGenreFrom(allSeries)
+                    graph.catalogRepository.seriesByGenre()
                 }.getOrDefault(emptyList())
 
                 loadedHomeFeeds = HomeFeedsKey(profileId, movieCount, seriesCount)
@@ -908,66 +905,71 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Movies + series load on demand — the first time the user opens Movies or Shows — rather than
-    // up front at login. A provider's 40,000-title VOD list is exactly what makes a first sync
-    // crawl, and most sessions only ever watch live TV. Loaded once per app run.
-    private val _vodLoading = MutableStateFlow(false)
-    val vodLoading: StateFlow<Boolean> = _vodLoading.asStateFlow()
+    // Movies + series load gradually in the background: the app starts a throttled sync shortly
+    // after launch (see OpenTvApp), the periodic worker refreshes it past the TTL, and opening
+    // Movies/Shows only kicks one off itself when nothing has run yet. Titles land batch by batch,
+    // so the rows fill in while it runs; [vodProgress] counts them for the "loading" strip.
+
+    /** The running VOD sync's progress (any trigger), or null when none is running. */
+    val vodProgress: StateFlow<CatalogRepository.VodProgress?> = graph.catalogRepository.vodProgress
+
+    val vodLoading: StateFlow<Boolean> =
+        vodProgress.map { it != null }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, vodProgress.value != null)
+
+    init {
+        // Rebuild the computed rows every [HOME_REFRESH_STEP] titles while a sync runs, and once
+        // when it ends — so a first load shows genre rows long before the last batch arrives.
+        viewModelScope.launch {
+            var lastStep = -1
+            vodProgress.collect { p ->
+                if (p == null) {
+                    if (lastStep >= 0) loadHomeFeeds()
+                    lastStep = -1
+                } else {
+                    val step = p.total / HOME_REFRESH_STEP
+                    if (step != lastStep) {
+                        if (lastStep >= 0) loadHomeFeeds()
+                        lastStep = step
+                    }
+                }
+            }
+        }
+    }
 
     @Volatile private var vodRequested = false
-
-    /** How long a fetched VOD catalogue is trusted before a warm launch re-syncs it. */
-    private val VOD_TTL_MILLIS = 12L * 60 * 60 * 1000  // 12 hours
 
     fun ensureVodLoaded() {
         if (vodRequested) return
         vodRequested = true
-        viewModelScope.launch { syncVodIfStale(force = false) }
+        viewModelScope.launch {
+            // An empty library means the user is staring at a spinner: no rate cap then.
+            val empty = runCatching {
+                graph.catalogRepository.movieCount() + graph.catalogRepository.seriesCount()
+            }.getOrDefault(0) == 0
+            syncVod(force = false, throttled = !empty)
+        }
     }
 
     /**
      * Force a fresh download of the movies/series catalogue, ignoring the freshness cache. Wired
      * to the pull-to-refresh / refresh action so the user always has a way to pull new titles in
-     * before the TTL lapses.
+     * before the TTL lapses. Uncapped: the user asked for it.
      */
     fun refreshVod() {
         vodRequested = true
-        viewModelScope.launch { syncVodIfStale(force = true) }
+        viewModelScope.launch { syncVod(force = true, throttled = false) }
     }
 
-    private suspend fun syncVodIfStale(force: Boolean) {
-        val now = System.currentTimeMillis()
-
-        // Warm-launch fast path. The catalogue is persisted in Room, so once it has been fetched
-        // there is no reason to re-download and re-upsert a 40k-title list on every launch — that
-        // was both the multi-minute "Loading movies & shows…" and the bandwidth hog that starved
-        // the live preview into buffering. When we synced recently and already have rows, skip the
-        // network entirely and just (re)build the home shelves off what is stored.
-        if (!force) {
-            val haveCatalogue = runCatching {
-                graph.catalogRepository.movieCount() + graph.catalogRepository.seriesCount()
-            }.getOrDefault(0) > 0
-            val last = settings.vodSyncedAtMillis
-            val fresh = last > 0 && now - last < VOD_TTL_MILLIS
-            if (haveCatalogue && fresh) {
-                loadHomeFeeds()
-                return
-            }
+    private suspend fun syncVod(force: Boolean, throttled: Boolean) {
+        runCatching {
+            graph.catalogRepository.syncVodCatalogue(
+                graph.sourceRepository.enabled(),
+                System.currentTimeMillis(),
+                force = force,
+                throttled = throttled,
+            )
         }
-
-        _vodLoading.value = true
-        val synced = StatusBus.during("Loading movies & shows…") {
-            runCatching {
-                for (source in graph.sourceRepository.enabled()) {
-                    graph.catalogRepository.syncVod(source, now)
-                }
-            }.isSuccess
-        }
-        _vodLoading.value = false
-        // Stamp the cache only when the fetch actually succeeded, so a failed sync retries on the
-        // next open instead of being remembered as "fresh" and leaving the user with no catalogue.
-        if (synced) settings.vodSyncedAtMillis = now
-        // The catalogue may have grown — recompute the computed home rows off the fresh data.
         loadHomeFeeds()
     }
 
@@ -1268,5 +1270,97 @@ class WebManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         server.stop()
+    }
+}
+
+/** Titles between home-row rebuilds while a VOD sync is still landing. */
+private const val HOME_REFRESH_STEP = 20_000
+
+/**
+ * Backs the Categories screen: every provider category of one type, each switchable off so it is
+ * never downloaded. Switching off purges the stored rows at once; switching back on is batched —
+ * one background refresh when the screen closes, rather than a re-download per toggle.
+ */
+class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
+    private val graph = ServiceLocator.get(app)
+
+    @androidx.compose.runtime.Immutable
+    data class Entry(val key: String, val label: String, val enabled: Boolean)
+
+    val kind = MutableStateFlow(StreamKind.LIVE)
+    val query = MutableStateFlow("")
+
+    /** Set once something is switched back on; the refresh runs in [onCleared]. */
+    @Volatile
+    private var needsRefresh = false
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val all: StateFlow<List<Entry>> =
+        kind.flatMapLatest { graph.catalogRepository.observeAllCategories(it) }
+            .combine(graph.settings.categoryRules) { categories, rules ->
+                // One entry per switch: folded live categories share a key and appear once.
+                val entries = LinkedHashMap<String, Entry>()
+                for (category in categories) {
+                    val key = CatalogRepository.categoryKey(category)
+                    entries.getOrPut(key) {
+                        Entry(key, CatalogRepository.categoryLabel(category), !rules.isOff(category))
+                    }
+                }
+                entries.values.toList()
+            }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** [all] narrowed by the search box — also the scope of "switch all off/on". */
+    val entries: StateFlow<List<Entry>> =
+        combine(all, query) { list, q ->
+            val needle = q.trim()
+            if (needle.isEmpty()) list else list.filter { it.label.contains(needle, ignoreCase = true) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Switched-off count across the whole type, ignoring the search box. */
+    val offCount: StateFlow<Int> =
+        all.map { list -> list.count { !it.enabled } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val totalCount: StateFlow<Int> =
+        all.map { it.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** Live language rules — the "Italian only" and "international sport" switches. */
+    val italianOnly: StateFlow<Boolean> = graph.settings.italianOnly
+    val foreignSportOff: StateFlow<Boolean> = graph.settings.foreignSportOff
+
+    fun selectKind(next: StreamKind) {
+        kind.value = next
+        query.value = ""
+    }
+
+    fun setItalianOnly(on: Boolean) = setLanguageRules(on, foreignSportOff.value)
+
+    fun setForeignSportOff(off: Boolean) = setLanguageRules(italianOnly.value, off)
+
+    private fun setLanguageRules(italianOnly: Boolean, foreignSportOff: Boolean) {
+        viewModelScope.launch {
+            val cameBack = runCatching {
+                graph.catalogRepository.setLanguageRules(italianOnly, foreignSportOff)
+            }.getOrDefault(false)
+            if (cameBack) needsRefresh = true
+        }
+    }
+
+    fun setEnabled(keys: Collection<String>, enabled: Boolean) {
+        if (keys.isEmpty()) return
+        val target = kind.value
+        val set = keys.toSet()
+        graph.catalogRepository.setCategoriesEnabled(target, set, enabled)
+        if (enabled) {
+            needsRefresh = true
+        } else {
+            viewModelScope.launch { runCatching { graph.catalogRepository.purgeCategories(target, set) } }
+        }
+    }
+
+    override fun onCleared() {
+        if (needsRefresh) app.opentv.data.work.SyncWorker.refreshNow(getApplication())
     }
 }

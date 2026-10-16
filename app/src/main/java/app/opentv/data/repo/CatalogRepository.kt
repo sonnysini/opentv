@@ -32,6 +32,15 @@ import app.opentv.data.remote.XtreamApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -144,6 +153,20 @@ class CatalogRepository(
         data class Failed(val reason: String, val cause: Throwable?) : SyncResult
     }
 
+    /** Titles written so far by the VOD sync that is running right now. */
+    @androidx.compose.runtime.Immutable
+    data class VodProgress(val movies: Int, val series: Int) {
+        val total: Int get() = movies + series
+    }
+
+    private val _vodProgress = MutableStateFlow<VodProgress?>(null)
+
+    /** The running VOD sync's progress, or null when none is running. Movies/Shows show it. */
+    val vodProgress: StateFlow<VodProgress?> = _vodProgress.asStateFlow()
+
+    /** One VOD sync at a time, whoever asks (launch auto-start, worker, Movies/Shows tab). */
+    private val vodMutex = Mutex()
+
     fun observeChannels(sourceId: Long? = null, categoryId: String? = null): Flow<List<Channel>> =
         channelDao.observe(sourceId, categoryId)
 
@@ -164,11 +187,87 @@ class CatalogRepository(
      * building" (channels exist) apart from "nothing loaded" (a failed or empty sync). */
     fun observeChannelCount(): Flow<Int> = channelDao.observeVisibleCount()
 
-    fun observeCategories(kind: StreamKind): Flow<List<Category>> = categoryDao.observe(kind)
+    /** Categories of [kind] the user has not switched off — what every rail and chip row shows. */
+    fun observeCategories(kind: StreamKind): Flow<List<Category>> =
+        categoryDao.observe(kind).combine(settings.categoryRules) { categories, rules ->
+            if (rules.isEmpty) categories else categories.filter { !rules.isOff(it) }
+        }
 
-    fun observeMovies(categoryId: String? = null): Flow<List<Movie>> = movieDao.observe(categoryId)
+    /** Every category of [kind], switched-off ones included — the Categories screen's list. */
+    fun observeAllCategories(kind: StreamKind): Flow<List<Category>> = categoryDao.observe(kind)
 
-    fun observeSeries(categoryId: String? = null): Flow<List<Series>> = seriesDao.observe(categoryId)
+    /**
+     * Switch categories (by [categoryKey]) on or off. Off takes effect for every later sync; call
+     * [purgeCategories] to drop what is already stored. On only clears the flag: the rows come
+     * back with the next sync, so a re-enabled VOD category marks the catalogue stale here.
+     */
+    fun setCategoriesEnabled(kind: StreamKind, keys: Set<String>, enabled: Boolean) {
+        val current = settings.disabledCategories.value
+        settings.setDisabledCategories(if (enabled) current - keys else current + keys)
+        // A live category switched on by hand stays on even if a language rule would drop it.
+        if (kind == StreamKind.LIVE) {
+            val forced = settings.categoryRules.value.forcedOn
+            settings.setForcedOnCategories(if (enabled) forced + keys else forced - keys)
+        }
+        if (enabled && kind != StreamKind.LIVE) settings.vodSyncedAtMillis = 0L
+    }
+
+    /**
+     * Sets the live language rules and purges what they now switch off. Turning a rule on also
+     * drops the hand-made "keep on" choices it covers, so "Italian only" means exactly that.
+     * Returns true when something may have come back on (the caller schedules a refresh).
+     */
+    suspend fun setLanguageRules(italianOnly: Boolean, foreignSportOff: Boolean): Boolean =
+        withContext(Dispatchers.IO) {
+            val before = settings.categoryRules.value
+            val after = before.copy(italianOnly = italianOnly, foreignSportOff = foreignSportOff)
+            val live = categoryDao.allByKind(StreamKind.LIVE)
+            val newlyRuled = live.filter { after.ruleHides(it.name) && !before.ruleHides(it.name) }
+                .mapTo(HashSet()) { categoryKey(it) }
+            settings.setForcedOnCategories(before.forcedOn - newlyRuled)
+            settings.setLanguageRules(italianOnly, foreignSportOff)
+            val rules = settings.categoryRules.value
+            val offNow = live.filter { rules.isOff(it) && !before.isOff(it) }.mapTo(HashSet()) { categoryKey(it) }
+            if (offNow.isNotEmpty()) purgeCategories(StreamKind.LIVE, offNow)
+            live.any { before.isOff(it) && !rules.isOff(it) }
+        }
+
+    /** Deletes the stored channels/titles of the categories behind [keys]. */
+    suspend fun purgeCategories(kind: StreamKind, keys: Set<String>) = withContext(Dispatchers.IO) {
+        categoryDao.allByKind(kind)
+            .filter { categoryKey(it) in keys }
+            .groupBy({ it.sourceId }, { it.id })
+            .forEach { (sourceId, ids) ->
+                ids.chunked(SQL_CHUNK).forEach { chunk ->
+                    when (kind) {
+                        StreamKind.LIVE -> channelDao.deleteInCategories(sourceId, chunk)
+                        StreamKind.MOVIE -> movieDao.deleteInCategories(sourceId, chunk)
+                        StreamKind.SERIES -> seriesDao.deleteInCategories(sourceId, chunk)
+                    }
+                }
+            }
+    }
+
+    /** Ids among [categories] that are switched off right now. */
+    private fun switchedOffIds(categories: List<Category>): Set<String> {
+        val rules = settings.categoryRules.value
+        if (rules.isEmpty) return emptySet()
+        return categories.filter { rules.isOff(it) }.mapTo(HashSet()) { it.id }
+    }
+
+    /**
+     * One category's films for the browse grid (capped at [BROWSE_LIMIT]); no category → nothing.
+     * There is deliberately no "every movie" Flow: on a 300k-title provider that alone is enough to
+     * run a low-RAM box out of memory, and it re-emitted on every sync batch.
+     */
+    fun observeMovies(categoryId: String?): Flow<List<Movie>> =
+        if (categoryId == null) flowOf(emptyList())
+        else movieDao.observeInCategory(categoryId, BROWSE_LIMIT).distinctUntilChanged()
+
+    /** One category's shows for the browse grid. See [observeMovies]. */
+    fun observeSeries(categoryId: String?): Flow<List<Series>> =
+        if (categoryId == null) flowOf(emptyList())
+        else seriesDao.observeInCategory(categoryId, BROWSE_LIMIT).distinctUntilChanged()
 
     fun observeEpisodes(sourceId: Long, seriesId: String): Flow<List<Episode>> =
         episodeDao.observeForSeries(sourceId, seriesId)
@@ -205,23 +304,14 @@ class CatalogRepository(
 
     // ---- Netflix-style home feeds ---------------------------------------------------------------
     // All local: derived from the catalogue already on disk plus the active profile's watch history.
-    // The plain catalogue rows (recently added) are Flows so they fill in live as a VOD sync lands;
-    // the computed rows (recommended, by-genre, more-like-this) are one-shot suspend reads, cheap
-    // enough to recompute on screen open over a few thousand titles (one in-memory pass each — a
-    // per-genre LIKE query would multiply round-trips and match substrings). A later UI agent wraps
-    // these into home rows and detail screens.
+    // Every row is a bounded SQL read — never a scan of the whole library into memory. A provider
+    // with 300k titles made the old "load everything, group in Kotlin" approach crash low-RAM boxes.
 
     /** "Recently Added" movies, newest first. Reactive. */
     fun recentlyAddedMovies(limit: Int = 30): Flow<List<Movie>> = movieDao.observeRecentlyAdded(limit)
 
     /** "Recently Added" series, newest first. Reactive. */
     fun recentlyAddedSeries(limit: Int = 30): Flow<List<Series>> = seriesDao.observeRecentlyAdded(limit)
-
-    /** Every movie, newest first — for a caller that wants to build its own groupings. */
-    suspend fun allMovies(): List<Movie> = withContext(Dispatchers.IO) { movieDao.all() }
-
-    /** Every series, newest first. */
-    suspend fun allSeries(): List<Series> = withContext(Dispatchers.IO) { seriesDao.all() }
 
     /** How many movies / series are on disk — a cheap COUNT the home screen uses to tell "the
      *  library grew" from "unchanged since last open" without loading every row. */
@@ -232,83 +322,78 @@ class CatalogRepository(
      * Movies grouped by genre for the by-genre home rows: the [maxGenres] biggest genres, each with
      * up to [perGenre] titles (newest first). A movie appears under every genre it lists — provider
      * genre strings are frequently multi-valued ("Action, Thriller" / "Action|Thriller"), so they
-     * are split on comma and pipe (see [splitGenres]).
+     * are split on comma and pipe (see [splitGenres]). Genre sizes come from a GROUP BY over the
+     * raw strings; each row is then one capped query.
      */
     suspend fun moviesByGenre(maxGenres: Int = 12, perGenre: Int = 30): List<GenreGroup<Movie>> =
-        withContext(Dispatchers.IO) { groupByGenre(movieDao.all(), Movie::genre, maxGenres, perGenre) }
+        withContext(Dispatchers.IO) {
+            topGenres(movieDao.genreCounts(), maxGenres).mapNotNull { genre ->
+                movieDao.byGenreNewest(genre, perGenre * 2)
+                    .filter { genre in splitGenres(it.genre) }
+                    .take(perGenre)
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { GenreGroup(genre, it) }
+            }
+        }
 
     /** Series grouped by genre for the by-genre home rows. See [moviesByGenre]. */
     suspend fun seriesByGenre(maxGenres: Int = 12, perGenre: Int = 30): List<GenreGroup<Series>> =
-        withContext(Dispatchers.IO) { groupByGenre(seriesDao.all(), Series::genre, maxGenres, perGenre) }
-
-    /**
-     * Movies grouped by genre from an ALREADY-LOADED list — the single-scan path the home screen
-     * uses. [VodViewModel.loadHomeFeeds] reads [allMovies] once and hands that one list to this, to
-     * [recommendedMoviesFrom], etc., so opening Movies scans the (20k-title) table once instead of
-     * once per row. Pure grouping, off the main thread. See [moviesByGenre] for the scanning variant.
-     */
-    suspend fun moviesByGenreFrom(all: List<Movie>, maxGenres: Int = 12, perGenre: Int = 30): List<GenreGroup<Movie>> =
-        withContext(Dispatchers.Default) { groupByGenre(all, Movie::genre, maxGenres, perGenre) }
-
-    /** Series grouped by genre from an already-loaded list — the single-scan path. See [moviesByGenreFrom]. */
-    suspend fun seriesByGenreFrom(all: List<Series>, maxGenres: Int = 12, perGenre: Int = 30): List<GenreGroup<Series>> =
-        withContext(Dispatchers.Default) { groupByGenre(all, Series::genre, maxGenres, perGenre) }
+        withContext(Dispatchers.IO) {
+            topGenres(seriesDao.genreCounts(), maxGenres).mapNotNull { genre ->
+                seriesDao.byGenreNewest(genre, perGenre * 2)
+                    .filter { genre in splitGenres(it.genre) }
+                    .take(perGenre)
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { GenreGroup(genre, it) }
+            }
+        }
 
     /**
      * "Recommended for you" — a simple, explainable genre-affinity heuristic, no ML.
      *
      * Tallies the genres of the movies this profile has watched or resumed, then returns the
      * highest-scoring UNWATCHED movies, where a movie's score is how many of its genres the profile
-     * favours (ties broken by rating, then recency). With no usable history — a fresh profile, or
-     * only watched movies that carry no genre — it falls back to top-rated, then recently-added.
+     * favours (ties broken by rating, then recency). Candidates are the best-rated titles of the
+     * profile's top genres, so only a few hundred rows are read. With no usable history — a fresh
+     * profile, or only watched movies that carry no genre — it falls back to top-rated.
      */
     suspend fun recommendedMovies(profileId: Long, limit: Int = 30): List<Movie> =
-        withContext(Dispatchers.IO) { recommendFrom(movieDao.all(), watchedMovieIds(profileId), limit) }
+        withContext(Dispatchers.IO) {
+            val watchedIds = watchedMovieIds(profileId)
+            val watched = watchedIds.toList().chunked(500).flatMap { movieDao.byIds(it) }
 
-    /**
-     * "Recommended for you" from an ALREADY-LOADED movie list — the single-scan path (see
-     * [recommendedMovies]). Only the profile's watch history is read from disk here; the movie
-     * library is the caller's [allMovies] list, shared with the genre rows so the home screen scans
-     * the (20k-title) table once for the whole home feed rather than once per row.
-     */
-    suspend fun recommendedMoviesFrom(all: List<Movie>, profileId: Long, limit: Int = 30): List<Movie> =
-        withContext(Dispatchers.IO) { recommendFrom(all, watchedMovieIds(profileId), limit) }
+            val affinity = HashMap<String, Int>()
+            for (movie in watched) {
+                for (genre in splitGenres(movie.genre)) affinity[genre] = (affinity[genre] ?: 0) + 1
+            }
+
+            suspend fun topRatedFallback(): List<Movie> =
+                movieDao.topRated(limit + watchedIds.size).filter { it.id !in watchedIds }.take(limit)
+
+            if (affinity.isEmpty()) return@withContext topRatedFallback()
+
+            val candidates = LinkedHashMap<Long, Movie>()
+            affinity.entries.sortedByDescending { it.value }.take(RECOMMEND_GENRES).forEach { (genre, _) ->
+                for (m in movieDao.byGenreTopRated(genre, limit * 3)) candidates.putIfAbsent(m.id, m)
+            }
+            val ranked = candidates.values
+                .filter { it.id !in watchedIds }
+                .map { it to genreScore(it.genre, affinity) }
+                .filter { it.second > 0 }
+                .sortedWith(
+                    compareByDescending<Pair<Movie, Int>> { it.second }
+                        .thenByDescending { it.first.rating ?: -1.0 }
+                        .thenByDescending { it.first.addedMillis },
+                )
+                .map { it.first }
+                .take(limit)
+
+            ranked.ifEmpty { topRatedFallback() }
+        }
 
     /** The movie ids this profile has watched or resumed — the input to the affinity heuristic. */
     private suspend fun watchedMovieIds(profileId: Long): Set<Long> =
         positionDao.forProfile(profileId).mapNotNull { movieIdFromMediaKey(it.mediaKey) }.toSet()
-
-    /** The pure genre-affinity ranking pass shared by [recommendedMovies] and [recommendedMoviesFrom]. */
-    private fun recommendFrom(all: List<Movie>, watchedMovieIds: Set<Long>, limit: Int): List<Movie> {
-        val byId = all.associateBy { it.id }
-
-        val affinity = HashMap<String, Int>()
-        for (id in watchedMovieIds) {
-            val watched = byId[id] ?: continue
-            for (genre in splitGenres(watched.genre)) affinity[genre] = (affinity[genre] ?: 0) + 1
-        }
-
-        val unwatched = all.filter { it.id !in watchedMovieIds }
-
-        fun topRatedFallback(): List<Movie> = unwatched
-            .sortedWith(compareByDescending<Movie> { it.rating ?: -1.0 }.thenByDescending { it.addedMillis })
-            .take(limit)
-
-        if (affinity.isEmpty()) return topRatedFallback()
-
-        val ranked = unwatched
-            .map { it to genreScore(it.genre, affinity) }
-            .filter { it.second > 0 }
-            .sortedWith(
-                compareByDescending<Pair<Movie, Int>> { it.second }
-                    .thenByDescending { it.first.rating ?: -1.0 }
-                    .thenByDescending { it.first.addedMillis },
-            )
-            .map { it.first }
-            .take(limit)
-
-        return ranked.ifEmpty { topRatedFallback() }
-    }
 
     /**
      * "More Like This" for a movie: other titles sharing a genre, most genres in common first,
@@ -320,18 +405,11 @@ class CatalogRepository(
         if (genres.isEmpty()) {
             return@withContext movieDao.similarByCategory(movie.sourceId, movie.categoryId, movie.id, limit)
         }
-        movieDao.all().asSequence()
-            .filter { it.id != movie.id }
-            .map { it to sharedGenreCount(it.genre, genres) }
-            .filter { it.second > 0 }
-            .sortedWith(
-                compareByDescending<Pair<Movie, Int>> { it.second }
-                    .thenByDescending { it.first.sourceId == movie.sourceId }
-                    .thenByDescending { it.first.rating ?: -1.0 },
-            )
-            .map { it.first }
-            .take(limit)
-            .toList()
+        val candidates = LinkedHashMap<Long, Movie>()
+        genres.take(RECOMMEND_GENRES).forEach { genre ->
+            for (m in movieDao.byGenreTopRated(genre, SIMILAR_CANDIDATES)) candidates.putIfAbsent(m.id, m)
+        }
+        rankSimilar(candidates.values, movie.id, movie.sourceId, genres, limit, Movie::id, Movie::sourceId, Movie::genre, Movie::rating)
     }
 
     // ---- Related by person (Plex-style "click an actor / director") ----------------------------
@@ -382,18 +460,11 @@ class CatalogRepository(
         if (genres.isEmpty()) {
             return@withContext seriesDao.similarByCategory(series.sourceId, series.categoryId, series.id, limit)
         }
-        seriesDao.all().asSequence()
-            .filter { it.id != series.id }
-            .map { it to sharedGenreCount(it.genre, genres) }
-            .filter { it.second > 0 }
-            .sortedWith(
-                compareByDescending<Pair<Series, Int>> { it.second }
-                    .thenByDescending { it.first.sourceId == series.sourceId }
-                    .thenByDescending { it.first.rating ?: -1.0 },
-            )
-            .map { it.first }
-            .take(limit)
-            .toList()
+        val candidates = LinkedHashMap<Long, Series>()
+        genres.take(RECOMMEND_GENRES).forEach { genre ->
+            for (s in seriesDao.byGenreTopRated(genre, SIMILAR_CANDIDATES)) candidates.putIfAbsent(s.id, s)
+        }
+        rankSimilar(candidates.values, series.id, series.sourceId, genres, limit, Series::id, Series::sourceId, Series::genre, Series::rating)
     }
 
     /**
@@ -523,23 +594,36 @@ class CatalogRepository(
             ?.distinct()
             .orEmpty()
 
-    private fun <T> groupByGenre(
-        items: List<T>,
-        genreOf: (T) -> String?,
-        maxGenres: Int,
-        perGenre: Int,
-    ): List<GenreGroup<T>> {
-        val buckets = LinkedHashMap<String, MutableList<T>>()
-        for (item in items) {
-            for (genre in splitGenres(genreOf(item))) {
-                buckets.getOrPut(genre) { mutableListOf() }.add(item)
-            }
-        }
-        return buckets.entries
-            .sortedByDescending { it.value.size }
-            .take(maxGenres)
-            .map { GenreGroup(it.key, it.value.take(perGenre)) }
+    /** The [max] biggest genres, tallied from the raw (possibly multi-valued) genre strings. */
+    private fun topGenres(counts: List<app.opentv.data.db.GenreCount>, max: Int): List<String> {
+        val tally = HashMap<String, Int>()
+        for (c in counts) for (genre in splitGenres(c.genre)) tally[genre] = (tally[genre] ?: 0) + c.count
+        return tally.entries.sortedByDescending { it.value }.take(max).map { it.key }
     }
+
+    /** The More-Like-This ranking: most shared genres, then same source, then rating. */
+    private fun <T> rankSimilar(
+        candidates: Collection<T>,
+        selfId: Long,
+        selfSourceId: Long,
+        genres: Set<String>,
+        limit: Int,
+        idOf: (T) -> Long,
+        sourceOf: (T) -> Long,
+        genreOf: (T) -> String?,
+        ratingOf: (T) -> Double?,
+    ): List<T> = candidates.asSequence()
+        .filter { idOf(it) != selfId }
+        .map { it to sharedGenreCount(genreOf(it), genres) }
+        .filter { it.second > 0 }
+        .sortedWith(
+            compareByDescending<Pair<T, Int>> { it.second }
+                .thenByDescending { sourceOf(it.first) == selfSourceId }
+                .thenByDescending { ratingOf(it.first) ?: -1.0 },
+        )
+        .map { it.first }
+        .take(limit)
+        .toList()
 
     /** How strongly a title matches a profile's genre affinity: sum of its genres' tallies. */
     private fun genreScore(genre: String?, affinity: Map<String, Int>): Int =
@@ -575,7 +659,10 @@ class CatalogRepository(
     suspend fun enabledSources(): List<Source> = sourceDao.enabled()
 
     /** Every live category (raw, un-folded), for the manager's category list. */
-    suspend fun liveCategories(): List<Category> = categoryDao.allByKind(StreamKind.LIVE)
+    suspend fun liveCategories(): List<Category> {
+        val rules = settings.categoryRules.value
+        return categoryDao.allByKind(StreamKind.LIVE).filter { !rules.isOff(it) }
+    }
 
     /** Channel counts per (source, category) — the number shown next to each category. */
     suspend fun categoryChannelCounts(): List<app.opentv.data.db.CategoryChannelCount> =
@@ -608,23 +695,23 @@ class CatalogRepository(
     }
 
     /**
-     * Full catalogue: live channels, then movies and series. Used by the periodic worker and by a
-     * manual refresh, where there's no user staring at a spinner. The initial add takes the faster
-     * [syncLive] + background [syncVod] path instead, so the guide appears without waiting for a
-     * 40,000-title VOD list.
+     * Live catalogue for one source, honouring the Live TV toggle. Used by the periodic worker and
+     * by a manual refresh; VOD follows separately through [syncVodCatalogue].
      */
     suspend fun sync(source: Source, nowUtcMillis: Long): SyncResult = withContext(Dispatchers.IO) {
         // Skip fetching a content type the user has switched off — that's the whole speed-up.
         // Live is gated here (not in syncLive) so onboarding's direct syncLive still loads channels.
         // Already-synced rows are left untouched: turning a type back on and refreshing restores it.
-        val live =
-            if (settings.liveEnabled.value) syncLive(source, nowUtcMillis)
-            else SyncResult.Success(0, 0, 0)
-        if (live is SyncResult.Success && source.kind == SourceKind.XTREAM) {
-            runCatching { syncXtreamVod(source, nowUtcMillis) }
-                .onFailure { Log.w(TAG, "VOD sync failed for source ${source.id}", it) }
-        }
-        live
+        // Live only: VOD is refreshed separately by [syncVodCatalogue], once per pass over all
+        // sources, gated on its own TTL and rate-capped so it never starves the live stream.
+        if (settings.liveEnabled.value) syncLive(source, nowUtcMillis)
+        else SyncResult.Success(0, 0, 0)
+    }
+
+    /** Whether a stored VOD catalogue is older than [VOD_TTL_MILLIS] (or was never fetched). */
+    fun vodStale(nowUtcMillis: Long): Boolean {
+        val last = settings.vodSyncedAtMillis
+        return last <= 0L || nowUtcMillis - last >= VOD_TTL_MILLIS
     }
 
     /** Live channels only — the fast path so the guide can show before VOD and the guide load. */
@@ -643,11 +730,44 @@ class CatalogRepository(
         }
     }
 
-    /** Movies + series — best-effort, meant to run in the background so a huge VOD list never
-     * blocks live TV. Silent on failure: an account with no VOD is normal, not an error. */
-    suspend fun syncVod(source: Source, nowUtcMillis: Long) = withContext(Dispatchers.IO) {
-        runCatching { if (source.kind == SourceKind.XTREAM) syncXtreamVod(source, nowUtcMillis) }
-            .onFailure { Log.w(TAG, "VOD sync failed for source ${source.id}", it) }
+    /**
+     * Movies + series for every Xtream source in [sources] — best-effort and gradual: titles land
+     * in the DB batch by batch, so the Movies/Shows rows fill in while it runs, and [vodProgress]
+     * counts them. Skipped when the catalogue is still fresh unless [force]. A call that arrives
+     * while another sync runs waits for it, then normally finds the catalogue fresh and returns.
+     * [throttled] caps the download at [VOD_BACKGROUND_BYTES_PER_SECOND] — for every run the user
+     * is not actively waiting on. Returns true when a sync ran and stamped the catalogue.
+     */
+    suspend fun syncVodCatalogue(
+        sources: List<Source>,
+        nowUtcMillis: Long,
+        force: Boolean = false,
+        throttled: Boolean = true,
+    ): Boolean = withContext(Dispatchers.IO) {
+        vodMutex.withLock {
+            if (!force && !vodStale(nowUtcMillis)) return@withLock false
+            val xtream = sources.filter { it.kind == SourceKind.XTREAM }
+            if (xtream.isEmpty()) return@withLock false
+            val rate = if (throttled) VOD_BACKGROUND_BYTES_PER_SECOND else 0L
+            _vodProgress.value = VodProgress(0, 0)
+            try {
+                var ok = false
+                for (source in xtream) {
+                    runCatching { syncXtreamVod(source, nowUtcMillis, rate) }
+                        .onSuccess { if (it) ok = true }
+                        .onFailure {
+                            if (it is CancellationException) throw it
+                            Log.w(TAG, "VOD sync failed for source ${source.id}", it)
+                        }
+                }
+                // Stamp only when something synced, so a failure retries on the next trigger
+                // instead of being remembered as "fresh" with no catalogue behind it.
+                if (ok) settings.vodSyncedAtMillis = nowUtcMillis
+                ok
+            } finally {
+                _vodProgress.value = null
+            }
+        }
     }
 
     private suspend fun syncXtreamLive(source: Source, nowUtcMillis: Long): SyncResult {
@@ -665,10 +785,31 @@ class CatalogRepository(
         }
 
         categoryDao.upsertAll(liveCategories)
-        val categoryNames = liveCategories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(channels, categoryNames), nowUtcMillis)
+        val stored = storeLive(source.id, channels, liveCategories, nowUtcMillis)
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(channels.size, 0, 0)
+        return SyncResult.Success(stored, 0, 0)
+    }
+
+    /**
+     * Writes a freshly downloaded live list, minus the switched-off categories. If every channel is
+     * in a switched-off category the source's stored channels are simply cleared —
+     * [ChannelDao.replaceCatalogue] ignores an empty list so a broken download can't wipe the app.
+     */
+    private suspend fun storeLive(
+        sourceId: Long,
+        channels: List<Channel>,
+        categories: List<Category>,
+        nowUtcMillis: Long,
+    ): Int {
+        val off = switchedOffIds(categories)
+        val kept = if (off.isEmpty()) channels else channels.filter { it.categoryId !in off }
+        if (kept.isEmpty()) {
+            channelDao.deleteStale(sourceId, nowUtcMillis)
+        } else {
+            val categoryNames = categories.associate { it.id to it.name }
+            channelDao.replaceCatalogue(sourceId, normalized(kept, categoryNames), nowUtcMillis)
+        }
+        return kept.size
     }
 
     /**
@@ -687,10 +828,9 @@ class CatalogRepository(
             )
         }
         categoryDao.upsertAll(liveCategories)
-        val categoryNames = liveCategories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(channels, categoryNames), nowUtcMillis)
+        val stored = storeLive(source.id, channels, liveCategories, nowUtcMillis)
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(channels.size, 0, 0)
+        return SyncResult.Success(stored, 0, 0)
     }
 
     /**
@@ -705,32 +845,58 @@ class CatalogRepository(
         return runCatching { stalkerApi.createLink(source, cmd) }.getOrNull() ?: channel.streamUrl
     }
 
-    private suspend fun syncXtreamVod(source: Source, nowUtcMillis: Long) {
+    /** Returns false when an enabled content type failed to download (so the TTL is not stamped). */
+    private suspend fun syncXtreamVod(source: Source, nowUtcMillis: Long, maxBytesPerSecond: Long): Boolean {
+        var failed = false
         // VOD is optional: plenty of accounts have live TV only, and a 404 on get_vod_streams
         // must not cost the user their channel list. Movies and series are gated independently so
         // a user who only turned off, say, Series still gets their movie library refreshed.
-        val moviesOn = settings.moviesEnabled.value
-        val seriesOn = settings.seriesEnabled.value
-        if (!moviesOn && !seriesOn) return
-
-        val movieCategories =
-            if (moviesOn) runCatching { api.movieCategories(source) }.getOrDefault(emptyList())
-            else emptyList()
-        val movies =
-            if (moviesOn) runCatching { api.movies(source) }.getOrDefault(emptyList())
-            else emptyList()
-        val seriesCategories =
-            if (seriesOn) runCatching { api.seriesCategories(source) }.getOrDefault(emptyList())
-            else emptyList()
-        val series =
-            if (seriesOn) runCatching { api.series(source) }.getOrDefault(emptyList())
-            else emptyList()
-
-        if (movieCategories.isNotEmpty() || seriesCategories.isNotEmpty()) {
-            categoryDao.upsertAll(movieCategories + seriesCategories)
+        //
+        // Titles are streamed straight from the response into the database in batches; the full
+        // list never exists in memory. Stale titles are pruned only after a stream that completed —
+        // a cut connection leaves the previous catalogue (plus whatever new arrived) intact.
+        //
+        // Titles in switched-off categories are dropped per batch (read live, so switching one off
+        // mid-sync takes hold straight away); never stamped, they are pruned with the stale ones.
+        if (settings.moviesEnabled.value) {
+            val categories = runCatching { api.movieCategories(source) }.getOrNull().orEmpty()
+            if (categories.isNotEmpty()) categoryDao.upsertAll(categories)
+            try {
+                val count = api.movies(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
+                    val off = switchedOffIds(categories)
+                    val kept = if (off.isEmpty()) batch else batch.filter { it.categoryId !in off }
+                    movieDao.mergeBatch(source.id, kept, nowUtcMillis)
+                    _vodProgress.update { it?.copy(movies = it.movies + kept.size) }
+                }
+                if (count > 0) movieDao.deleteStale(source.id, nowUtcMillis)
+                Log.i(TAG, "VOD: $count movies for source ${source.id}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Movie sync failed for source ${source.id}", e)
+                failed = true
+            }
         }
-        if (movies.isNotEmpty()) movieDao.upsertAll(movies)
-        if (series.isNotEmpty()) seriesDao.upsertAll(series)
+        if (settings.seriesEnabled.value) {
+            val categories = runCatching { api.seriesCategories(source) }.getOrNull().orEmpty()
+            if (categories.isNotEmpty()) categoryDao.upsertAll(categories)
+            try {
+                val count = api.series(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
+                    val off = switchedOffIds(categories)
+                    val kept = if (off.isEmpty()) batch else batch.filter { it.categoryId !in off }
+                    seriesDao.mergeBatch(source.id, kept, nowUtcMillis)
+                    _vodProgress.update { it?.copy(series = it.series + kept.size) }
+                }
+                if (count > 0) seriesDao.deleteStale(source.id, nowUtcMillis)
+                Log.i(TAG, "VOD: $count series for source ${source.id}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Series sync failed for source ${source.id}", e)
+                failed = true
+            }
+        }
+        return !failed
     }
 
     private suspend fun syncM3u(source: Source, nowUtcMillis: Long): SyncResult {
@@ -771,8 +937,7 @@ class CatalogRepository(
             }
 
         categoryDao.upsertAll(categories)
-        val categoryNames = categories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(parsed.channels, categoryNames), nowUtcMillis)
+        val stored = storeLive(source.id, parsed.channels, categories, nowUtcMillis)
 
         // If the playlist declared its own guide URL and the user did not set one, adopt it.
         if (source.epgUrl.isNullOrBlank() && !parsed.declaredEpgUrl.isNullOrBlank()) {
@@ -780,7 +945,7 @@ class CatalogRepository(
         }
 
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(parsed.channels.size, 0, 0)
+        return SyncResult.Success(stored, 0, 0)
     }
 
     /**
@@ -933,6 +1098,47 @@ class CatalogRepository(
 
     companion object {
         private const val TAG = "CatalogRepository"
+
+        /** Ids per `IN (...)` statement, well under SQLite's bound-variable cap. */
+        private const val SQL_CHUNK = 500
+
+        /**
+         * Stable identity of a category for the on/off switch, scoped by kind. Live categories fold
+         * like the guide rail does ('UK| GENERAL HD' and 'UK| GENERAL hevc' are one switch); VOD
+         * categories are shown verbatim, so they key on their plain name — folding would merge
+         * shelves like 'Film 4k UHD' and 'Film FHD 1080p' that are genuinely different.
+         */
+        fun categoryKey(category: Category): String {
+            val identity = if (category.kind == StreamKind.LIVE) {
+                ChannelNameNormalizer.normalize(category.name).groupKey.ifEmpty { category.id }
+            } else {
+                category.name.trim().lowercase().ifEmpty { category.id }
+            }
+            return "${category.kind}:$identity"
+        }
+
+        /** What the Categories screen calls [category] — the same label its rail/chip shows. */
+        fun categoryLabel(category: Category): String =
+            if (category.kind == StreamKind.LIVE) {
+                ChannelNameNormalizer.normalize(category.name).baseName.ifBlank { category.name }
+            } else {
+                category.name.trim()
+            }
+
+        /** Most titles a category grid holds at once. Bigger categories show their newest. */
+        const val BROWSE_LIMIT = 3000
+
+        /** How many of the profile's / title's genres seed Recommended and More-Like-This. */
+        private const val RECOMMEND_GENRES = 5
+
+        /** Candidates read per genre for More-Like-This before ranking. */
+        private const val SIMILAR_CANDIDATES = 120
+
+        /** How long a fetched VOD catalogue is trusted before a background sync refreshes it. */
+        const val VOD_TTL_MILLIS = 12L * 60 * 60 * 1000
+
+        /** Download cap for VOD syncs nobody is waiting on (~6 Mbit/s): leaves room for live HD. */
+        const val VOD_BACKGROUND_BYTES_PER_SECOND = 768L * 1024
         val SEPARATOR_CHARS = setOf('#', '*', '=', '~', '-', '_', '•', '█', '▓', '|')
 
         /**

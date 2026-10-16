@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GridView
@@ -63,6 +64,7 @@ fun SettingsHubScreen(
     onOpenAddons: () -> Unit,
     onOpenGuide: () -> Unit,
     onOpenChannels: () -> Unit,
+    onOpenCategories: () -> Unit,
     onOpenWebManager: () -> Unit,
     onOpenDisplay: () -> Unit,
     onOpenParental: () -> Unit,
@@ -76,6 +78,7 @@ fun SettingsHubScreen(
         HubEntry(Icons.Filled.Extension, stringResource(R.string.settings_addons_title), stringResource(R.string.settings_addons_subtitle), onOpenAddons),
         HubEntry(Icons.Filled.LiveTv, stringResource(R.string.settings_guide_title), stringResource(R.string.settings_guide_subtitle), onOpenGuide),
         HubEntry(Icons.Filled.GridView, stringResource(R.string.common_channels), stringResource(R.string.settings_channels_subtitle), onOpenChannels),
+        HubEntry(Icons.Filled.Category, stringResource(R.string.settings_categories_title), stringResource(R.string.settings_categories_subtitle), onOpenCategories),
         HubEntry(Icons.Filled.PhoneAndroid, stringResource(R.string.settings_webmanager_title), stringResource(R.string.settings_webmanager_subtitle), onOpenWebManager),
         HubEntry(Icons.Filled.Tune, stringResource(R.string.settings_display_title), stringResource(R.string.settings_display_subtitle), onOpenDisplay),
         HubEntry(Icons.Filled.Storage, stringResource(R.string.settings_recording_title), stringResource(R.string.settings_recording_subtitle), onOpenRecordings),

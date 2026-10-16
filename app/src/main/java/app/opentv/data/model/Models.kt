@@ -261,6 +261,10 @@ data class Programme(
     indices = [
         Index(value = ["sourceId", "streamId"], unique = true),
         Index(value = ["sourceId", "categoryId"]),
+        // Newest-first / best-rated-first rows walk these and stop at LIMIT instead of sorting
+        // the whole library. Matters at 300k titles.
+        Index(value = ["addedMillis"]),
+        Index(value = ["rating"]),
     ],
 )
 data class Movie(
@@ -293,6 +297,9 @@ data class Movie(
     val tmdbId: String? = null,
     /** Director(s), provider-formatted. Movies only. */
     val director: String? = null,
+    /** Stamp of the last VOD sync that listed this title; older rows are pruned. See [Channel.lastSeenMillis]. */
+    @ColumnInfo(defaultValue = "0")
+    val lastSeenMillis: Long = 0,
 )
 
 @Entity(
@@ -300,6 +307,10 @@ data class Movie(
     indices = [
         Index(value = ["sourceId", "seriesId"], unique = true),
         Index(value = ["sourceId", "categoryId"]),
+        // Newest-first / best-rated-first rows walk these and stop at LIMIT instead of sorting
+        // the whole library. Matters at 300k titles.
+        Index(value = ["addedMillis"]),
+        Index(value = ["rating"]),
     ],
 )
 data class Series(
@@ -327,6 +338,9 @@ data class Series(
     val genre: String? = null,
     /** TMDB id, stored only — resolved/used by a later agent. Coerced to String (panels vary). */
     val tmdbId: String? = null,
+    /** Stamp of the last VOD sync that listed this series; older rows are pruned. */
+    @ColumnInfo(defaultValue = "0")
+    val lastSeenMillis: Long = 0,
 )
 
 @Entity(
