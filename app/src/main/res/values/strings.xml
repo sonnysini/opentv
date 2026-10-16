@@ -513,4 +513,8 @@
     <string name="categories_all_on">Switch on all (%1$d)</string>
     <string name="categories_none">No categories yet — they appear after the first sync.</string>
     <string name="categories_no_match">No category matches the filter.</string>
+    <string name="categories_italian_only">Italian only</string>
+    <string name="categories_italian_only_desc">Switches off every foreign-language live category (by flag or name), including ones the provider adds later. You can still switch one back on below.</string>
+    <string name="categories_foreign_sport">International sport</string>
+    <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — events with foreign commentary.</string>
 </resources>

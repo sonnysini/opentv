@@ -446,4 +446,8 @@
     <string name="categories_all_on">Accendi tutte (%1$d)</string>
     <string name="categories_none">Ancora nessuna categoria: compaiono dopo la prima sincronizzazione.</string>
     <string name="categories_no_match">Nessuna categoria corrisponde al filtro.</string>
+    <string name="categories_italian_only">Solo italiano</string>
+    <string name="categories_italian_only_desc">Spegne tutte le categorie live in altre lingue (da bandiera o nome), anche quelle che il provider aggiunge dopo. Puoi sempre riaccenderne una qui sotto.</string>
+    <string name="categories_foreign_sport">Sport internazionale</string>
+    <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>
 </resources>

@@ -62,6 +62,8 @@ fun CategoriesScreen(
     val entries by viewModel.entries.collectAsState()
     val offCount by viewModel.offCount.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
+    val italianOnly by viewModel.italianOnly.collectAsState()
+    val foreignSportOff by viewModel.foreignSportOff.collectAsState()
 
     Column(
         Modifier
@@ -116,6 +118,23 @@ fun CategoriesScreen(
                     )
                 }
                 Spacer(Modifier.height(10.dp))
+                if (kind == StreamKind.LIVE && query.isEmpty()) {
+                    RuleRow(
+                        stringResource(R.string.categories_italian_only),
+                        stringResource(R.string.categories_italian_only_desc),
+                        checked = italianOnly,
+                        onToggle = viewModel::setItalianOnly,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    // Worded as "keep", so on = channels kept, like every other switch here.
+                    RuleRow(
+                        stringResource(R.string.categories_foreign_sport),
+                        stringResource(R.string.categories_foreign_sport_desc),
+                        checked = !foreignSportOff,
+                        onToggle = { keep -> viewModel.setForeignSportOff(!keep) },
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
                 // Only the bulk action that would change something is offered.
                 val shownOn = entries.count { it.enabled }
                 val shownOff = entries.size - shownOn
@@ -185,7 +204,21 @@ private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CategoryRow(entry: CategoriesViewModel.Entry, onToggle: (Boolean) -> Unit) {
+private fun CategoryRow(entry: CategoriesViewModel.Entry, onToggle: (Boolean) -> Unit) =
+    SwitchRow(entry.label, subtitle = null, checked = entry.enabled, onToggle = onToggle)
+
+@Composable
+private fun RuleRow(label: String, subtitle: String, checked: Boolean, onToggle: (Boolean) -> Unit) =
+    SwitchRow(label, subtitle, checked, onToggle, emphasised = true)
+
+@Composable
+private fun SwitchRow(
+    label: String,
+    subtitle: String?,
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit,
+    emphasised: Boolean = false,
+) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(10.dp)
     // The whole row is the toggle, so the d-pad lands on one target per category; the Switch
@@ -200,22 +233,33 @@ private fun CategoryRow(entry: CategoriesViewModel.Entry, onToggle: (Boolean) ->
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
             .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .toggleable(value = entry.enabled, role = Role.Switch, onValueChange = onToggle)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle)
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            entry.label,
-            style = MaterialTheme.typography.titleMedium,
-            color = when {
-                focused -> MaterialTheme.colorScheme.onPrimaryContainer
-                entry.enabled -> MaterialTheme.colorScheme.onSurface
-                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(checked = entry.enabled, onCheckedChange = null)
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                style = if (emphasised) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                color = when {
+                    focused -> MaterialTheme.colorScheme.onPrimaryContainer
+                    checked || emphasised -> MaterialTheme.colorScheme.onSurface
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

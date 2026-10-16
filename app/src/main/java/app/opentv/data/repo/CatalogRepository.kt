@@ -189,8 +189,8 @@ class CatalogRepository(
 
     /** Categories of [kind] the user has not switched off — what every rail and chip row shows. */
     fun observeCategories(kind: StreamKind): Flow<List<Category>> =
-        categoryDao.observe(kind).combine(settings.disabledCategories) { categories, off ->
-            if (off.isEmpty()) categories else categories.filter { categoryKey(it) !in off }
+        categoryDao.observe(kind).combine(settings.categoryRules) { categories, rules ->
+            if (rules.isEmpty) categories else categories.filter { !rules.isOff(it) }
         }
 
     /** Every category of [kind], switched-off ones included — the Categories screen's list. */
@@ -204,8 +204,33 @@ class CatalogRepository(
     fun setCategoriesEnabled(kind: StreamKind, keys: Set<String>, enabled: Boolean) {
         val current = settings.disabledCategories.value
         settings.setDisabledCategories(if (enabled) current - keys else current + keys)
+        // A live category switched on by hand stays on even if a language rule would drop it.
+        if (kind == StreamKind.LIVE) {
+            val forced = settings.categoryRules.value.forcedOn
+            settings.setForcedOnCategories(if (enabled) forced + keys else forced - keys)
+        }
         if (enabled && kind != StreamKind.LIVE) settings.vodSyncedAtMillis = 0L
     }
+
+    /**
+     * Sets the live language rules and purges what they now switch off. Turning a rule on also
+     * drops the hand-made "keep on" choices it covers, so "Italian only" means exactly that.
+     * Returns true when something may have come back on (the caller schedules a refresh).
+     */
+    suspend fun setLanguageRules(italianOnly: Boolean, foreignSportOff: Boolean): Boolean =
+        withContext(Dispatchers.IO) {
+            val before = settings.categoryRules.value
+            val after = before.copy(italianOnly = italianOnly, foreignSportOff = foreignSportOff)
+            val live = categoryDao.allByKind(StreamKind.LIVE)
+            val newlyRuled = live.filter { after.ruleHides(it.name) && !before.ruleHides(it.name) }
+                .mapTo(HashSet()) { categoryKey(it) }
+            settings.setForcedOnCategories(before.forcedOn - newlyRuled)
+            settings.setLanguageRules(italianOnly, foreignSportOff)
+            val rules = settings.categoryRules.value
+            val offNow = live.filter { rules.isOff(it) && !before.isOff(it) }.mapTo(HashSet()) { categoryKey(it) }
+            if (offNow.isNotEmpty()) purgeCategories(StreamKind.LIVE, offNow)
+            live.any { before.isOff(it) && !rules.isOff(it) }
+        }
 
     /** Deletes the stored channels/titles of the categories behind [keys]. */
     suspend fun purgeCategories(kind: StreamKind, keys: Set<String>) = withContext(Dispatchers.IO) {
@@ -225,9 +250,9 @@ class CatalogRepository(
 
     /** Ids among [categories] that are switched off right now. */
     private fun switchedOffIds(categories: List<Category>): Set<String> {
-        val off = settings.disabledCategories.value
-        if (off.isEmpty()) return emptySet()
-        return categories.filter { categoryKey(it) in off }.mapTo(HashSet()) { it.id }
+        val rules = settings.categoryRules.value
+        if (rules.isEmpty) return emptySet()
+        return categories.filter { rules.isOff(it) }.mapTo(HashSet()) { it.id }
     }
 
     /**
@@ -635,8 +660,8 @@ class CatalogRepository(
 
     /** Every live category (raw, un-folded), for the manager's category list. */
     suspend fun liveCategories(): List<Category> {
-        val off = settings.disabledCategories.value
-        return categoryDao.allByKind(StreamKind.LIVE).filter { categoryKey(it) !in off }
+        val rules = settings.categoryRules.value
+        return categoryDao.allByKind(StreamKind.LIVE).filter { !rules.isOff(it) }
     }
 
     /** Channel counts per (source, category) — the number shown next to each category. */

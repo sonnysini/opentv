@@ -123,6 +123,56 @@ class AppSettings private constructor(context: Context) {
     fun setDisabledCategories(keys: Set<String>) {
         prefs.edit().putStringSet(KEY_DISABLED_CATS, keys.toSet()).apply()
         _disabledCategories.value = keys.toSet()
+        publishCategoryRules()
+    }
+
+    /**
+     * Live category keys the user switched back on by hand while a language rule
+     * ([italianOnly]/[foreignSportOff]) would otherwise switch them off.
+     */
+    private val _forcedOnCategories =
+        MutableStateFlow(prefs.getStringSet(KEY_FORCED_ON_CATS, emptySet())!!.toSet())
+
+    /** "Italian only": every foreign-language live category is switched off, new ones included. */
+    private val _italianOnly = MutableStateFlow(prefs.getBoolean(KEY_ITALIAN_ONLY, false))
+    val italianOnly: StateFlow<Boolean> = _italianOnly.asStateFlow()
+
+    /** International sport groups with foreign commentary (ESPN+, NBA Pass, …) switched off. */
+    private val _foreignSportOff = MutableStateFlow(prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false))
+    val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
+
+    private val _categoryRules = MutableStateFlow(currentCategoryRules())
+
+    /** Everything that decides whether a category is switched off — see [CategoryRules.isOff]. */
+    val categoryRules: StateFlow<CategoryRules> = _categoryRules.asStateFlow()
+
+    @Synchronized
+    fun setForcedOnCategories(keys: Set<String>) {
+        prefs.edit().putStringSet(KEY_FORCED_ON_CATS, keys.toSet()).apply()
+        _forcedOnCategories.value = keys.toSet()
+        publishCategoryRules()
+    }
+
+    @Synchronized
+    fun setLanguageRules(italianOnly: Boolean, foreignSportOff: Boolean) {
+        prefs.edit()
+            .putBoolean(KEY_ITALIAN_ONLY, italianOnly)
+            .putBoolean(KEY_FOREIGN_SPORT_OFF, foreignSportOff)
+            .apply()
+        _italianOnly.value = italianOnly
+        _foreignSportOff.value = foreignSportOff
+        publishCategoryRules()
+    }
+
+    private fun currentCategoryRules() = CategoryRules(
+        disabled = _disabledCategories.value,
+        forcedOn = _forcedOnCategories.value,
+        italianOnly = _italianOnly.value,
+        foreignSportOff = _foreignSportOff.value,
+    )
+
+    private fun publishCategoryRules() {
+        _categoryRules.value = currentCategoryRules()
     }
 
     private fun hashPin(pin: String): String {
@@ -446,6 +496,9 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_PIN_HASH = "parental_pin_hash"
         private const val KEY_HIDDEN_CATS = "hidden_categories"
         private const val KEY_DISABLED_CATS = "disabled_categories"
+        private const val KEY_FORCED_ON_CATS = "forced_on_categories"
+        private const val KEY_ITALIAN_ONLY = "italian_only"
+        private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"
         private const val KEY_CONTENT_LIVE = "content_live"

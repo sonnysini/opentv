@@ -1297,15 +1297,16 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
     @OptIn(ExperimentalCoroutinesApi::class)
     private val all: StateFlow<List<Entry>> =
         kind.flatMapLatest { graph.catalogRepository.observeAllCategories(it) }
-            .combine(graph.settings.disabledCategories) { categories, off ->
+            .combine(graph.settings.categoryRules) { categories, rules ->
                 // One entry per switch: folded live categories share a key and appear once.
-                val labels = LinkedHashMap<String, String>()
+                val entries = LinkedHashMap<String, Entry>()
                 for (category in categories) {
-                    labels.getOrPut(CatalogRepository.categoryKey(category)) {
-                        CatalogRepository.categoryLabel(category)
+                    val key = CatalogRepository.categoryKey(category)
+                    entries.getOrPut(key) {
+                        Entry(key, CatalogRepository.categoryLabel(category), !rules.isOff(category))
                     }
                 }
-                labels.map { (key, label) -> Entry(key, label, key !in off) }
+                entries.values.toList()
             }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -1325,9 +1326,26 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
     val totalCount: StateFlow<Int> =
         all.map { it.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    /** Live language rules — the "Italian only" and "international sport" switches. */
+    val italianOnly: StateFlow<Boolean> = graph.settings.italianOnly
+    val foreignSportOff: StateFlow<Boolean> = graph.settings.foreignSportOff
+
     fun selectKind(next: StreamKind) {
         kind.value = next
         query.value = ""
+    }
+
+    fun setItalianOnly(on: Boolean) = setLanguageRules(on, foreignSportOff.value)
+
+    fun setForeignSportOff(off: Boolean) = setLanguageRules(italianOnly.value, off)
+
+    private fun setLanguageRules(italianOnly: Boolean, foreignSportOff: Boolean) {
+        viewModelScope.launch {
+            val cameBack = runCatching {
+                graph.catalogRepository.setLanguageRules(italianOnly, foreignSportOff)
+            }.getOrDefault(false)
+            if (cameBack) needsRefresh = true
+        }
     }
 
     fun setEnabled(keys: Collection<String>, enabled: Boolean) {
