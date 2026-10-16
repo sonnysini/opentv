@@ -116,13 +116,21 @@ fun CategoriesScreen(
                     )
                 }
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val shown = entries
-                    HubTextButton(stringResource(R.string.categories_all_off, shown.count { it.enabled })) {
-                        viewModel.setEnabled(shown.filter { it.enabled }.map { it.key }, enabled = false)
-                    }
-                    HubTextButton(stringResource(R.string.categories_all_on, shown.count { !it.enabled })) {
-                        viewModel.setEnabled(shown.filter { !it.enabled }.map { it.key }, enabled = true)
+                // Only the bulk action that would change something is offered.
+                val shownOn = entries.count { it.enabled }
+                val shownOff = entries.size - shownOn
+                if (shownOn > 0 || shownOff > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (shownOn > 0) {
+                            HubTextButton(stringResource(R.string.categories_all_off, shownOn)) {
+                                viewModel.setEnabled(entries.filter { it.enabled }.map { it.key }, enabled = false)
+                            }
+                        }
+                        if (shownOff > 0) {
+                            HubTextButton(stringResource(R.string.categories_all_on, shownOff)) {
+                                viewModel.setEnabled(entries.filter { !it.enabled }.map { it.key }, enabled = true)
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
