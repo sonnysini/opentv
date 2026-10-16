@@ -864,15 +864,12 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Recomputes the computed home rows (Recommended + by-genre) from a SINGLE scan of the library.
+     * Recomputes the computed home rows (Recommended + by-genre) with bounded queries.
      *
      * The reactive rows (recently-added, continue-watching) keep themselves current, so this only
-     * covers the computed feeds. On a 20k-title library the old version was the lag: it read the
-     * whole movie table three times over (recommended + movie genres, plus a profile-change reload)
-     * and again on every tab re-open. Now [allMovies]/[allSeries] are read once and reused for the
-     * recommended row and every genre row, off the main thread, and a `(profile, movieCount,
-     * seriesCount)` guard skips the work entirely unless the profile changed or the catalogue grew —
-     * so re-opening Movies/Shows is free and a post-sync refresh still fills the rows in.
+     * covers the computed feeds. A `(profile, movieCount, seriesCount)` guard skips the work
+     * entirely unless the profile changed or the catalogue size moved — so re-opening Movies/Shows
+     * is free and a post-sync refresh still fills the rows in.
      */
     fun loadHomeFeeds() {
         viewModelScope.launch {
@@ -889,18 +886,16 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
                     prev.movieCount == movieCount && prev.seriesCount == seriesCount
                 ) return@withLock
 
-                // One scan of each library (repo switches to IO), reused across every computed row.
-                val allMovies = runCatching { graph.catalogRepository.allMovies() }.getOrDefault(emptyList())
-                val allSeries = runCatching { graph.catalogRepository.allSeries() }.getOrDefault(emptyList())
-
+                // Each row is a bounded query (repo switches to IO) — the library is never loaded
+                // whole, which is what crashed low-RAM boxes on 300k-title providers.
                 _recommendedMovies.value = runCatching {
-                    graph.catalogRepository.recommendedMoviesFrom(allMovies, profileId)
+                    graph.catalogRepository.recommendedMovies(profileId)
                 }.getOrDefault(emptyList())
                 _movieGenreRows.value = runCatching {
-                    graph.catalogRepository.moviesByGenreFrom(allMovies)
+                    graph.catalogRepository.moviesByGenre()
                 }.getOrDefault(emptyList())
                 _seriesGenreRows.value = runCatching {
-                    graph.catalogRepository.seriesByGenreFrom(allSeries)
+                    graph.catalogRepository.seriesByGenre()
                 }.getOrDefault(emptyList())
 
                 loadedHomeFeeds = HomeFeedsKey(profileId, movieCount, seriesCount)
@@ -917,7 +912,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var vodRequested = false
 
     /** How long a fetched VOD catalogue is trusted before a warm launch re-syncs it. */
-    private val VOD_TTL_MILLIS = 12L * 60 * 60 * 1000  // 12 hours
+    private val VOD_TTL_MILLIS = CatalogRepository.VOD_TTL_MILLIS
 
     fun ensureVodLoaded() {
         if (vodRequested) return

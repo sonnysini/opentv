@@ -420,14 +420,20 @@ interface ProgrammeDao {
 
 @Dao
 interface MovieDao {
+    /**
+     * One category's films for the browse grid, newest first, capped at [limit]. Never the whole
+     * table: a big provider ships 300k titles, and a Flow over all of them — re-emitted on every
+     * sync batch — is exactly what ran low-RAM boxes out of memory.
+     */
     @Query(
         """
         SELECT * FROM movies
-        WHERE (:categoryId IS NULL OR categoryId = :categoryId)
+        WHERE categoryId = :categoryId
         ORDER BY addedMillis DESC, name
+        LIMIT :limit
         """
     )
-    fun observe(categoryId: String?): Flow<List<Movie>>
+    fun observeInCategory(categoryId: String, limit: Int): Flow<List<Movie>>
 
     @Query("SELECT * FROM movies WHERE favourite = 1 ORDER BY name")
     fun observeFavourites(): Flow<List<Movie>>
@@ -440,12 +446,43 @@ interface MovieDao {
     fun observeRecentlyAdded(limit: Int): Flow<List<Movie>>
 
     /**
-     * Every movie, newest first — the working set for the Kotlin-side feeds (by-genre grouping,
-     * genre-affinity recommendations, more-like-this). One pass over a few thousand rows is cheap;
-     * per-genre `LIKE` queries would multiply round-trips and risk substring false positives.
+     * Distinct raw genre strings and how many films carry each. Provider strings are often
+     * multi-valued ("Action, Thriller"), so the caller splits and re-tallies — but this is a few
+     * hundred rows instead of the whole library.
      */
-    @Query("SELECT * FROM movies ORDER BY addedMillis DESC")
-    suspend fun all(): List<Movie>
+    @Query("SELECT genre, COUNT(*) AS count FROM movies WHERE genre IS NOT NULL AND genre != '' GROUP BY genre")
+    suspend fun genreCounts(): List<GenreCount>
+
+    /** Films whose genre string mentions [genre], newest first. A substring match: the caller
+     *  re-checks the split genres to drop false positives ("Drama" inside "Melodrama"). */
+    @Query(
+        """
+        SELECT * FROM movies
+        WHERE genre LIKE '%' || :genre || '%'
+        ORDER BY addedMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun byGenreNewest(genre: String, limit: Int): List<Movie>
+
+    /** Films whose genre string mentions [genre], best-rated first. See [byGenreNewest]. */
+    @Query(
+        """
+        SELECT * FROM movies
+        WHERE genre LIKE '%' || :genre || '%'
+        ORDER BY rating DESC, addedMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun byGenreTopRated(genre: String, limit: Int): List<Movie>
+
+    /** Best-rated films overall — the Recommended fallback for a profile with no usable history. */
+    @Query("SELECT * FROM movies ORDER BY rating DESC, addedMillis DESC LIMIT :limit")
+    suspend fun topRated(limit: Int): List<Movie>
+
+    /** A handful of films by id (watch history). Callers keep the list well under the bind cap. */
+    @Query("SELECT * FROM movies WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<Movie>
 
     /** How many movies are on disk. A cheap COUNT the home feeds use to tell "the library grew"
      *  from "same as last time" without loading every row (see VodViewModel.loadHomeFeeds). */
@@ -514,20 +551,47 @@ interface MovieDao {
     @Upsert
     suspend fun upsertAll(movies: List<Movie>)
 
+    @Query("UPDATE movies SET lastSeenMillis = :syncStamp WHERE sourceId = :sourceId AND streamId IN (:streamIds)")
+    suspend fun markSeen(sourceId: Long, streamIds: List<String>, syncStamp: Long)
+
+    /**
+     * One streamed sync batch: stamp the titles already on disk as seen, insert the new ones.
+     * Existing rows keep their favourite flag and lazily back-filled metadata — the upsert only
+     * lands for rows the unique (sourceId, streamId) index has not seen. See [ChannelDao.deleteStale]
+     * for why pruning goes by stamp rather than `NOT IN`.
+     */
+    @Transaction
+    suspend fun mergeBatch(sourceId: Long, batch: List<Movie>, syncStamp: Long) {
+        if (batch.isEmpty()) return
+        batch.chunked(UPSERT_CHUNK).forEach { chunk ->
+            markSeen(sourceId, chunk.map { it.streamId }, syncStamp)
+            upsertAll(chunk.map { it.copy(lastSeenMillis = syncStamp) })
+        }
+    }
+
+    /** Drops titles the provider no longer lists. Run only after a COMPLETE sync of [sourceId]. */
+    @Query("DELETE FROM movies WHERE sourceId = :sourceId AND lastSeenMillis < :syncStamp")
+    suspend fun deleteStale(sourceId: Long, syncStamp: Long)
+
     @Query("DELETE FROM movies WHERE sourceId = :sourceId")
     suspend fun deleteForSource(sourceId: Long)
 }
 
+/** Projection for [MovieDao.genreCounts] / [SeriesDao.genreCounts]. */
+data class GenreCount(val genre: String, val count: Int)
+
 @Dao
 interface SeriesDao {
+    /** One category's shows for the browse grid, capped. See [MovieDao.observeInCategory]. */
     @Query(
         """
         SELECT * FROM series
-        WHERE (:categoryId IS NULL OR categoryId = :categoryId)
+        WHERE categoryId = :categoryId
         ORDER BY addedMillis DESC, name
+        LIMIT :limit
         """
     )
-    fun observe(categoryId: String?): Flow<List<Series>>
+    fun observeInCategory(categoryId: String, limit: Int): Flow<List<Series>>
 
     @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit")
     fun search(query: String, limit: Int = 200): Flow<List<Series>>
@@ -536,9 +600,31 @@ interface SeriesDao {
     @Query("SELECT * FROM series ORDER BY addedMillis DESC LIMIT :limit")
     fun observeRecentlyAdded(limit: Int): Flow<List<Series>>
 
-    /** Every series, newest first — working set for the Kotlin-side by-genre / more-like-this feeds. */
-    @Query("SELECT * FROM series ORDER BY addedMillis DESC")
-    suspend fun all(): List<Series>
+    /** Distinct raw genre strings with counts. See [MovieDao.genreCounts]. */
+    @Query("SELECT genre, COUNT(*) AS count FROM series WHERE genre IS NOT NULL AND genre != '' GROUP BY genre")
+    suspend fun genreCounts(): List<GenreCount>
+
+    /** Shows whose genre string mentions [genre], newest first. See [MovieDao.byGenreNewest]. */
+    @Query(
+        """
+        SELECT * FROM series
+        WHERE genre LIKE '%' || :genre || '%'
+        ORDER BY addedMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun byGenreNewest(genre: String, limit: Int): List<Series>
+
+    /** Shows whose genre string mentions [genre], best-rated first. */
+    @Query(
+        """
+        SELECT * FROM series
+        WHERE genre LIKE '%' || :genre || '%'
+        ORDER BY rating DESC, addedMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun byGenreTopRated(genre: String, limit: Int): List<Series>
 
     /** How many series are on disk — the cheap "did the library grow" check for the home feeds. */
     @Query("SELECT COUNT(*) FROM series")
@@ -583,6 +669,23 @@ interface SeriesDao {
 
     @Upsert
     suspend fun upsertAll(items: List<Series>)
+
+    @Query("UPDATE series SET lastSeenMillis = :syncStamp WHERE sourceId = :sourceId AND seriesId IN (:seriesIds)")
+    suspend fun markSeen(sourceId: Long, seriesIds: List<String>, syncStamp: Long)
+
+    /** One streamed sync batch. See [MovieDao.mergeBatch]. */
+    @Transaction
+    suspend fun mergeBatch(sourceId: Long, batch: List<Series>, syncStamp: Long) {
+        if (batch.isEmpty()) return
+        batch.chunked(UPSERT_CHUNK).forEach { chunk ->
+            markSeen(sourceId, chunk.map { it.seriesId }, syncStamp)
+            upsertAll(chunk.map { it.copy(lastSeenMillis = syncStamp) })
+        }
+    }
+
+    /** Drops shows the provider no longer lists. Run only after a COMPLETE sync of [sourceId]. */
+    @Query("DELETE FROM series WHERE sourceId = :sourceId AND lastSeenMillis < :syncStamp")
+    suspend fun deleteStale(sourceId: Long, syncStamp: Long)
 
     @Query("DELETE FROM series WHERE sourceId = :sourceId")
     suspend fun deleteForSource(sourceId: Long)

@@ -112,7 +112,7 @@ fun MoviesScreen(
         CategoryChips(
             entries = categories.map { it.id to it.name },
             selected = browseCategory,
-            onSelectHome = { browseCategory = null },
+            onSelectHome = { browseCategory = null; viewModel.selectMovieCategory(null) },
             onSelectCategory = { id -> browseCategory = id; viewModel.selectMovieCategory(id) },
         )
         // Weighted so the shelves fill the space under the fixed search + chips header, exactly and
@@ -192,7 +192,7 @@ fun SeriesScreen(
         CategoryChips(
             entries = categories.map { it.id to it.name },
             selected = browseCategory,
-            onSelectHome = { browseCategory = null },
+            onSelectHome = { browseCategory = null; viewModel.selectSeriesCategory(null) },
             onSelectCategory = { id -> browseCategory = id; viewModel.selectSeriesCategory(id) },
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {

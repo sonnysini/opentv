@@ -13,14 +13,19 @@ import app.opentv.data.model.Series
 import app.opentv.data.model.Source
 import app.opentv.data.model.StreamKind
 import java.io.InputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.DecodeSequenceMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeToSequence
 import kotlinx.serialization.json.jsonObject
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -121,60 +126,79 @@ class XtreamApi(
         }
     }
 
-    suspend fun movies(source: Source): List<Movie> = withContext(Dispatchers.IO) {
-        getJson(source, "get_vod_streams").arrayOrEmpty.mapNotNull { element ->
-            val obj = element.jsonObjectOrNull ?: return@mapNotNull null
-            val streamId = obj["stream_id"].asStringOrNull ?: return@mapNotNull null
-            val name = obj["name"].asStringOrNull ?: return@mapNotNull null
-            val extension = obj["container_extension"].asStringOrNull?.takeIf { it.isNotBlank() }
-            Movie(
-                sourceId = source.id,
-                streamId = streamId,
-                name = name,
-                categoryId = obj["category_id"].asStringOrNull,
-                posterUrl = obj["stream_icon"].asStringOrNull?.takeIf { it.isNotBlank() },
-                rating = obj["rating"].asDoubleOrNull,
-                year = obj["year"].asIntOrNull,
-                plot = obj["plot"].asStringOrNull,
-                durationSeconds = obj["duration_secs"].asIntOrNull,
-                containerExtension = extension,
-                streamUrl = vodStreamUrl(source, streamId, extension),
-                addedMillis = obj["added"].asLongOrNull?.times(1000) ?: 0L,
-                // Rich metadata is best-effort here: the streams list carries it on some panels
-                // and not others. Whatever is missing is back-filled from get_vod_info on the
-                // first detail open. See asBackdropUrl for the array-or-string handling.
-                backdropUrl = obj.asBackdropUrl("movie_image", "cover_big"),
-                cast = obj["cast"].asStringOrNull ?: obj["actors"].asStringOrNull,
-                director = obj["director"].asStringOrNull,
-                genre = obj["genre"].asStringOrNull,
-                tmdbId = obj["tmdb_id"].asStringOrNull ?: obj["tmdb"].asStringOrNull,
-            )
-        }
+    /**
+     * Every movie on the panel, delivered in batches of [batchSize] to [onBatch] as the response is
+     * read. `get_vod_streams` on a big provider is tens of megabytes of JSON (300k titles is not
+     * rare); reading it into one String and parsing a tree of it is what ran an old Fire Stick out
+     * of memory. Here the body is decoded one array element at a time, so peak memory is one batch.
+     * Returns the number of titles delivered. Throws if the stream is cut or is not JSON — the
+     * caller must then treat what it received as partial.
+     */
+    suspend fun movies(
+        source: Source,
+        batchSize: Int = STREAM_BATCH,
+        onBatch: suspend (List<Movie>) -> Unit,
+    ): Int = withContext(Dispatchers.IO) {
+        streamArray(source, "get_vod_streams", batchSize, onBatch) { obj -> parseMovie(source, obj) }
     }
 
-    suspend fun series(source: Source): List<Series> = withContext(Dispatchers.IO) {
-        getJson(source, "get_series").arrayOrEmpty.mapNotNull { element ->
-            val obj = element.jsonObjectOrNull ?: return@mapNotNull null
-            val seriesId = obj["series_id"].asStringOrNull ?: return@mapNotNull null
-            val name = obj["name"].asStringOrNull ?: return@mapNotNull null
-            Series(
-                sourceId = source.id,
-                seriesId = seriesId,
-                name = name,
-                categoryId = obj["category_id"].asStringOrNull,
-                posterUrl = obj["cover"].asStringOrNull?.takeIf { it.isNotBlank() },
-                rating = obj["rating"].asDoubleOrNull,
-                year = obj["year"].asIntOrNull ?: obj["releaseDate"].asStringOrNull?.take(4)?.toIntOrNull(),
-                plot = obj["plot"].asStringOrNull,
-                addedMillis = obj["last_modified"].asLongOrNull?.times(1000) ?: 0L,
-                // get_series carries most of this inline on the majority of panels; anything
-                // missing is back-filled from get_series_info on the first detail open.
-                backdropUrl = obj.asBackdropUrl("cover_big", "cover"),
-                cast = obj["cast"].asStringOrNull ?: obj["actors"].asStringOrNull,
-                genre = obj["genre"].asStringOrNull,
-                tmdbId = obj["tmdb_id"].asStringOrNull ?: obj["tmdb"].asStringOrNull,
-            )
-        }
+    /** Every series on the panel, in batches. Same streaming contract as [movies]. */
+    suspend fun series(
+        source: Source,
+        batchSize: Int = STREAM_BATCH,
+        onBatch: suspend (List<Series>) -> Unit,
+    ): Int = withContext(Dispatchers.IO) {
+        streamArray(source, "get_series", batchSize, onBatch) { obj -> parseSeries(source, obj) }
+    }
+
+    private fun parseMovie(source: Source, obj: JsonObject): Movie? {
+        val streamId = obj["stream_id"].asStringOrNull ?: return null
+        val name = obj["name"].asStringOrNull ?: return null
+        val extension = obj["container_extension"].asStringOrNull?.takeIf { it.isNotBlank() }
+        return Movie(
+            sourceId = source.id,
+            streamId = streamId,
+            name = name,
+            categoryId = obj["category_id"].asStringOrNull,
+            posterUrl = obj["stream_icon"].asStringOrNull?.takeIf { it.isNotBlank() },
+            rating = obj["rating"].asDoubleOrNull,
+            year = obj["year"].asIntOrNull,
+            plot = obj["plot"].asStringOrNull,
+            durationSeconds = obj["duration_secs"].asIntOrNull,
+            containerExtension = extension,
+            streamUrl = vodStreamUrl(source, streamId, extension),
+            addedMillis = obj["added"].asLongOrNull?.times(1000) ?: 0L,
+            // Rich metadata is best-effort here: the streams list carries it on some panels
+            // and not others. Whatever is missing is back-filled from get_vod_info on the
+            // first detail open. See asBackdropUrl for the array-or-string handling.
+            backdropUrl = obj.asBackdropUrl("movie_image", "cover_big"),
+            cast = obj["cast"].asStringOrNull ?: obj["actors"].asStringOrNull,
+            director = obj["director"].asStringOrNull,
+            genre = obj["genre"].asStringOrNull,
+            tmdbId = obj["tmdb_id"].asStringOrNull ?: obj["tmdb"].asStringOrNull,
+        )
+    }
+
+    private fun parseSeries(source: Source, obj: JsonObject): Series? {
+        val seriesId = obj["series_id"].asStringOrNull ?: return null
+        val name = obj["name"].asStringOrNull ?: return null
+        return Series(
+            sourceId = source.id,
+            seriesId = seriesId,
+            name = name,
+            categoryId = obj["category_id"].asStringOrNull,
+            posterUrl = obj["cover"].asStringOrNull?.takeIf { it.isNotBlank() },
+            rating = obj["rating"].asDoubleOrNull,
+            year = obj["year"].asIntOrNull ?: obj["releaseDate"].asStringOrNull?.take(4)?.toIntOrNull(),
+            plot = obj["plot"].asStringOrNull,
+            addedMillis = obj["last_modified"].asLongOrNull?.times(1000) ?: 0L,
+            // get_series carries most of this inline on the majority of panels; anything
+            // missing is back-filled from get_series_info on the first detail open.
+            backdropUrl = obj.asBackdropUrl("cover_big", "cover"),
+            cast = obj["cast"].asStringOrNull ?: obj["actors"].asStringOrNull,
+            genre = obj["genre"].asStringOrNull,
+            tmdbId = obj["tmdb_id"].asStringOrNull ?: obj["tmdb"].asStringOrNull,
+        )
     }
 
     /**
@@ -352,6 +376,67 @@ class XtreamApi(
         }
     }
 
+    /**
+     * Streams a top-level JSON array from [action], decoding one element at a time and handing
+     * parsed rows to [onBatch] every [batchSize]. Nothing but the current batch is held in memory.
+     * A panel that answers with an object instead of an array (some do, for "no VOD") yields zero
+     * rows rather than an error, matching what the tree-based [getJson] path did.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    private suspend fun <T> streamArray(
+        source: Source,
+        action: String,
+        batchSize: Int,
+        onBatch: suspend (List<T>) -> Unit,
+        parse: (JsonObject) -> T?,
+    ): Int {
+        val url = baseUrl(source).newBuilder()
+            .encodedPath("/player_api.php")
+            .addQueryParameter("username", source.username.orEmpty())
+            .addQueryParameter("password", source.password.orEmpty())
+            .addQueryParameter("action", action)
+            .build()
+
+        http.newCall(request(source, url)).execute().use { response ->
+            if (!response.isSuccessful) throw XtreamException(describeHttpFailure(response.code))
+            val body = response.body ?: throw XtreamException("The server returned an empty response.")
+            var total = 0
+            val batch = ArrayList<T>(batchSize)
+            try {
+                val elements = json.decodeToSequence(
+                    body.byteStream().buffered(),
+                    JsonElement.serializer(),
+                    DecodeSequenceMode.AUTO_DETECT,
+                )
+                for (element in elements) {
+                    val row = element.jsonObjectOrNull?.let(parse) ?: continue
+                    batch += row
+                    if (batch.size >= batchSize) {
+                        onBatch(ArrayList(batch))
+                        total += batch.size
+                        batch.clear()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SerializationException) {
+                throw XtreamException(
+                    "The server replied with something that is not a valid catalogue. " +
+                        "Check the address and port are correct.",
+                    e,
+                )
+            } catch (e: IllegalArgumentException) {
+                // kotlinx reports some malformed input (e.g. an HTML error page) this way.
+                throw XtreamException("The server's catalogue could not be read.", e)
+            }
+            if (batch.isNotEmpty()) {
+                onBatch(ArrayList(batch))
+                total += batch.size
+            }
+            return total
+        }
+    }
+
     private fun request(source: Source, url: HttpUrl): Request =
         Request.Builder()
             .url(url)
@@ -368,6 +453,11 @@ class XtreamApi(
         429 -> "The server is rate-limiting this device (HTTP 429). Try again shortly."
         in 500..599 -> "The provider's server is having problems (HTTP $code)."
         else -> "The server returned HTTP $code."
+    }
+
+    companion object {
+        /** Rows per streamed batch: one DB transaction each, and the most held in memory at once. */
+        const val STREAM_BATCH = 1000
     }
 
     data class AccountInfo(
