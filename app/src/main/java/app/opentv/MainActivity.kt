@@ -69,6 +69,7 @@ import app.opentv.ui.settings.AboutScreen
 import app.opentv.ui.settings.AppSettingsScreen
 import app.opentv.ui.settings.EpgSettingsScreen
 import app.opentv.ui.settings.ParentalControlsScreen
+import app.opentv.ui.settings.CategoriesScreen
 import app.opentv.ui.settings.ProfilesScreen
 import app.opentv.ui.settings.ProvidersScreen
 import app.opentv.ui.settings.StremioAddonsScreen
@@ -196,6 +197,7 @@ object Routes {
     const val WEB_MANAGER = "web-manager"
     const val PROFILES = "profiles"
     const val PARENTAL = "parental"
+    const val CATEGORIES = "categories"
     const val SYNC = "sync"
     const val REC_SETTINGS = "recording-settings"
     const val ABOUT = "about"
@@ -409,6 +411,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onOpenAddons = { navController.navigate(Routes.ADDONS) },
                     onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },
                     onOpenChannels = { navController.navigate(Routes.CHANNELS) },
+                    onOpenCategories = { navController.navigate(Routes.CATEGORIES) },
                     onOpenWebManager = { navController.navigate(Routes.WEB_MANAGER) },
                     onOpenDisplay = { navController.navigate(Routes.APP_SETTINGS) },
                     onOpenParental = { navController.navigate(Routes.PARENTAL) },
@@ -433,6 +436,10 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
             composable(Routes.WEB_MANAGER) {
                 WebManagerScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Routes.CATEGORIES) {
+                CategoriesScreen(onBack = { navController.popBackStack() })
             }
 
             composable(Routes.PARENTAL) {

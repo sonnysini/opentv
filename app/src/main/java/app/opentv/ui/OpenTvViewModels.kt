@@ -1275,3 +1275,74 @@ class WebManagerViewModel(app: Application) : AndroidViewModel(app) {
 
 /** Titles between home-row rebuilds while a VOD sync is still landing. */
 private const val HOME_REFRESH_STEP = 20_000
+
+/**
+ * Backs the Categories screen: every provider category of one type, each switchable off so it is
+ * never downloaded. Switching off purges the stored rows at once; switching back on is batched —
+ * one background refresh when the screen closes, rather than a re-download per toggle.
+ */
+class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
+    private val graph = ServiceLocator.get(app)
+
+    @androidx.compose.runtime.Immutable
+    data class Entry(val key: String, val label: String, val enabled: Boolean)
+
+    val kind = MutableStateFlow(StreamKind.LIVE)
+    val query = MutableStateFlow("")
+
+    /** Set once something is switched back on; the refresh runs in [onCleared]. */
+    @Volatile
+    private var needsRefresh = false
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val all: StateFlow<List<Entry>> =
+        kind.flatMapLatest { graph.catalogRepository.observeAllCategories(it) }
+            .combine(graph.settings.disabledCategories) { categories, off ->
+                // One entry per switch: folded live categories share a key and appear once.
+                val labels = LinkedHashMap<String, String>()
+                for (category in categories) {
+                    labels.getOrPut(CatalogRepository.categoryKey(category)) {
+                        CatalogRepository.categoryLabel(category)
+                    }
+                }
+                labels.map { (key, label) -> Entry(key, label, key !in off) }
+            }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** [all] narrowed by the search box — also the scope of "switch all off/on". */
+    val entries: StateFlow<List<Entry>> =
+        combine(all, query) { list, q ->
+            val needle = q.trim()
+            if (needle.isEmpty()) list else list.filter { it.label.contains(needle, ignoreCase = true) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Switched-off count across the whole type, ignoring the search box. */
+    val offCount: StateFlow<Int> =
+        all.map { list -> list.count { !it.enabled } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val totalCount: StateFlow<Int> =
+        all.map { it.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun selectKind(next: StreamKind) {
+        kind.value = next
+        query.value = ""
+    }
+
+    fun setEnabled(keys: Collection<String>, enabled: Boolean) {
+        if (keys.isEmpty()) return
+        val target = kind.value
+        val set = keys.toSet()
+        graph.catalogRepository.setCategoriesEnabled(target, set, enabled)
+        if (enabled) {
+            needsRefresh = true
+        } else {
+            viewModelScope.launch { runCatching { graph.catalogRepository.purgeCategories(target, set) } }
+        }
+    }
+
+    override fun onCleared() {
+        if (needsRefresh) app.opentv.data.work.SyncWorker.refreshNow(getApplication())
+    }
+}

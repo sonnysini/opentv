@@ -437,4 +437,13 @@
     <string name="settings_tmdb_save">Salva chiave</string>
     <string name="settings_tmdb_saved">Chiave TMDB salvata</string>
     <string name="settings_tmdb_active">Attiva</string>
+    <string name="settings_categories_title">Categorie</string>
+    <string name="settings_categories_subtitle">Spegni le categorie intere che non guardi mai</string>
+    <string name="categories_desc">Una categoria spenta non viene proprio scaricata: meno memoria, guida e sincronizzazione più veloci. Se la riaccendi viene riscaricata in background.</string>
+    <string name="categories_filter_hint">Scrivi per filtrare…</string>
+    <string name="categories_off_count">%1$d spente su %2$d</string>
+    <string name="categories_all_off">Spegni tutte quelle mostrate (%1$d)</string>
+    <string name="categories_all_on">Accendi tutte quelle mostrate (%1$d)</string>
+    <string name="categories_none">Ancora nessuna categoria: compaiono dopo la prima sincronizzazione.</string>
+    <string name="categories_no_match">Nessuna categoria corrisponde al filtro.</string>
 </resources>

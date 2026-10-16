@@ -247,6 +247,10 @@ interface ChannelDao {
     @Query("DELETE FROM channels WHERE sourceId = :sourceId")
     suspend fun deleteForSource(sourceId: Long)
 
+    /** Drops a source's rows in switched-off categories (callers chunk [categoryIds]). */
+    @Query("DELETE FROM channels WHERE sourceId = :sourceId AND categoryId IN (:categoryIds)")
+    suspend fun deleteInCategories(sourceId: Long, categoryIds: List<String>)
+
     /**
      * Preserves user state (favourites, hidden, manual order, custom names, EPG overrides) across a
      * catalogue refresh. Upsert would otherwise overwrite them with the defaults from the
@@ -575,6 +579,10 @@ interface MovieDao {
 
     @Query("DELETE FROM movies WHERE sourceId = :sourceId")
     suspend fun deleteForSource(sourceId: Long)
+
+    /** Drops a source's rows in switched-off categories (callers chunk [categoryIds]). */
+    @Query("DELETE FROM movies WHERE sourceId = :sourceId AND categoryId IN (:categoryIds)")
+    suspend fun deleteInCategories(sourceId: Long, categoryIds: List<String>)
 }
 
 /** Projection for [MovieDao.genreCounts] / [SeriesDao.genreCounts]. */
@@ -689,6 +697,10 @@ interface SeriesDao {
 
     @Query("DELETE FROM series WHERE sourceId = :sourceId")
     suspend fun deleteForSource(sourceId: Long)
+
+    /** Drops a source's rows in switched-off categories (callers chunk [categoryIds]). */
+    @Query("DELETE FROM series WHERE sourceId = :sourceId AND categoryId IN (:categoryIds)")
+    suspend fun deleteInCategories(sourceId: Long, categoryIds: List<String>)
 }
 
 @Dao

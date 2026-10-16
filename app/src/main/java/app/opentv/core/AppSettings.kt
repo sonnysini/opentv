@@ -108,6 +108,23 @@ class AppSettings private constructor(context: Context) {
         _hiddenUnlocked.value = unlocked
     }
 
+    // ---- Switched-off categories -------------------------------------------------------------
+
+    /**
+     * Category keys (see [app.opentv.data.repo.CatalogRepository.categoryKey]) the user has switched
+     * off. Unlike [hiddenCategories] this is not a view filter: a switched-off category's channels
+     * and titles are never stored, so they cost no memory, no guide build time and no sync time.
+     */
+    private val _disabledCategories =
+        MutableStateFlow(prefs.getStringSet(KEY_DISABLED_CATS, emptySet())!!.toSet())
+    val disabledCategories: StateFlow<Set<String>> = _disabledCategories.asStateFlow()
+
+    @Synchronized
+    fun setDisabledCategories(keys: Set<String>) {
+        prefs.edit().putStringSet(KEY_DISABLED_CATS, keys.toSet()).apply()
+        _disabledCategories.value = keys.toSet()
+    }
+
     private fun hashPin(pin: String): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         val bytes = digest.digest("opentv-pin::$pin".toByteArray())
@@ -428,6 +445,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_PREVIEW_SOUND = "guide_preview_sound"
         private const val KEY_PIN_HASH = "parental_pin_hash"
         private const val KEY_HIDDEN_CATS = "hidden_categories"
+        private const val KEY_DISABLED_CATS = "disabled_categories"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"
         private const val KEY_CONTENT_LIVE = "content_live"

@@ -504,4 +504,13 @@
     <string name="settings_tmdb_save">Save key</string>
     <string name="settings_tmdb_saved">TMDB key saved</string>
     <string name="settings_tmdb_active">Active</string>
+    <string name="settings_categories_title">Categories</string>
+    <string name="settings_categories_subtitle">Switch off whole categories you never watch</string>
+    <string name="categories_desc">A switched-off category is not downloaded at all: less memory, a faster guide and faster syncs. Switching one back on downloads it again in the background.</string>
+    <string name="categories_filter_hint">Type to filter…</string>
+    <string name="categories_off_count">%1$d of %2$d off</string>
+    <string name="categories_all_off">Switch off all shown (%1$d)</string>
+    <string name="categories_all_on">Switch on all shown (%1$d)</string>
+    <string name="categories_none">No categories yet — they appear after the first sync.</string>
+    <string name="categories_no_match">No category matches the filter.</string>
 </resources>

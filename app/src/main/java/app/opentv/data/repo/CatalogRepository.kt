@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
@@ -186,7 +187,48 @@ class CatalogRepository(
      * building" (channels exist) apart from "nothing loaded" (a failed or empty sync). */
     fun observeChannelCount(): Flow<Int> = channelDao.observeVisibleCount()
 
-    fun observeCategories(kind: StreamKind): Flow<List<Category>> = categoryDao.observe(kind)
+    /** Categories of [kind] the user has not switched off — what every rail and chip row shows. */
+    fun observeCategories(kind: StreamKind): Flow<List<Category>> =
+        categoryDao.observe(kind).combine(settings.disabledCategories) { categories, off ->
+            if (off.isEmpty()) categories else categories.filter { categoryKey(it) !in off }
+        }
+
+    /** Every category of [kind], switched-off ones included — the Categories screen's list. */
+    fun observeAllCategories(kind: StreamKind): Flow<List<Category>> = categoryDao.observe(kind)
+
+    /**
+     * Switch categories (by [categoryKey]) on or off. Off takes effect for every later sync; call
+     * [purgeCategories] to drop what is already stored. On only clears the flag: the rows come
+     * back with the next sync, so a re-enabled VOD category marks the catalogue stale here.
+     */
+    fun setCategoriesEnabled(kind: StreamKind, keys: Set<String>, enabled: Boolean) {
+        val current = settings.disabledCategories.value
+        settings.setDisabledCategories(if (enabled) current - keys else current + keys)
+        if (enabled && kind != StreamKind.LIVE) settings.vodSyncedAtMillis = 0L
+    }
+
+    /** Deletes the stored channels/titles of the categories behind [keys]. */
+    suspend fun purgeCategories(kind: StreamKind, keys: Set<String>) = withContext(Dispatchers.IO) {
+        categoryDao.allByKind(kind)
+            .filter { categoryKey(it) in keys }
+            .groupBy({ it.sourceId }, { it.id })
+            .forEach { (sourceId, ids) ->
+                ids.chunked(SQL_CHUNK).forEach { chunk ->
+                    when (kind) {
+                        StreamKind.LIVE -> channelDao.deleteInCategories(sourceId, chunk)
+                        StreamKind.MOVIE -> movieDao.deleteInCategories(sourceId, chunk)
+                        StreamKind.SERIES -> seriesDao.deleteInCategories(sourceId, chunk)
+                    }
+                }
+            }
+    }
+
+    /** Ids among [categories] that are switched off right now. */
+    private fun switchedOffIds(categories: List<Category>): Set<String> {
+        val off = settings.disabledCategories.value
+        if (off.isEmpty()) return emptySet()
+        return categories.filter { categoryKey(it) in off }.mapTo(HashSet()) { it.id }
+    }
 
     /**
      * One category's films for the browse grid (capped at [BROWSE_LIMIT]); no category → nothing.
@@ -592,7 +634,10 @@ class CatalogRepository(
     suspend fun enabledSources(): List<Source> = sourceDao.enabled()
 
     /** Every live category (raw, un-folded), for the manager's category list. */
-    suspend fun liveCategories(): List<Category> = categoryDao.allByKind(StreamKind.LIVE)
+    suspend fun liveCategories(): List<Category> {
+        val off = settings.disabledCategories.value
+        return categoryDao.allByKind(StreamKind.LIVE).filter { categoryKey(it) !in off }
+    }
 
     /** Channel counts per (source, category) — the number shown next to each category. */
     suspend fun categoryChannelCounts(): List<app.opentv.data.db.CategoryChannelCount> =
@@ -715,10 +760,31 @@ class CatalogRepository(
         }
 
         categoryDao.upsertAll(liveCategories)
-        val categoryNames = liveCategories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(channels, categoryNames), nowUtcMillis)
+        val stored = storeLive(source.id, channels, liveCategories, nowUtcMillis)
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(channels.size, 0, 0)
+        return SyncResult.Success(stored, 0, 0)
+    }
+
+    /**
+     * Writes a freshly downloaded live list, minus the switched-off categories. If every channel is
+     * in a switched-off category the source's stored channels are simply cleared —
+     * [ChannelDao.replaceCatalogue] ignores an empty list so a broken download can't wipe the app.
+     */
+    private suspend fun storeLive(
+        sourceId: Long,
+        channels: List<Channel>,
+        categories: List<Category>,
+        nowUtcMillis: Long,
+    ): Int {
+        val off = switchedOffIds(categories)
+        val kept = if (off.isEmpty()) channels else channels.filter { it.categoryId !in off }
+        if (kept.isEmpty()) {
+            channelDao.deleteStale(sourceId, nowUtcMillis)
+        } else {
+            val categoryNames = categories.associate { it.id to it.name }
+            channelDao.replaceCatalogue(sourceId, normalized(kept, categoryNames), nowUtcMillis)
+        }
+        return kept.size
     }
 
     /**
@@ -737,10 +803,9 @@ class CatalogRepository(
             )
         }
         categoryDao.upsertAll(liveCategories)
-        val categoryNames = liveCategories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(channels, categoryNames), nowUtcMillis)
+        val stored = storeLive(source.id, channels, liveCategories, nowUtcMillis)
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(channels.size, 0, 0)
+        return SyncResult.Success(stored, 0, 0)
     }
 
     /**
@@ -765,13 +830,18 @@ class CatalogRepository(
         // Titles are streamed straight from the response into the database in batches; the full
         // list never exists in memory. Stale titles are pruned only after a stream that completed —
         // a cut connection leaves the previous catalogue (plus whatever new arrived) intact.
+        //
+        // Titles in switched-off categories are dropped per batch (read live, so switching one off
+        // mid-sync takes hold straight away); never stamped, they are pruned with the stale ones.
         if (settings.moviesEnabled.value) {
-            runCatching { api.movieCategories(source) }.getOrNull()
-                ?.takeIf { it.isNotEmpty() }?.let { categoryDao.upsertAll(it) }
+            val categories = runCatching { api.movieCategories(source) }.getOrNull().orEmpty()
+            if (categories.isNotEmpty()) categoryDao.upsertAll(categories)
             try {
                 val count = api.movies(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
-                    movieDao.mergeBatch(source.id, batch, nowUtcMillis)
-                    _vodProgress.update { it?.copy(movies = it.movies + batch.size) }
+                    val off = switchedOffIds(categories)
+                    val kept = if (off.isEmpty()) batch else batch.filter { it.categoryId !in off }
+                    movieDao.mergeBatch(source.id, kept, nowUtcMillis)
+                    _vodProgress.update { it?.copy(movies = it.movies + kept.size) }
                 }
                 if (count > 0) movieDao.deleteStale(source.id, nowUtcMillis)
                 Log.i(TAG, "VOD: $count movies for source ${source.id}")
@@ -783,12 +853,14 @@ class CatalogRepository(
             }
         }
         if (settings.seriesEnabled.value) {
-            runCatching { api.seriesCategories(source) }.getOrNull()
-                ?.takeIf { it.isNotEmpty() }?.let { categoryDao.upsertAll(it) }
+            val categories = runCatching { api.seriesCategories(source) }.getOrNull().orEmpty()
+            if (categories.isNotEmpty()) categoryDao.upsertAll(categories)
             try {
                 val count = api.series(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
-                    seriesDao.mergeBatch(source.id, batch, nowUtcMillis)
-                    _vodProgress.update { it?.copy(series = it.series + batch.size) }
+                    val off = switchedOffIds(categories)
+                    val kept = if (off.isEmpty()) batch else batch.filter { it.categoryId !in off }
+                    seriesDao.mergeBatch(source.id, kept, nowUtcMillis)
+                    _vodProgress.update { it?.copy(series = it.series + kept.size) }
                 }
                 if (count > 0) seriesDao.deleteStale(source.id, nowUtcMillis)
                 Log.i(TAG, "VOD: $count series for source ${source.id}")
@@ -840,8 +912,7 @@ class CatalogRepository(
             }
 
         categoryDao.upsertAll(categories)
-        val categoryNames = categories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(parsed.channels, categoryNames), nowUtcMillis)
+        val stored = storeLive(source.id, parsed.channels, categories, nowUtcMillis)
 
         // If the playlist declared its own guide URL and the user did not set one, adopt it.
         if (source.epgUrl.isNullOrBlank() && !parsed.declaredEpgUrl.isNullOrBlank()) {
@@ -849,7 +920,7 @@ class CatalogRepository(
         }
 
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(parsed.channels.size, 0, 0)
+        return SyncResult.Success(stored, 0, 0)
     }
 
     /**
@@ -1002,6 +1073,32 @@ class CatalogRepository(
 
     companion object {
         private const val TAG = "CatalogRepository"
+
+        /** Ids per `IN (...)` statement, well under SQLite's bound-variable cap. */
+        private const val SQL_CHUNK = 500
+
+        /**
+         * Stable identity of a category for the on/off switch, scoped by kind. Live categories fold
+         * like the guide rail does ('UK| GENERAL HD' and 'UK| GENERAL hevc' are one switch); VOD
+         * categories are shown verbatim, so they key on their plain name — folding would merge
+         * shelves like 'Film 4k UHD' and 'Film FHD 1080p' that are genuinely different.
+         */
+        fun categoryKey(category: Category): String {
+            val identity = if (category.kind == StreamKind.LIVE) {
+                ChannelNameNormalizer.normalize(category.name).groupKey.ifEmpty { category.id }
+            } else {
+                category.name.trim().lowercase().ifEmpty { category.id }
+            }
+            return "${category.kind}:$identity"
+        }
+
+        /** What the Categories screen calls [category] — the same label its rail/chip shows. */
+        fun categoryLabel(category: Category): String =
+            if (category.kind == StreamKind.LIVE) {
+                ChannelNameNormalizer.normalize(category.name).baseName.ifBlank { category.name }
+            } else {
+                category.name.trim()
+            }
 
         /** Most titles a category grid holds at once. Bigger categories show their newest. */
         const val BROWSE_LIMIT = 3000
