@@ -375,6 +375,7 @@
     <string name="vod_no_movies_provider">Questo provider non ha restituito alcun film.</string>
     <string name="vod_no_movies_add">Aggiungi un provider per vedere qui i suoi film.</string>
     <string name="vod_loading_shows">Caricamento serie</string>
+    <string name="vod_sync_progress">Aggiornamento catalogo… %1$s film · %2$s serie</string>
     <string name="vod_no_shows">Nessuna serie</string>
     <string name="vod_no_shows_provider">Questo provider non ha restituito alcuna serie.</string>
     <string name="vod_no_shows_add">Aggiungi un provider per vedere qui le sue serie.</string>

@@ -32,8 +32,14 @@ import app.opentv.data.remote.XtreamApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -145,6 +151,20 @@ class CatalogRepository(
 
         data class Failed(val reason: String, val cause: Throwable?) : SyncResult
     }
+
+    /** Titles written so far by the VOD sync that is running right now. */
+    @androidx.compose.runtime.Immutable
+    data class VodProgress(val movies: Int, val series: Int) {
+        val total: Int get() = movies + series
+    }
+
+    private val _vodProgress = MutableStateFlow<VodProgress?>(null)
+
+    /** The running VOD sync's progress, or null when none is running. Movies/Shows show it. */
+    val vodProgress: StateFlow<VodProgress?> = _vodProgress.asStateFlow()
+
+    /** One VOD sync at a time, whoever asks (launch auto-start, worker, Movies/Shows tab). */
+    private val vodMutex = Mutex()
 
     fun observeChannels(sourceId: Long? = null, categoryId: String? = null): Flow<List<Channel>> =
         channelDao.observe(sourceId, categoryId)
@@ -605,37 +625,23 @@ class CatalogRepository(
     }
 
     /**
-     * Full catalogue: live channels, then movies and series. Used by the periodic worker and by a
-     * manual refresh, where there's no user staring at a spinner. The initial add takes the faster
-     * [syncLive] + background [syncVod] path instead, so the guide appears without waiting for a
-     * 40,000-title VOD list.
+     * Live catalogue for one source, honouring the Live TV toggle. Used by the periodic worker and
+     * by a manual refresh; VOD follows separately through [syncVodCatalogue].
      */
     suspend fun sync(source: Source, nowUtcMillis: Long): SyncResult = withContext(Dispatchers.IO) {
         // Skip fetching a content type the user has switched off — that's the whole speed-up.
         // Live is gated here (not in syncLive) so onboarding's direct syncLive still loads channels.
         // Already-synced rows are left untouched: turning a type back on and refreshing restores it.
-        val live =
-            if (settings.liveEnabled.value) syncLive(source, nowUtcMillis)
-            else SyncResult.Success(0, 0, 0)
-        // VOD rides along only when the stored catalogue is older than [VOD_TTL_MILLIS]: the
-        // periodic worker used to re-download a 300k-title list every run, in the background,
-        // while the user was watching live TV. The Movies/Shows tabs refresh it on their own.
-        if (live is SyncResult.Success && source.kind == SourceKind.XTREAM && vodDue(nowUtcMillis)) {
-            runCatching { syncXtreamVod(source, nowUtcMillis) }
-                .onSuccess { settings.vodSyncedAtMillis = nowUtcMillis }
-                .onFailure { Log.w(TAG, "VOD sync failed for source ${source.id}", it) }
-        }
-        live
+        // Live only: VOD is refreshed separately by [syncVodCatalogue], once per pass over all
+        // sources, gated on its own TTL and rate-capped so it never starves the live stream.
+        if (settings.liveEnabled.value) syncLive(source, nowUtcMillis)
+        else SyncResult.Success(0, 0, 0)
     }
 
-    /**
-     * Whether the VOD catalogue is old enough to re-sync. The stamp is shared by every source, and
-     * callers loop sources with one `now` — so a stamp equal to this pass's `now` means "an earlier
-     * source in this same pass did it", and the rest of the pass still syncs.
-     */
-    private fun vodDue(nowUtcMillis: Long): Boolean {
+    /** Whether a stored VOD catalogue is older than [VOD_TTL_MILLIS] (or was never fetched). */
+    fun vodStale(nowUtcMillis: Long): Boolean {
         val last = settings.vodSyncedAtMillis
-        return last <= 0L || last == nowUtcMillis || nowUtcMillis - last >= VOD_TTL_MILLIS
+        return last <= 0L || nowUtcMillis - last >= VOD_TTL_MILLIS
     }
 
     /** Live channels only — the fast path so the guide can show before VOD and the guide load. */
@@ -654,11 +660,44 @@ class CatalogRepository(
         }
     }
 
-    /** Movies + series — best-effort, meant to run in the background so a huge VOD list never
-     * blocks live TV. Silent on failure: an account with no VOD is normal, not an error. */
-    suspend fun syncVod(source: Source, nowUtcMillis: Long) = withContext(Dispatchers.IO) {
-        runCatching { if (source.kind == SourceKind.XTREAM) syncXtreamVod(source, nowUtcMillis) }
-            .onFailure { Log.w(TAG, "VOD sync failed for source ${source.id}", it) }
+    /**
+     * Movies + series for every Xtream source in [sources] — best-effort and gradual: titles land
+     * in the DB batch by batch, so the Movies/Shows rows fill in while it runs, and [vodProgress]
+     * counts them. Skipped when the catalogue is still fresh unless [force]. A call that arrives
+     * while another sync runs waits for it, then normally finds the catalogue fresh and returns.
+     * [throttled] caps the download at [VOD_BACKGROUND_BYTES_PER_SECOND] — for every run the user
+     * is not actively waiting on. Returns true when a sync ran and stamped the catalogue.
+     */
+    suspend fun syncVodCatalogue(
+        sources: List<Source>,
+        nowUtcMillis: Long,
+        force: Boolean = false,
+        throttled: Boolean = true,
+    ): Boolean = withContext(Dispatchers.IO) {
+        vodMutex.withLock {
+            if (!force && !vodStale(nowUtcMillis)) return@withLock false
+            val xtream = sources.filter { it.kind == SourceKind.XTREAM }
+            if (xtream.isEmpty()) return@withLock false
+            val rate = if (throttled) VOD_BACKGROUND_BYTES_PER_SECOND else 0L
+            _vodProgress.value = VodProgress(0, 0)
+            try {
+                var ok = false
+                for (source in xtream) {
+                    runCatching { syncXtreamVod(source, nowUtcMillis, rate) }
+                        .onSuccess { if (it) ok = true }
+                        .onFailure {
+                            if (it is CancellationException) throw it
+                            Log.w(TAG, "VOD sync failed for source ${source.id}", it)
+                        }
+                }
+                // Stamp only when something synced, so a failure retries on the next trigger
+                // instead of being remembered as "fresh" with no catalogue behind it.
+                if (ok) settings.vodSyncedAtMillis = nowUtcMillis
+                ok
+            } finally {
+                _vodProgress.value = null
+            }
+        }
     }
 
     private suspend fun syncXtreamLive(source: Source, nowUtcMillis: Long): SyncResult {
@@ -716,7 +755,9 @@ class CatalogRepository(
         return runCatching { stalkerApi.createLink(source, cmd) }.getOrNull() ?: channel.streamUrl
     }
 
-    private suspend fun syncXtreamVod(source: Source, nowUtcMillis: Long) {
+    /** Returns false when an enabled content type failed to download (so the TTL is not stamped). */
+    private suspend fun syncXtreamVod(source: Source, nowUtcMillis: Long, maxBytesPerSecond: Long): Boolean {
+        var failed = false
         // VOD is optional: plenty of accounts have live TV only, and a 404 on get_vod_streams
         // must not cost the user their channel list. Movies and series are gated independently so
         // a user who only turned off, say, Series still gets their movie library refreshed.
@@ -728,28 +769,37 @@ class CatalogRepository(
             runCatching { api.movieCategories(source) }.getOrNull()
                 ?.takeIf { it.isNotEmpty() }?.let { categoryDao.upsertAll(it) }
             try {
-                val count = api.movies(source) { batch -> movieDao.mergeBatch(source.id, batch, nowUtcMillis) }
+                val count = api.movies(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
+                    movieDao.mergeBatch(source.id, batch, nowUtcMillis)
+                    _vodProgress.update { it?.copy(movies = it.movies + batch.size) }
+                }
                 if (count > 0) movieDao.deleteStale(source.id, nowUtcMillis)
                 Log.i(TAG, "VOD: $count movies for source ${source.id}")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Movie sync failed for source ${source.id}", e)
+                failed = true
             }
         }
         if (settings.seriesEnabled.value) {
             runCatching { api.seriesCategories(source) }.getOrNull()
                 ?.takeIf { it.isNotEmpty() }?.let { categoryDao.upsertAll(it) }
             try {
-                val count = api.series(source) { batch -> seriesDao.mergeBatch(source.id, batch, nowUtcMillis) }
+                val count = api.series(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
+                    seriesDao.mergeBatch(source.id, batch, nowUtcMillis)
+                    _vodProgress.update { it?.copy(series = it.series + batch.size) }
+                }
                 if (count > 0) seriesDao.deleteStale(source.id, nowUtcMillis)
                 Log.i(TAG, "VOD: $count series for source ${source.id}")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Series sync failed for source ${source.id}", e)
+                failed = true
             }
         }
+        return !failed
     }
 
     private suspend fun syncM3u(source: Source, nowUtcMillis: Long): SyncResult {
@@ -964,6 +1014,9 @@ class CatalogRepository(
 
         /** How long a fetched VOD catalogue is trusted before a background sync refreshes it. */
         const val VOD_TTL_MILLIS = 12L * 60 * 60 * 1000
+
+        /** Download cap for VOD syncs nobody is waiting on (~6 Mbit/s): leaves room for live HD. */
+        const val VOD_BACKGROUND_BYTES_PER_SECOND = 768L * 1024
         val SEPARATOR_CHARS = setOf('#', '*', '=', '~', '-', '_', '•', '█', '▓', '|')
 
         /**

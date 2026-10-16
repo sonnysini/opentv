@@ -137,18 +137,20 @@ class XtreamApi(
     suspend fun movies(
         source: Source,
         batchSize: Int = STREAM_BATCH,
+        maxBytesPerSecond: Long = 0,
         onBatch: suspend (List<Movie>) -> Unit,
     ): Int = withContext(Dispatchers.IO) {
-        streamArray(source, "get_vod_streams", batchSize, onBatch) { obj -> parseMovie(source, obj) }
+        streamArray(source, "get_vod_streams", batchSize, maxBytesPerSecond, onBatch) { obj -> parseMovie(source, obj) }
     }
 
     /** Every series on the panel, in batches. Same streaming contract as [movies]. */
     suspend fun series(
         source: Source,
         batchSize: Int = STREAM_BATCH,
+        maxBytesPerSecond: Long = 0,
         onBatch: suspend (List<Series>) -> Unit,
     ): Int = withContext(Dispatchers.IO) {
-        streamArray(source, "get_series", batchSize, onBatch) { obj -> parseSeries(source, obj) }
+        streamArray(source, "get_series", batchSize, maxBytesPerSecond, onBatch) { obj -> parseSeries(source, obj) }
     }
 
     private fun parseMovie(source: Source, obj: JsonObject): Movie? {
@@ -381,12 +383,14 @@ class XtreamApi(
      * parsed rows to [onBatch] every [batchSize]. Nothing but the current batch is held in memory.
      * A panel that answers with an object instead of an array (some do, for "no VOD") yields zero
      * rows rather than an error, matching what the tree-based [getJson] path did.
+     * A positive [maxBytesPerSecond] caps the download rate (see [ThrottledInputStream]).
      */
     @OptIn(ExperimentalSerializationApi::class)
     private suspend fun <T> streamArray(
         source: Source,
         action: String,
         batchSize: Int,
+        maxBytesPerSecond: Long,
         onBatch: suspend (List<T>) -> Unit,
         parse: (JsonObject) -> T?,
     ): Int {
@@ -404,7 +408,7 @@ class XtreamApi(
             val batch = ArrayList<T>(batchSize)
             try {
                 val elements = json.decodeToSequence(
-                    body.byteStream().buffered(),
+                    ThrottledInputStream(body.byteStream(), maxBytesPerSecond).buffered(),
                     JsonElement.serializer(),
                     DecodeSequenceMode.AUTO_DETECT,
                 )

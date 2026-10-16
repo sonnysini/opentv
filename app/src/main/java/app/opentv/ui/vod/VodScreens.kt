@@ -83,6 +83,7 @@ fun MoviesScreen(
     val genreRows by viewModel.movieGenreRows.collectAsState()
     val categoryMovies by viewModel.movies.collectAsState()
     val vodLoading by viewModel.vodLoading.collectAsState()
+    val vodProgress by viewModel.vodProgress.collectAsState()
     val sources by viewModel.sources.collectAsState()
     val selectedSource by viewModel.selectedVodSource.collectAsState()
 
@@ -115,6 +116,7 @@ fun MoviesScreen(
             onSelectHome = { browseCategory = null; viewModel.selectMovieCategory(null) },
             onSelectCategory = { id -> browseCategory = id; viewModel.selectMovieCategory(id) },
         )
+        vodProgress?.let { VodSyncStrip(it) }
         // Weighted so the shelves fill the space under the fixed search + chips header, exactly and
         // unambiguously — the same reason Live TV weights its guide grid.
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -167,6 +169,7 @@ fun SeriesScreen(
     val genreRows by viewModel.seriesGenreRows.collectAsState()
     val categorySeries by viewModel.series.collectAsState()
     val vodLoading by viewModel.vodLoading.collectAsState()
+    val vodProgress by viewModel.vodProgress.collectAsState()
     val sources by viewModel.sources.collectAsState()
     val selectedSource by viewModel.selectedVodSource.collectAsState()
 
@@ -195,6 +198,7 @@ fun SeriesScreen(
             onSelectHome = { browseCategory = null; viewModel.selectSeriesCategory(null) },
             onSelectCategory = { id -> browseCategory = id; viewModel.selectSeriesCategory(id) },
         )
+        vodProgress?.let { VodSyncStrip(it) }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 browseCategory != null -> SeriesCategoryGrid(categorySeries, onOpenSeries)
@@ -660,6 +664,27 @@ private fun LoadingVod(message: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * A thin "still loading" line while a background VOD sync runs: what is on screen is usable, more
+ * is on its way. Counts are this run's titles, so they climb from zero on a refresh too.
+ */
+@Composable
+private fun VodSyncStrip(progress: app.opentv.data.repo.CatalogRepository.VodProgress) {
+    val format = remember { java.text.NumberFormat.getIntegerInstance() }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        CircularProgressIndicator(modifier = Modifier.width(14.dp).height(14.dp), strokeWidth = 2.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            stringResource(R.string.vod_sync_progress, format.format(progress.movies), format.format(progress.series)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

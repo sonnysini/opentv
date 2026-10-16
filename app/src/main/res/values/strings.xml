@@ -428,6 +428,7 @@
     <string name="vod_no_movies_provider">This provider didn\'t return any movies.</string>
     <string name="vod_no_movies_add">Add a provider to see its movies here.</string>
     <string name="vod_loading_shows">Loading shows</string>
+    <string name="vod_sync_progress">Updating catalogue… %1$s movies · %2$s shows</string>
     <string name="vod_no_shows">No shows</string>
     <string name="vod_no_shows_provider">This provider didn\'t return any shows.</string>
     <string name="vod_no_shows_add">Add a provider to see its shows here.</string>

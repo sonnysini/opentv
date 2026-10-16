@@ -191,6 +191,8 @@ class SourcesViewModel(app: Application) : AndroidViewModel(app) {
                     is CatalogRepository.SyncResult.Failed -> problems++
                 }
             }
+            // VOD in the background, off the refresh spinner (it can take minutes on big providers).
+            launch { runCatching { graph.catalogRepository.syncVodCatalogue(graph.sourceRepository.enabled(), now) } }
             val summary = graph.epgRepository.syncAll(now, force = true)
             problems += summary.feedsFailed
             runCatching { graph.recordingEngine.rescanSeriesRules() }
@@ -903,66 +905,71 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Movies + series load on demand — the first time the user opens Movies or Shows — rather than
-    // up front at login. A provider's 40,000-title VOD list is exactly what makes a first sync
-    // crawl, and most sessions only ever watch live TV. Loaded once per app run.
-    private val _vodLoading = MutableStateFlow(false)
-    val vodLoading: StateFlow<Boolean> = _vodLoading.asStateFlow()
+    // Movies + series load gradually in the background: the app starts a throttled sync shortly
+    // after launch (see OpenTvApp), the periodic worker refreshes it past the TTL, and opening
+    // Movies/Shows only kicks one off itself when nothing has run yet. Titles land batch by batch,
+    // so the rows fill in while it runs; [vodProgress] counts them for the "loading" strip.
+
+    /** The running VOD sync's progress (any trigger), or null when none is running. */
+    val vodProgress: StateFlow<CatalogRepository.VodProgress?> = graph.catalogRepository.vodProgress
+
+    val vodLoading: StateFlow<Boolean> =
+        vodProgress.map { it != null }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, vodProgress.value != null)
+
+    init {
+        // Rebuild the computed rows every [HOME_REFRESH_STEP] titles while a sync runs, and once
+        // when it ends — so a first load shows genre rows long before the last batch arrives.
+        viewModelScope.launch {
+            var lastStep = -1
+            vodProgress.collect { p ->
+                if (p == null) {
+                    if (lastStep >= 0) loadHomeFeeds()
+                    lastStep = -1
+                } else {
+                    val step = p.total / HOME_REFRESH_STEP
+                    if (step != lastStep) {
+                        if (lastStep >= 0) loadHomeFeeds()
+                        lastStep = step
+                    }
+                }
+            }
+        }
+    }
 
     @Volatile private var vodRequested = false
-
-    /** How long a fetched VOD catalogue is trusted before a warm launch re-syncs it. */
-    private val VOD_TTL_MILLIS = CatalogRepository.VOD_TTL_MILLIS
 
     fun ensureVodLoaded() {
         if (vodRequested) return
         vodRequested = true
-        viewModelScope.launch { syncVodIfStale(force = false) }
+        viewModelScope.launch {
+            // An empty library means the user is staring at a spinner: no rate cap then.
+            val empty = runCatching {
+                graph.catalogRepository.movieCount() + graph.catalogRepository.seriesCount()
+            }.getOrDefault(0) == 0
+            syncVod(force = false, throttled = !empty)
+        }
     }
 
     /**
      * Force a fresh download of the movies/series catalogue, ignoring the freshness cache. Wired
      * to the pull-to-refresh / refresh action so the user always has a way to pull new titles in
-     * before the TTL lapses.
+     * before the TTL lapses. Uncapped: the user asked for it.
      */
     fun refreshVod() {
         vodRequested = true
-        viewModelScope.launch { syncVodIfStale(force = true) }
+        viewModelScope.launch { syncVod(force = true, throttled = false) }
     }
 
-    private suspend fun syncVodIfStale(force: Boolean) {
-        val now = System.currentTimeMillis()
-
-        // Warm-launch fast path. The catalogue is persisted in Room, so once it has been fetched
-        // there is no reason to re-download and re-upsert a 40k-title list on every launch — that
-        // was both the multi-minute "Loading movies & shows…" and the bandwidth hog that starved
-        // the live preview into buffering. When we synced recently and already have rows, skip the
-        // network entirely and just (re)build the home shelves off what is stored.
-        if (!force) {
-            val haveCatalogue = runCatching {
-                graph.catalogRepository.movieCount() + graph.catalogRepository.seriesCount()
-            }.getOrDefault(0) > 0
-            val last = settings.vodSyncedAtMillis
-            val fresh = last > 0 && now - last < VOD_TTL_MILLIS
-            if (haveCatalogue && fresh) {
-                loadHomeFeeds()
-                return
-            }
+    private suspend fun syncVod(force: Boolean, throttled: Boolean) {
+        runCatching {
+            graph.catalogRepository.syncVodCatalogue(
+                graph.sourceRepository.enabled(),
+                System.currentTimeMillis(),
+                force = force,
+                throttled = throttled,
+            )
         }
-
-        _vodLoading.value = true
-        val synced = StatusBus.during("Loading movies & shows…") {
-            runCatching {
-                for (source in graph.sourceRepository.enabled()) {
-                    graph.catalogRepository.syncVod(source, now)
-                }
-            }.isSuccess
-        }
-        _vodLoading.value = false
-        // Stamp the cache only when the fetch actually succeeded, so a failed sync retries on the
-        // next open instead of being remembered as "fresh" and leaving the user with no catalogue.
-        if (synced) settings.vodSyncedAtMillis = now
-        // The catalogue may have grown — recompute the computed home rows off the fresh data.
         loadHomeFeeds()
     }
 
@@ -1265,3 +1272,6 @@ class WebManagerViewModel(app: Application) : AndroidViewModel(app) {
         server.stop()
     }
 }
+
+/** Titles between home-row rebuilds while a VOD sync is still landing. */
+private const val HOME_REFRESH_STEP = 20_000

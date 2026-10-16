@@ -52,6 +52,10 @@ class SyncWorker(
 
         }
 
+        // Movies + series once for all sources, only when the stored catalogue is past its TTL,
+        // rate-capped so a background run never starves whatever is playing.
+        runCatching { graph.catalogRepository.syncVodCatalogue(sources, now) }
+
         // Guides sync as one pass across every enabled feed — provider guides, built-in
         // free sources and user URLs merge into a single guide, then the matcher runs.
         val summary = graph.epgRepository.syncAll(now)
