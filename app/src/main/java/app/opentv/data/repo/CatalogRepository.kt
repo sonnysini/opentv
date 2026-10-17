@@ -991,7 +991,25 @@ class CatalogRepository(
             )
         }
 
-        return stamped
+        return withTidiestNames(stamped)
+    }
+
+    /**
+     * One display name per channel: the variants of a group can be spelled `Sky Uno`, `SKY UNO`
+     * and `Sky UNO` by different lists, and whichever plays first used to name the row. Prefer
+     * the most common spelling that isn't all capitals.
+     */
+    private fun withTidiestNames(channels: List<Channel>): List<Channel> {
+        val names = channels.groupBy { it.groupKey }.mapValues { (_, group) ->
+            val spellings = group.map { it.displayName }
+            spellings.filter { n -> n.any { it.isLowerCase() } }.ifEmpty { spellings }
+                .groupingBy { it }.eachCount()
+                .maxByOrNull { it.value }!!.key
+        }
+        return channels.map { c ->
+            val name = names[c.groupKey] ?: return@map c
+            if (c.groupKey.isEmpty() || name == c.displayName) c else c.copy(displayName = name)
+        }
     }
 
     /** Decorative list headings: starts AND ends with a run of banner characters. */
@@ -1165,6 +1183,6 @@ class CatalogRepository(
          * already-imported channels. The app compares it against a stored value on launch
          * and runs [renormalizeAll] once when it moves.
          */
-        const val NORMALIZER_VERSION = 2
+        const val NORMALIZER_VERSION = 3
     }
 }

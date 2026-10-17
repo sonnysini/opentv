@@ -57,12 +57,33 @@ class ChannelNameNormalizerTest {
     }
 
     @Test
-    fun `RAW and fps markers strip into the label without ranking`() {
+    fun `RAW and fps markers strip into the label, bare RAW ranks as FHD`() {
         val n = ChannelNameNormalizer.normalize("UK| PRIME RAW 60fps")
 
         assertThat(n.baseName).isEqualTo("PRIME")
-        assertThat(n.qualityRank).isEqualTo(0)
+        assertThat(n.qualityRank).isEqualTo(310)
         assertThat(n.qualityLabel).isEqualTo("RAW 60fps")
+    }
+
+    @Test
+    fun `HEVC beats RAW beats plain inside a resolution, below 4K`() {
+        fun rank(name: String) = ChannelNameNormalizer.normalize(name).qualityRank
+        assertThat(rank("Sky Atlantic HEVC")).isEqualTo(320)
+        assertThat(rank("Sky Uno HD [1080p] HEVC")).isEqualTo(320)
+        assertThat(rank("Rai 1 RAW")).isEqualTo(310)
+        assertThat(rank("Sky Atlantic FHD")).isEqualTo(300)
+        assertThat(rank("Sky Atlantic 4K")).isEqualTo(400)
+        assertThat(ChannelNameNormalizer.resolutionTier(320)).isEqualTo(300)
+    }
+
+    @Test
+    fun `Full HD in two words is FHD and folds with the other variants`() {
+        val n = ChannelNameNormalizer.normalize("Sky Atlantic Full HD")
+
+        assertThat(n.baseName).isEqualTo("Sky Atlantic")
+        assertThat(n.groupKey).isEqualTo(ChannelNameNormalizer.normalize("Sky Atlantic FHD").groupKey)
+        assertThat(n.qualityRank).isEqualTo(300)
+        assertThat(n.qualityLabel).isEqualTo("FHD")
     }
 
     @Test
