@@ -169,6 +169,7 @@
     <string name="live_categories_title">Categorie</string>
     <string name="live_menu_hint">☰ Categorie   ← Menu</string>
     <string name="live_menu_hint_categories">☰ Torna ai canali   ← Menu</string>
+    <string name="live_group_empty">Nessun canale in questo gruppo — torno alle categorie…</string>
     <string name="settings_live_preview_title">Anteprima in diretta nella guida</string>
     <string name="settings_live_preview_subtitle">Riproduce il canale selezionato nel riquadro di anteprima. Disattiva questa opzione se la guida è scattosa su un box datato.</string>
     <string name="settings_preview_sound_title">Audio anteprima</string>

@@ -376,6 +376,13 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /**
+     * True once the guide has been built at least once. After that an empty [rows] means the group
+     * really has no channels, not that it is still loading — the full-screen list uses it to stop
+     * spinning and send the user back to the categories.
+     */
+    val rowsLoaded = MutableStateFlow(false)
+
     /** Guards the start-up loading bar so it shows once, on the first build, not on every tap. */
     @Volatile
     private var guideBuilt = false
@@ -428,7 +435,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             .flowOn(Dispatchers.Default)
             // Once the first guide is on screen, clear the start-up bar — and never show it for a
             // plain category switch again.
-            .onEach { if (!guideBuilt) { guideBuilt = true; StatusBus.set(null) } }
+            .onEach {
+                if (!guideBuilt) { guideBuilt = true; StatusBus.set(null) }
+                rowsLoaded.value = true
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private fun buildRows(

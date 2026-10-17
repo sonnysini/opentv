@@ -130,6 +130,7 @@ fun HomeScreen(
 
     val categories by viewModel.visibleCategoryGroups.collectAsState()
     val rows by viewModel.rows.collectAsState()
+    val rowsLoaded by viewModel.rowsLoaded.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val favouritesOnly by viewModel.favouritesOnly.collectAsState()
     val sources by viewModel.sources.collectAsState()
@@ -314,6 +315,7 @@ fun HomeScreen(
             selectedCategory = selectedCategory,
             favouritesOnly = favouritesOnly,
             highlightedKey = highlightedRow?.key,
+            rowsLoaded = rowsLoaded && !isSyncing,
             fallbackKey = { lastWatched(it)?.key },
             nowMillis = nowMillis,
             onSelectCategory = viewModel::selectCategory,
