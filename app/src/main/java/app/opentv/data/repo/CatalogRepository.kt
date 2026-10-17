@@ -1055,6 +1055,7 @@ class CatalogRepository(
     suspend fun variants(channel: Channel): List<Channel> {
         if (channel.groupKey.isEmpty()) return listOf(channel)
         val all = channelDao.variantsInGroup(channel.groupKey)
+        if (!settings.mergeCategorySources.value) return distinctByQuality(all).ifEmpty { listOf(channel) }
         // The same quality from different restream sources ('Sky Sport (Hermes)' vs '(SAT)') is a
         // real alternative — one may be down while the other plays — so it stays, labelled
         // "FHD · Hermes", and the fallback walks through it. Plain dupes still collapse.

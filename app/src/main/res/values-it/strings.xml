@@ -453,6 +453,8 @@
     <string name="categories_no_match">Nessuna categoria corrisponde al filtro.</string>
     <string name="categories_italian_only">Solo italiano</string>
     <string name="categories_italian_only_desc">Spegne tutte le categorie live in altre lingue (da bandiera o nome), anche quelle che il provider aggiunge dopo. Puoi sempre riaccenderne una qui sotto.</string>
+    <string name="categories_merge_sources">Unisci gruppi per sorgente</string>
+    <string name="categories_merge_sources_desc">Sky Sport (Hermes), (SAT), (DVS)… diventano un solo "Sky Sport"; le sorgenti si scelgono dal pannello Qualità.</string>
     <string name="categories_foreign_sport">Sport internazionale</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>
     <!-- Qualità preferita + fallback automatico -->

@@ -139,6 +139,15 @@ class AppSettings private constructor(context: Context) {
     val italianOnly: StateFlow<Boolean> = _italianOnly.asStateFlow()
 
     /** International sport groups with foreign commentary (ESPN+, NBA Pass, …) switched off. */
+    /** Fold live categories split by restream source ('Sky Sport (Hermes)' + '(SAT)') into one. */
+    private val _mergeCategorySources = MutableStateFlow(prefs.getBoolean(KEY_MERGE_CATEGORY_SOURCES, true))
+    val mergeCategorySources: StateFlow<Boolean> = _mergeCategorySources.asStateFlow()
+
+    fun setMergeCategorySources(on: Boolean) {
+        prefs.edit().putBoolean(KEY_MERGE_CATEGORY_SOURCES, on).apply()
+        _mergeCategorySources.value = on
+    }
+
     private val _foreignSportOff = MutableStateFlow(prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false))
     val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
 
@@ -543,6 +552,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_DISABLED_CATS = "disabled_categories"
         private const val KEY_FORCED_ON_CATS = "forced_on_categories"
         private const val KEY_ITALIAN_ONLY = "italian_only"
+        private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
         private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"

@@ -251,11 +251,12 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         combine(
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             selectedSource,
-        ) { raw, sourceId ->
+            settings.mergeCategorySources,
+        ) { raw, sourceId, merge ->
             // Scope the category rail to the chosen provider, so a second playlist's categories show
             // on their own (cardiodoc's "keep sources separate"); null folds across every provider.
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped)
+            foldCategories(scoped, merge)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -264,7 +265,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * underlying id at once. Shared by the guide's [categoryGroups] and the manager's
      * [managerCategoryGroups] so both group the rail identically.
      */
-    private fun foldCategories(raw: List<Category>): List<CategoryGroup> {
+    private fun foldCategories(raw: List<Category>, mergeSources: Boolean): List<CategoryGroup> {
         // Pass 1: codec folding, as before — one entry per normalised name.
         data class Folded(val key: String, val label: String, val rawName: String, val ids: MutableList<String>)
         val folded = LinkedHashMap<String, Folded>()
@@ -279,7 +280,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         // member, and [CategoryGroup.memberKeys] remembers the rest.
         val families = LinkedHashMap<String, MutableList<Folded>>()
         for (f in folded.values) {
-            val family = CategoryFamily.of(f.rawName).key.ifEmpty { "#" + f.key }
+            val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
             families.getOrPut(family) { mutableListOf() } += f
         }
         return families.values.map { members ->
@@ -648,9 +649,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         combine(
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             managerSelectedSource,
-        ) { raw, sourceId ->
+            graph.settings.mergeCategorySources,
+        ) { raw, sourceId, merge ->
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped)
+            foldCategories(scoped, merge)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -1393,6 +1395,9 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
     /** Live language rules — the "Italian only" and "international sport" switches. */
     val italianOnly: StateFlow<Boolean> = graph.settings.italianOnly
     val foreignSportOff: StateFlow<Boolean> = graph.settings.foreignSportOff
+    val mergeSources: StateFlow<Boolean> = graph.settings.mergeCategorySources
+
+    fun setMergeSources(on: Boolean) = graph.settings.setMergeCategorySources(on)
 
     fun selectKind(next: StreamKind) {
         kind.value = next
