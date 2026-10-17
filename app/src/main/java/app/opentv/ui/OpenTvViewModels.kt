@@ -24,6 +24,7 @@ import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StremioStream
 import app.opentv.data.model.StreamKind
 import app.opentv.data.parser.displayTitle
+import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.repo.CatalogRepository
 import app.opentv.data.repo.GenreGroup
@@ -242,17 +243,20 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         val ids: List<String>,
         /** The provider's own name for the first category in the group, flags and emoji intact. */
         val rawName: String = label,
+        /** Keys of the categories folded into this one (by source); just [key] when nothing folded. */
+        val memberKeys: Set<String> = setOf(key),
     )
 
     val categoryGroups: StateFlow<List<CategoryGroup>> =
         combine(
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             selectedSource,
-        ) { raw, sourceId ->
+            settings.mergeCategorySources,
+        ) { raw, sourceId, merge ->
             // Scope the category rail to the chosen provider, so a second playlist's categories show
             // on their own (cardiodoc's "keep sources separate"); null folds across every provider.
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped)
+            foldCategories(scoped, merge)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -261,17 +265,39 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * underlying id at once. Shared by the guide's [categoryGroups] and the manager's
      * [managerCategoryGroups] so both group the rail identically.
      */
-    private fun foldCategories(raw: List<Category>): List<CategoryGroup> {
-        val groups = LinkedHashMap<String, Pair<String, MutableList<String>>>()
-        val rawNames = HashMap<String, String>()
+    private fun foldCategories(raw: List<Category>, mergeSources: Boolean): List<CategoryGroup> {
+        // Pass 1: codec folding, as before — one entry per normalised name.
+        data class Folded(val key: String, val label: String, val rawName: String, val ids: MutableList<String>)
+        val folded = LinkedHashMap<String, Folded>()
         for (category in raw) {
             val n = ChannelNameNormalizer.normalize(category.name)
             val key = n.groupKey.ifEmpty { category.id }
-            val entry = groups.getOrPut(key) { n.baseName to mutableListOf() }
-            entry.second += category.id
-            rawNames.putIfAbsent(key, category.name.trim())
+            folded.getOrPut(key) { Folded(key, n.baseName, category.name.trim(), mutableListOf()) }.ids += category.id
         }
-        return groups.map { (key, value) -> CategoryGroup(key, value.first, value.second, rawNames[key] ?: value.first) }
+        // Pass 2: source folding — 'Sky Sport (Hermes)' + 'Sky Sport (SAT)' become one "Sky Sport".
+        // Only families with 2+ members fold; a lone category keeps its own key and name, so saved
+        // picks (last group, hidden groups) still find it. A folded family keys on its first
+        // member, and [CategoryGroup.memberKeys] remembers the rest.
+        val families = LinkedHashMap<String, MutableList<Folded>>()
+        for (f in folded.values) {
+            val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
+            families.getOrPut(family) { mutableListOf() } += f
+        }
+        return families.values.map { members ->
+            val first = members.first()
+            if (members.size == 1) {
+                CategoryGroup(first.key, first.label, first.ids, first.rawName)
+            } else {
+                val name = CategoryFamily.of(first.rawName).name
+                CategoryGroup(
+                    key = first.key,
+                    label = ChannelNameNormalizer.normalize(name).baseName,
+                    ids = members.flatMap { it.ids },
+                    rawName = name,
+                    memberKeys = members.mapTo(HashSet()) { it.key },
+                )
+            }
+        }
     }
 
     /**
@@ -281,7 +307,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     private val hiddenCategoryIds: StateFlow<Set<String>> =
         combine(categoryGroups, settings.hiddenCategories, settings.hiddenUnlocked) { groups, hidden, unlocked ->
             if (unlocked) emptySet()
-            else groups.filter { it.key in hidden }.flatMap { it.ids }.toSet()
+            else groups.filter { g -> g.memberKeys.any { it in hidden } }.flatMap { it.ids }.toSet()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     /**
@@ -297,7 +323,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     /** The rail's view of categories: hidden ones drop out until the session is unlocked. */
     val visibleCategoryGroups: StateFlow<List<CategoryGroup>> =
         combine(categoryGroups, settings.hiddenCategories, settings.hiddenUnlocked) { groups, hidden, unlocked ->
-            if (unlocked) groups else groups.filter { it.key !in hidden }
+            if (unlocked) groups else groups.filter { g -> g.memberKeys.none { it in hidden } }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -401,7 +427,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     val rows: StateFlow<List<Row>> =
         combine(selectedCategory, favouritesOnly, query, categoryGroups, hiddenCategoryIds) {
                 category, favs, q, groups, hidden ->
-            val ids = category?.let { key -> groups.firstOrNull { it.key == key }?.ids }
+            val ids = category?.let { key -> groups.firstOrNull { key in it.memberKeys }?.ids }
             RowsKey(ids, favs, q, hidden)
         }
             .combine(selectedSource) { key, source -> key to source }
@@ -623,9 +649,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         combine(
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             managerSelectedSource,
-        ) { raw, sourceId ->
+            graph.settings.mergeCategorySources,
+        ) { raw, sourceId, merge ->
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped)
+            foldCategories(scoped, merge)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -636,7 +663,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     @OptIn(ExperimentalCoroutinesApi::class)
     val managerRows: StateFlow<List<Row>> =
         combine(managerSelectedSource, managerSelectedCategory, managerCategoryGroups) { source, key, groups ->
-            val ids = key?.let { k -> groups.firstOrNull { it.key == k }?.ids }
+            val ids = key?.let { k -> groups.firstOrNull { k in it.memberKeys }?.ids }
             source to ids
         }
             .distinctUntilChanged()
@@ -1368,6 +1395,9 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
     /** Live language rules — the "Italian only" and "international sport" switches. */
     val italianOnly: StateFlow<Boolean> = graph.settings.italianOnly
     val foreignSportOff: StateFlow<Boolean> = graph.settings.foreignSportOff
+    val mergeSources: StateFlow<Boolean> = graph.settings.mergeCategorySources
+
+    fun setMergeSources(on: Boolean) = graph.settings.setMergeCategorySources(on)
 
     fun selectKind(next: StreamKind) {
         kind.value = next

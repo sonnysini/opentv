@@ -138,7 +138,7 @@ fun FullscreenLive(
     val title = when {
         favouritesOnly -> favouritesLabel
         selectedCategory == null -> allLabel
-        else -> categories.firstOrNull { it.key == selectedCategory }?.rawName ?: ""
+        else -> categories.firstOrNull { selectedCategory in it.memberKeys }?.rawName ?: ""
     }
 
     Column(
@@ -186,7 +186,7 @@ fun FullscreenLive(
                 add(Entry("fav", favouritesLabel, favouritesOnly) { onSelectFavourites() })
                 add(Entry("all", allLabel, !favouritesOnly && selectedCategory == null) { onSelectCategory(null) })
                 categories.forEach { g ->
-                    add(Entry("cat-${g.key}", g.rawName, !favouritesOnly && selectedCategory == g.key) { onSelectCategory(g.key) })
+                    add(Entry("cat-${g.key}", g.rawName, !favouritesOnly && selectedCategory in g.memberKeys) { onSelectCategory(g.key) })
                 }
             }
             val startIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)

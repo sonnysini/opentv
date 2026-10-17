@@ -306,7 +306,7 @@ fun HomeScreen(
     // would leave an empty list after a restart — fall back to All once the categories are in.
     LaunchedEffect(categories, selectedCategory) {
         val key = selectedCategory ?: return@LaunchedEffect
-        if (categories.isNotEmpty() && categories.none { it.key == key }) viewModel.selectCategory(null)
+        if (categories.isNotEmpty() && categories.none { key in it.memberKeys }) viewModel.selectCategory(null)
     }
 
     if (fullscreen) {
@@ -406,7 +406,7 @@ fun HomeScreen(
                     )
                 }
                 items(categories, key = { it.key }) { group ->
-                    val groupSelected = !favouritesOnly && selectedCategory == group.key
+                    val groupSelected = !favouritesOnly && selectedCategory in group.memberKeys
                     RailEntry(
                         label = group.label,
                         selected = groupSelected,
