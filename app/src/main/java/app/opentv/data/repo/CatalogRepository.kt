@@ -23,6 +23,7 @@ import app.opentv.data.model.Series
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StreamKind
+import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.M3uParser
 import app.opentv.data.parser.VodTitleCleaner
@@ -1054,7 +1055,19 @@ class CatalogRepository(
     suspend fun variants(channel: Channel): List<Channel> {
         if (channel.groupKey.isEmpty()) return listOf(channel)
         val all = channelDao.variantsInGroup(channel.groupKey)
-        return distinctByQuality(all).ifEmpty { listOf(channel) }
+        // The same quality from different restream sources ('Sky Sport (Hermes)' vs '(SAT)') is a
+        // real alternative — one may be down while the other plays — so it stays, labelled
+        // "FHD · Hermes", and the fallback walks through it. Plain dupes still collapse.
+        val ids = all.mapNotNullTo(HashSet()) { it.categoryId }
+        val sources = if (ids.isEmpty()) emptyMap() else categoryDao.namesFor(ids)
+            .associate { it.id to CategoryFamily.of(it.name).source }
+        val seen = HashSet<String>()
+        return all.mapNotNull { v ->
+            val source = sources[v.categoryId]
+            if (!seen.add("${v.qualityRank}|${v.qualityLabel.lowercase()}|$source")) return@mapNotNull null
+            if (source == null) v
+            else v.copy(qualityLabel = listOf(v.qualityLabel, source).filter { it.isNotEmpty() }.joinToString(" · "))
+        }.ifEmpty { listOf(channel) }
     }
 
     /**
