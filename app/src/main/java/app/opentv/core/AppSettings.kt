@@ -37,9 +37,10 @@ class AppSettings private constructor(context: Context) {
     /**
      * How the live-TV channel list is laid out: the scrolling EPG time-[ChannelLayout.GRID], or a
      * compact one-channel-per-row [ChannelLayout.LIST] (logo, name, now/next) for people who find
-     * the full grid busy. Defaults to the grid.
+     * the full grid busy, or [ChannelLayout.FULLSCREEN]: the same list across the whole screen with
+     * no preview or menus, ☰ switching to the categories. Defaults to the full-screen list.
      */
-    enum class ChannelLayout { GRID, LIST }
+    enum class ChannelLayout { GRID, LIST, FULLSCREEN }
 
     private val _channelLayout = MutableStateFlow(readChannelLayout())
     val channelLayout: StateFlow<ChannelLayout> = _channelLayout.asStateFlow()
@@ -190,6 +191,14 @@ class AppSettings private constructor(context: Context) {
         prefs.edit().putString(KEY_CHANNEL_LAYOUT, layout.name).apply()
         _channelLayout.value = layout
     }
+
+    /**
+     * The live group last opened — "fav", "all", or a category group key — so the app reopens on
+     * it. Read once at start-up by the live screen; not a flow because nothing needs to observe it.
+     */
+    var lastLiveGroup: String?
+        get() = prefs.getString(KEY_LAST_LIVE_GROUP, null)
+        set(value) { prefs.edit().putString(KEY_LAST_LIVE_GROUP, value).apply() }
 
     fun setSubtitlesEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SUBTITLES, enabled).apply()
@@ -369,7 +378,7 @@ class AppSettings private constructor(context: Context) {
 
     private fun readChannelLayout(): ChannelLayout =
         runCatching { ChannelLayout.valueOf(prefs.getString(KEY_CHANNEL_LAYOUT, null) ?: "") }
-            .getOrDefault(ChannelLayout.GRID)
+            .getOrDefault(ChannelLayout.FULLSCREEN)
 
     // ---- Recording ---------------------------------------------------------------------------
 
@@ -525,6 +534,7 @@ class AppSettings private constructor(context: Context) {
     companion object {
         private const val KEY_THEME = "theme_mode"
         private const val KEY_CHANNEL_LAYOUT = "channel_layout"
+        private const val KEY_LAST_LIVE_GROUP = "last_live_group"
         private const val KEY_SUBTITLES = "subtitles_enabled"
         private const val KEY_PREVIEW_VIDEO = "guide_preview_video"
         private const val KEY_PREVIEW_SOUND = "guide_preview_sound"

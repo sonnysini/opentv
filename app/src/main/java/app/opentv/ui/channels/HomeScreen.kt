@@ -115,13 +115,18 @@ fun HomeScreen(
     onAddSource: () -> Unit,
     onRefresh: () -> Unit,
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit = { _, _, _, _ -> },
+    // Full-screen layout only: LEFT on a row asks the shell to bring its navigation menu back.
+    onRevealNav: () -> Unit = {},
     viewModel: ChannelsViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val graph = remember { ServiceLocator.get(context) }
     val settings = remember { graph.settings }
-    val previewEnabled by settings.guidePreviewVideo.collectAsState()
+    val previewSetting by settings.guidePreviewVideo.collectAsState()
     val channelLayout by settings.channelLayout.collectAsState()
+    val fullscreen = channelLayout == AppSettings.ChannelLayout.FULLSCREEN
+    // The full-screen list has no preview pane, so it never runs the preview player either.
+    val previewEnabled = previewSetting && !fullscreen
 
     val categories by viewModel.visibleCategoryGroups.collectAsState()
     val rows by viewModel.rows.collectAsState()
@@ -140,7 +145,11 @@ fun HomeScreen(
     //  - highlightedRow: where the d-pad is in the grid. Moves freely with up/down.
     //  - selectedRow: what the preview pane plays. Only changes when you press OK, so scrolling
     //    the list is calm and silent instead of re-tuning a stream on every keypress.
-    var highlightedRow by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
+    // Starts on the channel last watched (the player records every zap), so coming back from
+    // full-screen — or opening the app — lands on it rather than on the top of the list.
+    fun lastWatched(list: List<ChannelsViewModel.Row>) =
+        settings.lastChannelId.let { id -> list.firstOrNull { row -> row.variants.any { it.id == id } } }
+    var highlightedRow by remember { mutableStateOf(lastWatched(rows)) }
     var selectedRow by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     val previewSound by settings.guidePreviewSound.collectAsState()
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -198,7 +207,7 @@ fun HomeScreen(
     // Keep both valid as the list changes (e.g. switching category): stay on the same channel if
     // it's still present, otherwise fall back to the top of the new list.
     LaunchedEffect(rows) {
-        highlightedRow = rows.firstOrNull { it.key == highlightedRow?.key } ?: rows.firstOrNull()
+        highlightedRow = rows.firstOrNull { it.key == highlightedRow?.key } ?: lastWatched(rows) ?: rows.firstOrNull()
         selectedRow = rows.firstOrNull { it.key == selectedRow?.key } ?: rows.firstOrNull()
     }
 
@@ -291,7 +300,38 @@ fun HomeScreen(
         )
     }
 
-    Row(Modifier.fillMaxSize()) {
+    // A remembered category that has since gone (deleted by the provider, switched off, hidden)
+    // would leave an empty list after a restart — fall back to All once the categories are in.
+    LaunchedEffect(categories, selectedCategory) {
+        val key = selectedCategory ?: return@LaunchedEffect
+        if (categories.isNotEmpty() && categories.none { it.key == key }) viewModel.selectCategory(null)
+    }
+
+    if (fullscreen) {
+        FullscreenLive(
+            rows = rows,
+            categories = categories,
+            selectedCategory = selectedCategory,
+            favouritesOnly = favouritesOnly,
+            highlightedKey = highlightedRow?.key,
+            fallbackKey = { lastWatched(it)?.key },
+            nowMillis = nowMillis,
+            onSelectCategory = viewModel::selectCategory,
+            onSelectFavourites = viewModel::selectFavourites,
+            onFocusRow = { highlightedRow = it },
+            onPlay = { requestLive(it.primary) },
+            onToggleFavourite = { viewModel.toggleFavourite(it) },
+            onExitLeft = onRevealNav,
+            emptyContent = {
+                when {
+                    favouritesOnly -> NoFavouritesState()
+                    isSyncing || channelsPresent == null || channelsPresent == true -> LoadingState(isSyncing)
+                    hasSources -> ChannelsErrorState(onRetry = onRefresh, onEditProvider = onAddSource)
+                    else -> EmptyState(onAddSource)
+                }
+            },
+        )
+    } else Row(Modifier.fillMaxSize()) {
 
         // ---- Category rail -----------------------------------------------------------------
         // Width animates to 0 while focus is in the guide (see onFocusRow) so the grid gets the

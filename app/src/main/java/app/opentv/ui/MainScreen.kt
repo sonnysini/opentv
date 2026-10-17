@@ -56,7 +56,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import app.opentv.core.AppSettings
 import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -112,6 +115,7 @@ fun MainScreen(
     val liveEnabled by settings.liveEnabled.collectAsState()
     val moviesEnabled by settings.moviesEnabled.collectAsState()
     val seriesEnabled by settings.seriesEnabled.collectAsState()
+    val channelLayout by settings.channelLayout.collectAsState()
     val visibleTabs = remember(liveEnabled, moviesEnabled, seriesEnabled) {
         buildList {
             if (liveEnabled) add(Tab.LIVE)
@@ -125,6 +129,18 @@ fun MainScreen(
     val homeTab = visibleTabs.first()
 
     var tab by remember { mutableStateOf(homeTab) }
+
+    // The full-screen live list takes the whole screen, menu included: the rail is gone until LEFT
+    // on a row brings it back, and it goes again as soon as focus leaves it.
+    var navRevealed by remember { mutableStateOf(false) }
+    val navHidden = tab == Tab.LIVE && channelLayout == AppSettings.ChannelLayout.FULLSCREEN && !navRevealed
+    val navFocus = remember { FocusRequester() }
+    LaunchedEffect(navRevealed) {
+        if (navRevealed) {
+            delay(50)
+            runCatching { navFocus.requestFocus() }
+        }
+    }
 
     // If the selected tab gets hidden (its type toggled off while it's open), drop back to the
     // home tab so the content area never tries to show a tab that's no longer there.
@@ -161,10 +177,14 @@ fun MainScreen(
     // of it and leave a sliver poking out — so they live side by side and never collide.
     Column(Modifier.fillMaxSize()) {
       Row(Modifier.weight(1f).fillMaxWidth()) {
-        NavRail(
+        if (!navHidden) NavRail(
             tabs = visibleTabs,
             current = tab,
-            onSelect = { tab = it },
+            // Keep the rail while it holds focus — picking Live from it mustn't pull it out from
+            // under the cursor; it goes once focus moves on into the list.
+            onSelect = { tab = it; navRevealed = true },
+            currentFocus = navFocus,
+            onFocusLeft = { navRevealed = false },
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onOpenProfiles = onOpenProfiles,
@@ -181,6 +201,7 @@ fun MainScreen(
                     onAddSource = onAddSource,
                     onRefresh = onRefresh,
                     onPlayCatchup = onPlayCatchup,
+                    onRevealNav = { navRevealed = true },
                 )
                 Tab.MOVIES -> MoviesScreen(
                     onOpenMovie = onOpenMovie,
@@ -263,6 +284,10 @@ private fun NavRail(
     onOpenProfiles: () -> Unit,
     activeProfileName: String,
     modifier: Modifier = Modifier,
+    // Put on the current tab's item, so the shell can drop focus into the rail when it reveals it.
+    currentFocus: FocusRequester? = null,
+    // Focus has moved out of the rail (after having been in it).
+    onFocusLeft: () -> Unit = {},
 ) {
     // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
@@ -277,7 +302,10 @@ private fun NavRail(
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
             .focusGroup()
-            .onFocusChanged { expanded = it.hasFocus }
+            .onFocusChanged {
+                if (expanded && !it.hasFocus) onFocusLeft()
+                expanded = it.hasFocus
+            }
             .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -307,7 +335,10 @@ private fun NavRail(
         Spacer(Modifier.height(8.dp))
 
         tabs.forEach { t ->
-            RailItem(t.icon, stringResource(t.labelRes), expanded, current == t) { onSelect(t) }
+            RailItem(
+                t.icon, stringResource(t.labelRes), expanded, current == t,
+                modifier = if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier,
+            ) { onSelect(t) }
         }
 
         Spacer(Modifier.height(1.dp).fillMaxWidth())
@@ -325,6 +356,7 @@ private fun RailItem(
     label: String,
     expanded: Boolean,
     selected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -338,7 +370,7 @@ private fun RailItem(
     else MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .clip(RoundedCornerShape(10.dp))

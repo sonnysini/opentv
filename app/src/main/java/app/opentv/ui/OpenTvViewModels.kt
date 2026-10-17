@@ -217,8 +217,12 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = graph.settings
 
     /** null = All. Exposed so the sidebar can highlight the active entry. */
-    val selectedCategory = MutableStateFlow<String?>(null)
-    val favouritesOnly = MutableStateFlow(false)
+    // Both start on the group the user last opened, so the app reopens where they left it. A
+    // category that has since disappeared just yields an empty list until they pick another.
+    val selectedCategory = MutableStateFlow(
+        settings.lastLiveGroup?.takeIf { it != LAST_GROUP_ALL && it != LAST_GROUP_FAVOURITES },
+    )
+    val favouritesOnly = MutableStateFlow(settings.lastLiveGroup == LAST_GROUP_FAVOURITES)
     /** Provider filter for the live guide. null = every source. Only surfaced when there's >1 source. */
     val selectedSource = MutableStateFlow<Long?>(null)
     private val query = MutableStateFlow("")
@@ -232,7 +236,13 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * filter across every underlying id at once. This is the on-device version of what
      * Viewella did on a server it had to pay for.
      */
-    data class CategoryGroup(val key: String, val label: String, val ids: List<String>)
+    data class CategoryGroup(
+        val key: String,
+        val label: String,
+        val ids: List<String>,
+        /** The provider's own name for the first category in the group, flags and emoji intact. */
+        val rawName: String = label,
+    )
 
     val categoryGroups: StateFlow<List<CategoryGroup>> =
         combine(
@@ -253,13 +263,15 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun foldCategories(raw: List<Category>): List<CategoryGroup> {
         val groups = LinkedHashMap<String, Pair<String, MutableList<String>>>()
+        val rawNames = HashMap<String, String>()
         for (category in raw) {
             val n = ChannelNameNormalizer.normalize(category.name)
             val key = n.groupKey.ifEmpty { category.id }
             val entry = groups.getOrPut(key) { n.baseName to mutableListOf() }
             entry.second += category.id
+            rawNames.putIfAbsent(key, category.name.trim())
         }
-        return groups.map { (key, value) -> CategoryGroup(key, value.first, value.second) }
+        return groups.map { (key, value) -> CategoryGroup(key, value.first, value.second, rawNames[key] ?: value.first) }
     }
 
     /**
@@ -503,11 +515,13 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     fun selectCategory(id: String?) {
         favouritesOnly.value = false
         selectedCategory.value = id
+        settings.lastLiveGroup = id ?: LAST_GROUP_ALL
     }
 
     fun selectFavourites() {
         favouritesOnly.value = true
         selectedCategory.value = null
+        settings.lastLiveGroup = LAST_GROUP_FAVOURITES
     }
 
     /** Switch the live guide's provider filter; the category resets since categories differ per source. */
@@ -649,6 +663,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         const val DAY_MILLIS = 24 * 60 * 60 * 1000L
         const val GUIDE_MAX_DAYS = 6  // browse up to a week out, matching typical XMLTV depth
         const val HALF_HOUR_MILLIS = 30 * 60 * 1000L
+        const val LAST_GROUP_ALL = "all"
+        const val LAST_GROUP_FAVOURITES = "fav"
     }
 }
 
