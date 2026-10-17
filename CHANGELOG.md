@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.4 — 18 October 2026
+
+- **Updates in place, from the app.** The fork now has its own package (`app.opentv.sonny`, next to
+  the official OpenTV) and a fixed signing key: new versions install over the old one and keep your
+  provider and settings. The app checks this fork's GitHub releases and offers the update itself.
+- **Better quality order.** HEVC and RAW feeds with no resolution in the name are 1080p (measured),
+  so they now rank as FHD instead of below SD; within a resolution HEVC comes first, then RAW.
+  Order: 4K › HEVC › RAW › FHD › HD › SD.
+- **"Full HD" written in two words** is FHD: no more separate "Sky Atlantic Full" rows.
+- **One spelling per channel:** "Sky Uno", not "SKY UNO", whichever variant plays.
+- **Back opens the categories** from the full-screen channel list (like ☰); from the categories,
+  Back asks to leave.
+- **Quality fallback wait** from 0.5 to 10 s in half-second steps.
+
 ## 0.14.3 — 18 October 2026
 
 - **Categories folded by source.** Groups the provider splits by restream source — "Sky Sport

@@ -12,7 +12,12 @@ GitHub release.
 
 ## Signing
 
-**Right now, release builds are signed with the Android debug key.** This is deliberate, and
+**This fork (sonnysini/opentv) signs releases with a fixed key** (package `app.opentv.sonny`); the
+keystore is in the repository secrets and, encrypted, in the maintainer's vault. Branch and main
+builds also upload a signed `opentv-release-apk` artifact that installs over a release. The notes
+below are upstream's.
+
+Upstream: **release builds are signed with the Android debug key.** This is deliberate, and
 it is temporary.
 
 An *unsigned* APK cannot be installed on Android at all — the installer rejects it before the
