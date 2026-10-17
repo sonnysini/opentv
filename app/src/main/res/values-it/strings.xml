@@ -450,4 +450,12 @@
     <string name="categories_italian_only_desc">Spegne tutte le categorie live in altre lingue (da bandiera o nome), anche quelle che il provider aggiunge dopo. Puoi sempre riaccenderne una qui sotto.</string>
     <string name="categories_foreign_sport">Sport internazionale</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>
+    <!-- Qualità preferita + fallback automatico -->
+    <string name="settings_quality_title">Qualità predefinita</string>
+    <string name="settings_quality_note">Quale versione di un canale parte per prima quando è disponibile in più qualità. Se manca, si usa quella inferiore successiva.</string>
+    <string name="settings_quality_best">Migliore disponibile</string>
+    <string name="settings_quality_fallback_title">Fallback automatico qualità</string>
+    <string name="settings_quality_fallback_subtitle">Se un canale va in errore o non mostra l\'immagine in tempo, passa alla qualità inferiore successiva.</string>
+    <string name="settings_quality_timeout">Attesa prima di cambiare: %1$d s</string>
+    <string name="player_quality_fallback">%1$s non disponibile → %2$s</string>
 </resources>

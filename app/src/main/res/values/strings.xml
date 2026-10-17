@@ -517,4 +517,12 @@
     <string name="categories_italian_only_desc">Switches off every foreign-language live category (by flag or name), including ones the provider adds later. You can still switch one back on below.</string>
     <string name="categories_foreign_sport">International sport</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — events with foreign commentary.</string>
+    <!-- Preferred channel quality + automatic fallback -->
+    <string name="settings_quality_title">Default quality</string>
+    <string name="settings_quality_note">Which version of a channel plays first when it comes in several qualities. If it is missing, the next lower one is used.</string>
+    <string name="settings_quality_best">Best available</string>
+    <string name="settings_quality_fallback_title">Automatic quality fallback</string>
+    <string name="settings_quality_fallback_subtitle">If a channel fails or shows no picture in time, switch to the next quality down.</string>
+    <string name="settings_quality_timeout">Wait before switching: %1$d s</string>
+    <string name="player_quality_fallback">%1$s not available → %2$s</string>
 </resources>

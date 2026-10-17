@@ -8,6 +8,7 @@ package app.opentv.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.opentv.core.QualityPreference
 import app.opentv.core.ServiceLocator
 import app.opentv.data.model.Category
 import app.opentv.data.model.Channel
@@ -436,12 +437,14 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
 
         val total = groups.size.coerceAtLeast(1)
         var built = 0
+        val preferredQuality = settings.preferredQuality.value
         return groups.values.map { group ->
             group.sortByDescending { it.qualityRank }
             // Only genuinely different qualities are switchable; identical-quality dupes
             // (same stream in two categories) collapse to one, so no false "2 qualities".
             val variants = distinctByQuality(group)
-            val primary = variants.first()
+            // What plays on click and in the preview: the user's preferred quality, not always the best.
+            val primary = QualityPreference.order(variants, preferredQuality).first()
 
             // Walk every variant's guide-id candidates (override → provider → matched)
             // and use the first that actually has programmes. An id that never lights up

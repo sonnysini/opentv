@@ -215,6 +215,41 @@ class AppSettings private constructor(context: Context) {
         _resumeLastChannel.value = enabled
     }
 
+    // ---- Channel quality ---------------------------------------------------------------------
+
+    /** Which quality variant of a channel plays first. See [QualityPreference.order]. */
+    private val _preferredQuality = MutableStateFlow(
+        runCatching { PreferredQuality.valueOf(prefs.getString(KEY_PREFERRED_QUALITY, null) ?: "") }
+            .getOrDefault(PreferredQuality.FHD),
+    )
+    val preferredQuality: StateFlow<PreferredQuality> = _preferredQuality.asStateFlow()
+
+    fun setPreferredQuality(quality: PreferredQuality) {
+        prefs.edit().putString(KEY_PREFERRED_QUALITY, quality.name).apply()
+        _preferredQuality.value = quality
+    }
+
+    /** When a variant errors or shows no picture within [qualityFallbackSeconds], try the next one. */
+    private val _qualityFallback = MutableStateFlow(prefs.getBoolean(KEY_QUALITY_FALLBACK, true))
+    val qualityFallback: StateFlow<Boolean> = _qualityFallback.asStateFlow()
+
+    fun setQualityFallback(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_QUALITY_FALLBACK, enabled).apply()
+        _qualityFallback.value = enabled
+    }
+
+    private val _qualityFallbackSeconds = MutableStateFlow(
+        prefs.getInt(KEY_QUALITY_FALLBACK_SECONDS, DEFAULT_FALLBACK_SECONDS)
+            .coerceIn(MIN_FALLBACK_SECONDS, MAX_FALLBACK_SECONDS),
+    )
+    val qualityFallbackSeconds: StateFlow<Int> = _qualityFallbackSeconds.asStateFlow()
+
+    fun setQualityFallbackSeconds(seconds: Int) {
+        val s = seconds.coerceIn(MIN_FALLBACK_SECONDS, MAX_FALLBACK_SECONDS)
+        prefs.edit().putInt(KEY_QUALITY_FALLBACK_SECONDS, s).apply()
+        _qualityFallbackSeconds.value = s
+    }
+
     // ---- Recording behaviour -----------------------------------------------------------------
 
     /** Minutes to start a scheduled recording early, so a late start isn't clipped. */
@@ -532,6 +567,13 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_PAD_END = "rec_pad_end_min"
         private const val KEY_REC_AUTOSWITCH = "rec_auto_switch"
         private const val KEY_LIVE_PAUSE = "live_pause_enabled"
+        private const val KEY_PREFERRED_QUALITY = "preferred_quality"
+        private const val KEY_QUALITY_FALLBACK = "quality_fallback"
+        private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
+
+        const val MIN_FALLBACK_SECONDS = 3
+        const val MAX_FALLBACK_SECONDS = 10
+        private const val DEFAULT_FALLBACK_SECONDS = 4
 
         @Volatile private var instance: AppSettings? = null
 

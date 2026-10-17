@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0 — 17 October 2026
+
+- **Choose which quality plays first.** Settings → Display & playback → Playback → Default quality
+  (Best / FHD / HD / SD / RAW / HEVC, FHD by default). If a channel lacks it, the next lower one is
+  used; the guide row and preview follow the choice too.
+- **Automatic quality fallback.** If a variant errors or shows no picture within a set wait (3–10 s,
+  4 s by default), the player moves on to the next quality down — then RAW/HEVC, then higher — with
+  a short "X not available → Y" notice. Can be switched off.
+
 ## 0.12.0 — 16 October 2026
 
 - **Big VOD catalogues no longer crash the app.** The Xtream film/series lists are streamed straight
