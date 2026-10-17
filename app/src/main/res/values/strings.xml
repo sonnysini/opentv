@@ -530,6 +530,8 @@
     <string name="settings_quality_best">Best available</string>
     <string name="settings_quality_fallback_title">Automatic quality fallback</string>
     <string name="settings_quality_fallback_subtitle">If a channel fails or shows no picture in time, switch to the next quality down.</string>
+    <string name="settings_ui_scale">Interface size: %1$d%%</string>
+    <string name="settings_ui_scale_note">Shrink to fit more channels on screen, enlarge to read from further away.</string>
     <string name="settings_quality_timeout">Wait before switching: %1$s s</string>
     <string name="player_quality_fallback">%1$s not available → %2$s</string>
 </resources>
