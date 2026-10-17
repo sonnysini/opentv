@@ -171,9 +171,9 @@ fun AboutScreen(onBack: () -> Unit) {
                 "GNU General Public License v3.0",
                 url = "https://www.gnu.org/licenses/gpl-3.0.html",
             )
-            LinkLine(stringResource(R.string.about_source_code), "github.com/opentvproject/opentv")
-            LinkLine(stringResource(R.string.about_report_bug), "github.com/opentvproject/opentv/issues")
-            LinkLine(stringResource(R.string.about_install_page), "opentvproject.github.io/opentv")
+            LinkLine(stringResource(R.string.about_source_code), "github.com/sonnysini/opentv")
+            LinkLine(stringResource(R.string.about_report_bug), "github.com/sonnysini/opentv/issues")
+            LinkLine(stringResource(R.string.about_install_page), "github.com/sonnysini/opentv/releases")
         }
     }
 }

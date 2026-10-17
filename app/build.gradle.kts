@@ -26,6 +26,9 @@ android {
             val storePath = providers.environmentVariable("KEYSTORE_PATH").orNull
             if (storePath != null) {
                 storeFile = file(storePath)
+                // keytool on JDK 9+ writes PKCS12 whatever the extension; without this AGP reads
+                // it as JKS and fails with "Tag number over 30".
+                storeType = "PKCS12"
                 storePassword = providers.environmentVariable("KEYSTORE_PASSWORD").orNull
                 keyAlias = providers.environmentVariable("KEY_ALIAS").orNull
                 keyPassword = providers.environmentVariable("KEY_PASSWORD").orNull
@@ -35,6 +38,9 @@ android {
 
     buildTypes {
         release {
+            // Fork build: its own package, so it installs next to the official OpenTV and
+            // updates in place from this fork's releases (fixed key, see docs/RELEASING.md).
+            applicationIdSuffix = ".sonny"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

@@ -43,6 +43,33 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+      # Branch/main builds also get a release APK signed with the fork's fixed key, so a test
+      # build installs over the previous one and keeps its data. Skipped where secrets are not
+      # available (pull requests from forks).
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Assemble signed release APK
+        if: env.KEYSTORE_PATH != ''
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload release APK
+        if: env.KEYSTORE_PATH != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: opentv-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
