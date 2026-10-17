@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0 — 17 October 2026
+
+- **Full-screen channel list** (new default layout; Grid and Simple list stay in Settings). The
+  current group's channels fill the screen: number, logo, name, the programme on now with times and
+  progress, and what's next on the right. No preview pane or menus — LEFT on a row brings the menu back.
+- **☰ for categories.** The remote's menu key swaps the list for the categories in the same style,
+  with the provider's own names (flags and emoji included); OK opens that group.
+- **Reopens where you left off:** the last group and the last channel watched.
+- **☰ in the player** opens and closes the channel list of the current group.
+
 ## 0.13.0 — 17 October 2026
 
 - **Choose which quality plays first.** Settings → Display & playback → Playback → Default quality
