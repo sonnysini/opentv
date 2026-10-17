@@ -459,6 +459,18 @@ fun PlayerScreen(
                         numberEntry = (numberEntry + digit).take(4)
                         reveal(); interaction++; true
                     }
+                    // ☰ (the remote's menu key) toggles the channel list of the group you're in,
+                    // from anywhere — immersive, bar up, or a picker open.
+                    event.key == Key.Menu -> {
+                        if (channelListVisible) {
+                            channelListVisible = false
+                        } else if (queue.isNotEmpty()) {
+                            panel = Panel.NONE
+                            controlsVisible = false
+                            channelListVisible = true
+                        }
+                        true
+                    }
                     // A picker or the channel list owns the whole d-pad while it's up.
                     channelListVisible || panel != Panel.NONE -> {
                         interaction++

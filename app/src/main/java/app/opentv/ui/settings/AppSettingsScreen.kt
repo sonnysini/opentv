@@ -179,6 +179,10 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 stringResource(R.string.settings_channel_layout_list),
                 channelLayout == AppSettings.ChannelLayout.LIST,
             ) { settings.setChannelLayout(AppSettings.ChannelLayout.LIST) }
+            ThemeOption(
+                stringResource(R.string.settings_channel_layout_fullscreen),
+                channelLayout == AppSettings.ChannelLayout.FULLSCREEN,
+            ) { settings.setChannelLayout(AppSettings.ChannelLayout.FULLSCREEN) }
             Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = stringResource(R.string.settings_live_preview_title),
