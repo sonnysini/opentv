@@ -13,6 +13,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -600,14 +601,23 @@ fun PlayerScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
+                    // Fades in over the top inset, then stays dark behind all the text: with the
+                    // now/next synopsis the bar is tall, and a plain two-stop gradient left the
+                    // title and times over near-clear video — unreadable on a bright pitch.
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.18f to Color.Black.copy(alpha = 0.72f),
+                            1f to Color.Black.copy(alpha = 0.92f),
+                        ),
+                    )
                     // Keep the controls clear of the phone/tablet system nav bar (and the side nav
                     // bar / display cutout in landscape). Zero on a TV, so the 10-foot layout is
                     // unchanged; the gradient above stays full-bleed to the screen edge.
                     .windowInsetsPadding(
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
                     )
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                    .padding(start = 28.dp, end = 28.dp, top = 64.dp, bottom = 20.dp),
             ) {
                 // The open picker sits above the transport row.
                 if (panel != Panel.NONE) {
@@ -643,7 +653,12 @@ fun PlayerScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Scrolls sideways when the chips don't all fit (seek + quality + record on a
+                // smaller dp width), instead of squeezing the last one into a wrapped label.
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (controller.isSeekable) {
                         BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
                             controller.seekBackward(); interaction++
@@ -1083,7 +1098,7 @@ private fun BarChip(
     ) {
         Icon(icon, contentDescription = label, tint = if (focused) content else (iconTint ?: content))
         Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = content)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = content, maxLines = 1, softWrap = false)
     }
 }
 

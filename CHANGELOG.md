@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.1 — 17 October 2026
+
+- **Readable player bar on bright pictures.** The dark backdrop now covers every line of the bar
+  (title, times, synopsis), not just the bottom; the button row scrolls instead of wrapping labels.
+- **Navigation menu fix (full-screen list).** Moving down the menu opened with LEFT no longer drops
+  focus back into the channel list, so Films, Series and Settings are reachable again.
+
 ## 0.14.0 — 17 October 2026
 
 - **Full-screen channel list** (new default layout; Grid and Simple list stay in Settings). The

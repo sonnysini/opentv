@@ -291,6 +291,19 @@ private fun NavRail(
 ) {
     // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
+    // Report "focus left" only once it has really gone: moving between two items can flicker the
+    // group's focus state for a frame, and acting on that hid the rail mid-move (DOWN from Live TV
+    // dropped you back into the channel list). The effect is cancelled if focus comes straight back.
+    var hadFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            hadFocus = true
+        } else if (hadFocus) {
+            delay(150)
+            hadFocus = false
+            onFocusLeft()
+        }
+    }
     val width by animateDpAsState(
         targetValue = if (expanded) RAIL_EXPANDED else RAIL_COLLAPSED,
         label = "railWidth",
@@ -301,11 +314,8 @@ private fun NavRail(
             .width(width)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
+            .onFocusChanged { expanded = it.hasFocus }
             .focusGroup()
-            .onFocusChanged {
-                if (expanded && !it.hasFocus) onFocusLeft()
-                expanded = it.hasFocus
-            }
             .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
