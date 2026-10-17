@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.2 — 17 October 2026
+
+- **No more dead ends on empty groups.** The ☰ category list only shows groups that have channels
+  right now (event-only feeds such as NBA/NHL Pass are empty between events). If a group still turns
+  out empty, the screen says so and returns to the categories.
+- **The remote always responds** on the full-screen list, even while it's loading or empty — ☰ and
+  LEFT work from anywhere.
+
 ## 0.14.1 — 17 October 2026
 
 - **Readable player bar on bright pictures.** The dark backdrop now covers every line of the bar

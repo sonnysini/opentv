@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,6 +81,8 @@ fun FullscreenLive(
     selectedCategory: String?,
     favouritesOnly: Boolean,
     highlightedKey: Any?,
+    // The guide has been built at least once (and no sync is running), so an empty list is final.
+    rowsLoaded: Boolean,
     // Where to start when the highlight isn't in the list yet (rows only just loaded): the last
     // watched channel, so returning from the player lands back on it.
     fallbackKey: (List<ChannelsViewModel.Row>) -> Any?,
@@ -108,12 +111,34 @@ fun FullscreenLive(
         }
     }
 
+    // A group that turns out empty (all its channels gone, filtered or hidden) would otherwise sit
+    // on the loading screen for good. Once the guide is known to be built, give it a moment, then
+    // go back to the categories so the user can pick another.
+    val groupEmpty = !showCategories && awaitingRows == null && rows.isEmpty() && rowsLoaded
+    LaunchedEffect(groupEmpty) {
+        if (groupEmpty) {
+            delay(1_500)
+            showCategories = true
+        }
+    }
+
+    // When nothing in the list can hold focus (loading, empty), park it on the screen itself —
+    // with focus nowhere, the remote's keys (☰ included) would go nowhere either.
+    val holderFocus = remember { FocusRequester() }
+    val needsHolder = !showCategories && (awaitingRows != null || rows.isEmpty())
+    LaunchedEffect(needsHolder) {
+        if (needsHolder) {
+            delay(50)
+            runCatching { holderFocus.requestFocus() }
+        }
+    }
+
     val favouritesLabel = stringResource(R.string.guide_favourites)
     val allLabel = stringResource(R.string.guide_all_channels)
     val title = when {
         favouritesOnly -> favouritesLabel
         selectedCategory == null -> allLabel
-        else -> categories.firstOrNull { it.key == selectedCategory }?.rawName ?: allLabel
+        else -> categories.firstOrNull { it.key == selectedCategory }?.rawName ?: ""
     }
 
     Column(
@@ -124,6 +149,7 @@ fun FullscreenLive(
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
                     Key.Menu -> { showCategories = !showCategories; true }
+                    Key.DirectionLeft -> if (needsHolder) { onExitLeft(); true } else false
                     else -> false
                 }
             }
@@ -181,9 +207,20 @@ fun FullscreenLive(
                 )
             }
         } else if (awaitingRows != null) {
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f).fillMaxWidth().focusRequester(holderFocus).focusable())
         } else if (rows.isEmpty()) {
-            Box(Modifier.weight(1f).fillMaxWidth()) { emptyContent() }
+            Box(Modifier.weight(1f).fillMaxWidth().focusRequester(holderFocus).focusable()) {
+                if (groupEmpty) {
+                    Text(
+                        stringResource(R.string.live_group_empty),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                } else {
+                    emptyContent()
+                }
+            }
         } else {
             val startIndex = rows.indexOfFirst { it.key == highlightedKey }.takeIf { it >= 0 }
                 ?: fallbackKey(rows)?.let { key -> rows.indexOfFirst { it.key == key } }?.coerceAtLeast(0)

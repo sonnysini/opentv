@@ -129,7 +129,9 @@ fun HomeScreen(
     val previewEnabled = previewSetting && !fullscreen
 
     val categories by viewModel.visibleCategoryGroups.collectAsState()
+    val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsState()
     val rows by viewModel.rows.collectAsState()
+    val rowsLoaded by viewModel.rowsLoaded.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val favouritesOnly by viewModel.favouritesOnly.collectAsState()
     val sources by viewModel.sources.collectAsState()
@@ -310,10 +312,11 @@ fun HomeScreen(
     if (fullscreen) {
         FullscreenLive(
             rows = rows,
-            categories = categories,
+            categories = fullscreenCategories,
             selectedCategory = selectedCategory,
             favouritesOnly = favouritesOnly,
             highlightedKey = highlightedRow?.key,
+            rowsLoaded = rowsLoaded && !isSyncing,
             fallbackKey = { lastWatched(it)?.key },
             nowMillis = nowMillis,
             onSelectCategory = viewModel::selectCategory,

@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -186,6 +187,9 @@ class CatalogRepository(
     /** Reactive number of visible channels on disk — the UI uses this to tell "guide still
      * building" (channels exist) apart from "nothing loaded" (a failed or empty sync). */
     fun observeChannelCount(): Flow<Int> = channelDao.observeVisibleCount()
+
+    fun observeNonEmptyCategoryIds(): Flow<Set<String>> =
+        channelDao.observeNonEmptyCategoryIds().map { it.toSet() }
 
     /** Categories of [kind] the user has not switched off — what every rail and chip row shows. */
     fun observeCategories(kind: StreamKind): Flow<List<Category>> =

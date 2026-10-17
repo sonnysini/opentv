@@ -188,6 +188,7 @@
     <string name="live_categories_title">Categories</string>
     <string name="live_menu_hint">☰ Categories   ← Menu</string>
     <string name="live_menu_hint_categories">☰ Back to channels   ← Menu</string>
+    <string name="live_group_empty">No channels in this group — back to categories…</string>
     <string name="settings_live_preview_title">Live preview in the guide</string>
     <string name="settings_live_preview_subtitle">Play the selected channel in the preview pane. Turn this off if the guide stutters on an older box.</string>
     <string name="settings_preview_sound_title">Preview sound</string>
