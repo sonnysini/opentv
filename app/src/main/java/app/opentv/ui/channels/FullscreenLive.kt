@@ -217,18 +217,21 @@ private fun FocusedList(
 ) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 3).coerceAtLeast(0))
     val focusRequester = remember { FocusRequester() }
+    var listHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        // The item has to be laid out before it can take focus; retry briefly while it settles.
-        repeat(10) {
-            delay(40)
-            if (runCatching { focusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+        // The item has to be laid out — and, at app start, the window focused — before it can take
+        // focus, and a request made too early is silently dropped. Keep asking until it sticks.
+        repeat(40) {
+            delay(75)
+            if (listHasFocus) return@LaunchedEffect
+            runCatching { focusRequester.requestFocus() }
         }
     }
     LazyColumn(
         state = listState,
+        modifier = Modifier.fillMaxSize().onFocusChanged { listHasFocus = it.hasFocus },
         contentPadding = PaddingValues(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.fillMaxSize(),
     ) {
         itemsIndexed(List(count) { it }, key = { i, _ -> i }) { index, _ ->
             item(index, if (index == startIndex) Modifier.focusRequester(focusRequester) else Modifier)
