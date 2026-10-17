@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,7 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -209,6 +212,7 @@ fun FullscreenLive(
  * so opening the categories lands on the current one and coming back lands on the channel you
  * were on. [item] gets a modifier to attach to its focusable root.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun FocusedList(
     count: Int,
@@ -218,6 +222,9 @@ private fun FocusedList(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 3).coerceAtLeast(0))
     val focusRequester = remember { FocusRequester() }
     var listHasFocus by remember { mutableStateOf(false) }
+    // The requester follows focus, so coming back into the list (RIGHT from the navigation menu)
+    // returns to the row you left rather than to whichever row sits nearest the menu.
+    var focusedIndex by remember { mutableIntStateOf(startIndex) }
     LaunchedEffect(Unit) {
         // The item has to be laid out — and, at app start, the window focused — before it can take
         // focus, and a request made too early is silently dropped. Keep asking until it sticks.
@@ -229,12 +236,16 @@ private fun FocusedList(
     }
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().onFocusChanged { listHasFocus = it.hasFocus },
+        modifier = Modifier
+            .fillMaxSize()
+            .focusProperties { enter = { focusRequester } }
+            .onFocusChanged { listHasFocus = it.hasFocus },
         contentPadding = PaddingValues(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         itemsIndexed(List(count) { it }, key = { i, _ -> i }) { index, _ ->
-            item(index, if (index == startIndex) Modifier.focusRequester(focusRequester) else Modifier)
+            val tracked = Modifier.onFocusChanged { if (it.isFocused) focusedIndex = index }
+            item(index, if (index == focusedIndex) tracked.focusRequester(focusRequester) else tracked)
         }
     }
 }
