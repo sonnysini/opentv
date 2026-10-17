@@ -45,6 +45,7 @@ import android.content.Context
 import android.widget.Toast
 import app.opentv.R
 import app.opentv.core.AppSettings
+import app.opentv.core.PreferredQuality
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
 import app.opentv.data.work.SyncWorker
@@ -68,6 +69,9 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val liveEnabled by settings.liveEnabled.collectAsState()
     val moviesEnabled by settings.moviesEnabled.collectAsState()
     val seriesEnabled by settings.seriesEnabled.collectAsState()
+    val preferredQuality by settings.preferredQuality.collectAsState()
+    val qualityFallback by settings.qualityFallback.collectAsState()
+    val fallbackSeconds by settings.qualityFallbackSeconds.collectAsState()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -205,6 +209,42 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 checked = resumeLast,
                 onToggle = settings::setResumeLastChannel,
             )
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.settings_quality_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.settings_quality_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            PreferredQuality.values().forEach { quality ->
+                val label = if (quality == PreferredQuality.BEST) stringResource(R.string.settings_quality_best) else quality.name
+                ThemeOption(label, preferredQuality == quality) { settings.setPreferredQuality(quality) }
+            }
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = stringResource(R.string.settings_quality_fallback_title),
+                subtitle = stringResource(R.string.settings_quality_fallback_subtitle),
+                checked = qualityFallback,
+                onToggle = settings::setQualityFallback,
+            )
+            if (qualityFallback) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.settings_quality_timeout, fallbackSeconds),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedButton(
+                        onClick = { settings.setQualityFallbackSeconds(fallbackSeconds - 1) },
+                        enabled = fallbackSeconds > AppSettings.MIN_FALLBACK_SECONDS,
+                    ) { Text("−") }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = { settings.setQualityFallbackSeconds(fallbackSeconds + 1) },
+                        enabled = fallbackSeconds < AppSettings.MAX_FALLBACK_SECONDS,
+                    ) { Text("+") }
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))

@@ -97,6 +97,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.opentv.R
+import app.opentv.core.QualityPreference
 import app.opentv.core.ServiceLocator
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
@@ -174,6 +175,13 @@ fun PlayerScreen(
 
     var variants by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var currentId by remember { mutableStateOf<Long?>(null) }
+    // Quality fallback: the variants in try order (preferred first), the ones already tried for this
+    // channel, and whether the current attempt has shown a picture yet. [attempt] restarts the timer.
+    var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
+    var tried by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var started by remember { mutableStateOf(false) }
+    var attempt by remember { mutableIntStateOf(0) }
+    var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // The channel we were on before this one — powers the "Last channel" recall in the list.
     var previousId by remember { mutableStateOf<Long?>(null) }
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
@@ -226,6 +234,9 @@ fun PlayerScreen(
     fun tuneTo(channel: Channel) {
         currentId = channel.id
         paused = false
+        tried = tried + channel.id
+        started = false
+        attempt++
         settings.lastChannelId = channel.id
         scope.launch {
             val source = graph.sourceRepository.byId(channel.sourceId)
@@ -243,14 +254,34 @@ fun PlayerScreen(
         }
     }
 
+    /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
+    suspend fun startChannel(channel: Channel) {
+        variants = graph.catalogRepository.variants(channel)
+        tryOrder = QualityPreference.order(variants, settings.preferredQuality.value)
+        tried = emptySet()
+        tuneTo(tryOrder.firstOrNull() ?: channel)
+    }
+
+    /** The current variant didn't start: move on to the next untried quality, if there is one. */
+    fun fallBack() {
+        if (!settings.qualityFallback.value || started) return
+        val failed = tryOrder.firstOrNull { it.id == currentId } ?: return
+        val next = tryOrder.firstOrNull { it.id !in tried } ?: return
+        fallbackNotice = context.getString(
+            R.string.player_quality_fallback,
+            failed.qualityLabel.ifBlank { failed.shownName },
+            next.qualityLabel.ifBlank { next.shownName },
+        )
+        tuneTo(next)
+    }
+
     fun playChannelId(id: Long) {
         // Remember where we came from so "Last channel" can bounce straight back. Quality switches
         // go through tuneTo directly, so they never count as a channel change here.
         currentId?.let { if (it != id) previousId = it }
         scope.launch {
             val channel = graph.catalogRepository.channel(id) ?: return@launch
-            variants = graph.catalogRepository.variants(channel)
-            tuneTo(variants.firstOrNull { it.id == channel.id } ?: channel)
+            startChannel(channel)
         }
     }
 
@@ -279,8 +310,32 @@ fun PlayerScreen(
     LaunchedEffect(channelId) {
         val id = channelId ?: return@LaunchedEffect
         val channel = graph.catalogRepository.channel(id) ?: return@LaunchedEffect
-        variants = graph.catalogRepository.variants(channel)
-        tuneTo(variants.firstOrNull { it.id == channel.id } ?: channel)
+        startChannel(channel)
+    }
+
+    // A picture means this variant works; an error before that means try the next quality now.
+    LaunchedEffect(Unit) {
+        controller.state.collect { s ->
+            when (s) {
+                is PlayerController.State.Playing -> started = true
+                is PlayerController.State.Error -> fallBack()
+                else -> Unit
+            }
+        }
+    }
+
+    // No picture within the configured wait (a stream stuck "loading" never errors): next quality.
+    LaunchedEffect(attempt) {
+        if (attempt == 0 || !settings.qualityFallback.value) return@LaunchedEffect
+        delay(settings.qualityFallbackSeconds.value * 1_000L)
+        fallBack()
+    }
+
+    LaunchedEffect(fallbackNotice) {
+        if (fallbackNotice != null) {
+            delay(FALLBACK_NOTICE_MILLIS)
+            fallbackNotice = null
+        }
     }
 
     // Now/next for the channel on screen. Walks the channel's guide ids like the guide does (first
@@ -450,6 +505,21 @@ fun PlayerScreen(
             update = { it.resizeMode = resizeMode },
         )
 
+        fallbackNotice?.let { notice ->
+            if (!inPip) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(32.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(alpha = 0.82f))
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                ) {
+                    Text(notice, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+
         // The channel number as you type it, top-right, until it resolves.
         if (numberEntry.isNotEmpty() && !inPip) {
             Box(
@@ -538,7 +608,7 @@ fun PlayerScreen(
                         currentId = currentId,
                         resizeMode = resizeMode,
                         onResize = { resizeMode = it; settings.setPlayerResizeMode(it) },
-                        onTune = { tuneTo(it) },
+                        onTune = { tried = emptySet(); tuneTo(it) },
                         firstFocus = panelFocus,
                         onDone = { panel = Panel.NONE; interaction++ },
                     )
@@ -1008,6 +1078,7 @@ private fun BarChip(
 private const val CONTROLS_TIMEOUT_MILLIS = 5_000L
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
+private const val FALLBACK_NOTICE_MILLIS = 3_000L
 
 /** Maps a remote's number keys (top row and numeric keypad) to a digit, or null for other keys. */
 private fun keyToDigit(key: Key): Char? = when (key) {
