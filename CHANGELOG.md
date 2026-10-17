@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.3 — 18 October 2026
+
+- **Categories folded by source.** Groups the provider splits by restream source — "Sky Sport
+  (Hermes)", "(SAT)", "(DVS)", "DAZN KALI/STELLINA/…" — show as one "Sky Sport", "DAZN"… in the
+  category list (141 → ~89 on a big Italian list). Inside, each channel appears once.
+- **Sources in the Quality panel.** The same quality from different sources is offered separately
+  ("FHD · Hermes", "FHD · SAT"), and the automatic quality fallback tries the other sources too.
+- **Switch:** Settings › Categories › Live › "Merge groups by source" (on by default) brings the
+  separate groups back.
+
 ## 0.14.2 — 17 October 2026
 
 - **No more dead ends on empty groups.** The ☰ category list only shows groups that have channels
