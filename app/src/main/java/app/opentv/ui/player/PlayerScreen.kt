@@ -328,7 +328,7 @@ fun PlayerScreen(
     // No picture within the configured wait (a stream stuck "loading" never errors): next quality.
     LaunchedEffect(attempt) {
         if (attempt == 0 || !settings.qualityFallback.value) return@LaunchedEffect
-        delay(settings.qualityFallbackSeconds.value * 1_000L)
+        delay(settings.qualityFallbackMillis.value.toLong())
         fallBack()
     }
 

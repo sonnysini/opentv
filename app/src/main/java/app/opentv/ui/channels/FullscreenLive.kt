@@ -96,7 +96,9 @@ fun FullscreenLive(
     emptyContent: @Composable () -> Unit,
 ) {
     var showCategories by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = showCategories) { showCategories = false }
+    // Back climbs one level like ☰: channels → categories; from the categories it falls through
+    // to the screen's usual Back (the exit prompt).
+    BackHandler(enabled = !showCategories) { showCategories = true }
 
     // After picking another category the old group's rows are still on hand for a moment; hold the
     // list back until the new ones arrive, so focus lands on the new group's first channel instead

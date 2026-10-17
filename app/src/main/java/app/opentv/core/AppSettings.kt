@@ -247,7 +247,7 @@ class AppSettings private constructor(context: Context) {
         _preferredQuality.value = quality
     }
 
-    /** When a variant errors or shows no picture within [qualityFallbackSeconds], try the next one. */
+    /** When a variant errors or shows no picture within [qualityFallbackMillis], try the next one. */
     private val _qualityFallback = MutableStateFlow(prefs.getBoolean(KEY_QUALITY_FALLBACK, true))
     val qualityFallback: StateFlow<Boolean> = _qualityFallback.asStateFlow()
 
@@ -256,16 +256,19 @@ class AppSettings private constructor(context: Context) {
         _qualityFallback.value = enabled
     }
 
-    private val _qualityFallbackSeconds = MutableStateFlow(
-        prefs.getInt(KEY_QUALITY_FALLBACK_SECONDS, DEFAULT_FALLBACK_SECONDS)
-            .coerceIn(MIN_FALLBACK_SECONDS, MAX_FALLBACK_SECONDS),
+    /** Wait in milliseconds, in [FALLBACK_STEP_MILLIS] steps; migrates the old whole-seconds pref. */
+    private val _qualityFallbackMillis = MutableStateFlow(
+        prefs.getInt(
+            KEY_QUALITY_FALLBACK_MILLIS,
+            prefs.getInt(KEY_QUALITY_FALLBACK_SECONDS, DEFAULT_FALLBACK_SECONDS) * 1_000,
+        ).coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS),
     )
-    val qualityFallbackSeconds: StateFlow<Int> = _qualityFallbackSeconds.asStateFlow()
+    val qualityFallbackMillis: StateFlow<Int> = _qualityFallbackMillis.asStateFlow()
 
-    fun setQualityFallbackSeconds(seconds: Int) {
-        val s = seconds.coerceIn(MIN_FALLBACK_SECONDS, MAX_FALLBACK_SECONDS)
-        prefs.edit().putInt(KEY_QUALITY_FALLBACK_SECONDS, s).apply()
-        _qualityFallbackSeconds.value = s
+    fun setQualityFallbackMillis(millis: Int) {
+        val ms = millis.coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS)
+        prefs.edit().putInt(KEY_QUALITY_FALLBACK_MILLIS, ms).apply()
+        _qualityFallbackMillis.value = ms
     }
 
     // ---- Recording behaviour -----------------------------------------------------------------
@@ -590,9 +593,11 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_PREFERRED_QUALITY = "preferred_quality"
         private const val KEY_QUALITY_FALLBACK = "quality_fallback"
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
+        private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
 
-        const val MIN_FALLBACK_SECONDS = 3
-        const val MAX_FALLBACK_SECONDS = 10
+        const val MIN_FALLBACK_MILLIS = 500
+        const val MAX_FALLBACK_MILLIS = 10_000
+        const val FALLBACK_STEP_MILLIS = 500
         private const val DEFAULT_FALLBACK_SECONDS = 4
 
         @Volatile private var instance: AppSettings? = null

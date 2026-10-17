@@ -148,10 +148,18 @@ object ChannelNameNormalizer {
         val labelParts = ArrayList<String>(2)
         val keptTokens = ArrayList<String>()
 
-        for (token in working.split(' ', '\t', '/').filter { it.isNotBlank() }) {
-            val bare = token.trim('.', ',', ':', ';', '|', '-', '(', ')', '[', ']')
-            if (bare.isEmpty()) continue
-            val upper = bare.uppercase()
+        val tokens = working.split(' ', '\t', '/')
+            .map { it.trim('.', ',', ':', ';', '|', '-', '(', ')', '[', ']') }
+            .filter { it.isNotEmpty() }
+        var i = 0
+        while (i < tokens.size) {
+            val bare = tokens[i++]
+            var upper = bare.uppercase()
+            // `Full HD` written as two words is FHD, not a channel called "… Full" in HD.
+            if (upper == "FULL" && tokens.getOrNull(i)?.uppercase() == "HD") {
+                upper = "FHD"
+                i++
+            }
 
             val rank = QUALITY_RANKS[upper]
             when {
@@ -164,6 +172,8 @@ object ChannelNameNormalizer {
             }
         }
 
+        bestRank = withCodecBonus(bestRank, labelParts)
+
         val base = MULTI_SPACE.replace(keptTokens.joinToString(" "), " ").trim()
         val key = groupKeyOf(base)
 
@@ -175,6 +185,30 @@ object ChannelNameNormalizer {
             region = region,
         )
     }
+
+    /**
+     * Ranks HEVC and RAW feeds within their resolution tier: HEVC above RAW above plain.
+     *
+     * Measured on a real Italian list: "X HEVC" and "X RAW" with no resolution tag were all
+     * 1080p, yet scored 0 and sorted below SD. So a bare HEVC/RAW is taken as FHD, and at equal
+     * resolution HEVC (better picture per bit) beats RAW (untouched feed) beats a plain H.264.
+     * The bonus stays under 100, so `rank / 100` is still the resolution tier.
+     */
+    private fun withCodecBonus(rank: Int, labelParts: List<String>): Int {
+        val upper = labelParts.map { it.uppercase() }
+        val hevc = upper.any { it == "HEVC" || it == "H265" || it == "H.265" }
+        val raw = "RAW" in upper
+        if (!hevc && !raw) return rank
+        val base = if (rank == 0) FHD_RANK else rank
+        return base + if (hevc) HEVC_BONUS else RAW_BONUS
+    }
+
+    /** The resolution tier of a rank (`320` HEVC 1080p → `300`), dropping the codec bonus. */
+    fun resolutionTier(rank: Int): Int = rank / 100 * 100
+
+    private const val FHD_RANK = 300
+    private const val HEVC_BONUS = 20
+    private const val RAW_BONUS = 10
 
     /**
      * The canonical join key: lowercase letters and digits only.

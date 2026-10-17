@@ -11,7 +11,7 @@ import app.opentv.data.model.Channel
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
-/** Preferred quality plays first; the fallback steps down, then RAW/HEVC, then up. */
+/** Preferred quality plays first (HEVC > RAW > plain within it); the fallback steps down, then up. */
 class QualityPreferenceTest {
 
     private fun ch(id: Long, rank: Int, label: String) = Channel(
@@ -24,8 +24,8 @@ class QualityPreferenceTest {
     private val fhd = ch(2, 300, "FHD")
     private val hd = ch(3, 200, "HD")
     private val sd = ch(4, 100, "SD")
-    private val raw = ch(5, 0, "RAW")
-    private val hevc = ch(6, 0, "HEVC")
+    private val raw = ch(5, 310, "RAW")
+    private val hevc = ch(6, 320, "HEVC")
     private val all = listOf(sd, raw, hevc, uhd, hd, fhd)
 
     private fun labels(p: PreferredQuality, list: List<Channel> = all) =
@@ -33,12 +33,12 @@ class QualityPreferenceTest {
 
     @Test
     fun bestIsHighestFirst() {
-        assertThat(labels(PreferredQuality.BEST)).containsExactly("4K", "FHD", "HD", "SD", "RAW", "HEVC").inOrder()
+        assertThat(labels(PreferredQuality.BEST)).containsExactly("4K", "HEVC", "RAW", "FHD", "HD", "SD").inOrder()
     }
 
     @Test
-    fun fhdStepsDownThenCodecsThenUp() {
-        assertThat(labels(PreferredQuality.FHD)).containsExactly("FHD", "HD", "SD", "RAW", "HEVC", "4K").inOrder()
+    fun fhdPrefersHevcRawThenStepsDownThenUp() {
+        assertThat(labels(PreferredQuality.FHD)).containsExactly("HEVC", "RAW", "FHD", "HD", "SD", "4K").inOrder()
     }
 
     @Test
@@ -49,12 +49,13 @@ class QualityPreferenceTest {
 
     @Test
     fun codecChoiceFirstThenBest() {
-        assertThat(labels(PreferredQuality.HEVC)).containsExactly("HEVC", "4K", "FHD", "HD", "SD", "RAW").inOrder()
+        assertThat(labels(PreferredQuality.HEVC)).containsExactly("HEVC", "4K", "RAW", "FHD", "HD", "SD").inOrder()
     }
 
     @Test
-    fun plainLabelBeatsExtrasAtSameRank() {
-        val fhdHevc = ch(7, 300, "FHD HEVC")
-        assertThat(labels(PreferredQuality.FHD, listOf(fhdHevc, fhd)).first()).isEqualTo("FHD")
+    fun unlabelledFeedsComeAfterTheLadder() {
+        val plain = ch(7, 0, "")
+        assertThat(labels(PreferredQuality.FHD, listOf(plain, uhd, sd)))
+            .containsExactly("SD", "", "4K").inOrder()
     }
 }

@@ -49,6 +49,7 @@ import app.opentv.core.PreferredQuality
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
 import app.opentv.data.work.SyncWorker
+import java.text.DecimalFormat
 
 /**
  * Display & playback preferences: the app-behaviour settings, kept apart from the guide/data
@@ -71,7 +72,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val seriesEnabled by settings.seriesEnabled.collectAsState()
     val preferredQuality by settings.preferredQuality.collectAsState()
     val qualityFallback by settings.qualityFallback.collectAsState()
-    val fallbackSeconds by settings.qualityFallbackSeconds.collectAsState()
+    val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -234,18 +235,21 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             if (qualityFallback) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.settings_quality_timeout, fallbackSeconds),
+                        stringResource(
+                            R.string.settings_quality_timeout,
+                            DecimalFormat("0.#").format(fallbackMillis / 1_000.0),
+                        ),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedButton(
-                        onClick = { settings.setQualityFallbackSeconds(fallbackSeconds - 1) },
-                        enabled = fallbackSeconds > AppSettings.MIN_FALLBACK_SECONDS,
+                        onClick = { settings.setQualityFallbackMillis(fallbackMillis - AppSettings.FALLBACK_STEP_MILLIS) },
+                        enabled = fallbackMillis > AppSettings.MIN_FALLBACK_MILLIS,
                     ) { Text("−") }
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(
-                        onClick = { settings.setQualityFallbackSeconds(fallbackSeconds + 1) },
-                        enabled = fallbackSeconds < AppSettings.MAX_FALLBACK_SECONDS,
+                        onClick = { settings.setQualityFallbackMillis(fallbackMillis + AppSettings.FALLBACK_STEP_MILLIS) },
+                        enabled = fallbackMillis < AppSettings.MAX_FALLBACK_MILLIS,
                     ) { Text("+") }
                 }
             }
