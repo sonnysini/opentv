@@ -138,7 +138,7 @@ fun FullscreenLive(
     val title = when {
         favouritesOnly -> favouritesLabel
         selectedCategory == null -> allLabel
-        else -> categories.firstOrNull { it.key == selectedCategory }?.rawName ?: allLabel
+        else -> categories.firstOrNull { it.key == selectedCategory }?.rawName ?: ""
     }
 
     Column(

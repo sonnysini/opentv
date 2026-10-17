@@ -183,6 +183,10 @@ interface ChannelDao {
     @Query("SELECT COUNT(*) FROM channels WHERE hidden = 0")
     fun observeVisibleCount(): Flow<Int>
 
+    /** Categories that hold at least one visible channel — event-only groups sit empty between events. */
+    @Query("SELECT DISTINCT categoryId FROM channels WHERE hidden = 0 AND categoryId IS NOT NULL")
+    fun observeNonEmptyCategoryIds(): Flow<List<String>>
+
     @Query("UPDATE channels SET favourite = :favourite WHERE id = :id")
     suspend fun setFavourite(id: Long, favourite: Boolean)
 

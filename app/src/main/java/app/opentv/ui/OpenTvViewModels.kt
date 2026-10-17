@@ -284,6 +284,16 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             else groups.filter { it.key in hidden }.flatMap { it.ids }.toSet()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
+    /**
+     * The full-screen list's categories: the rail's, minus groups with no channels right now
+     * (event-only feeds like NBA/NHL Pass are empty between events and would open onto nothing).
+     */
+    val nonEmptyCategoryGroups: StateFlow<List<CategoryGroup>> by lazy {
+        combine(visibleCategoryGroups, graph.catalogRepository.observeNonEmptyCategoryIds()) { groups, filled ->
+            groups.filter { g -> g.ids.any { it in filled } }
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }
+
     /** The rail's view of categories: hidden ones drop out until the session is unlocked. */
     val visibleCategoryGroups: StateFlow<List<CategoryGroup>> =
         combine(categoryGroups, settings.hiddenCategories, settings.hiddenUnlocked) { groups, hidden, unlocked ->
