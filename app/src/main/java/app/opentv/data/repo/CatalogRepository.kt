@@ -1065,7 +1065,8 @@ class CatalogRepository(
         return all.mapNotNull { v ->
             val source = sources[v.categoryId]
             if (!seen.add("${v.qualityRank}|${v.qualityLabel.lowercase()}|$source")) return@mapNotNull null
-            if (source == null) v
+            // "4K · 4K" says nothing twice: a source tag that is already the quality stays off.
+            if (source == null || v.qualityLabel.contains(source, ignoreCase = true)) v
             else v.copy(qualityLabel = listOf(v.qualityLabel, source).filter { it.isNotEmpty() }.joinToString(" · "))
         }.ifEmpty { listOf(channel) }
     }
