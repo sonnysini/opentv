@@ -337,8 +337,9 @@ object ChannelNameNormalizer {
     /**
      * Folds the group keys of one list so the same channel under two names lands in one row.
      *
-     * Italian resellers ship `Sky MTV` next to `MTV`, `Discovery Giallo` next to `Giallo`, and
-     * plain typos (`Nicklodeon`). Returns old key → new key for the keys that change. A `Sky`/
+     * Italian resellers ship `Sky MTV` next to `MTV` and `Discovery Giallo` next to `Giallo`.
+     * Typos (`Nicklodeon`) are not fixed here: [MergeSuggester] offers them to the user.
+     * Returns old key → new key for the keys that change. A `Sky`/
      * `Discovery` prefix is dropped only when the bare channel exists in the same list, so `Sky Uno`
      * stays `Sky Uno`. `Sky Cinema X` is left alone: `Cinema X` is often a different 24/7 loop.
      * `DAZN` / `IT DAZN|` work the same way, and so do DAZN team feeds (`DAZN Serie A Milan`,
@@ -357,7 +358,7 @@ object ChannelNameNormalizer {
                 // `DAZN 1` is not channel `1`: a bare number left over is no channel name.
                 it != base && it.length >= 2 && !it.startsWith("cinema") && !it.all(Char::isDigit)
             } + listOfNotNull(teamOf(base))
-            val alias = KEY_ALIASES[base] ?: candidates.firstOrNull { it in bases }?.let { KEY_ALIASES[it] ?: it }
+            val alias = candidates.firstOrNull { it in bases }
             if (alias != null && alias != base) out[key] = alias + shift
         }
         return out
@@ -371,33 +372,6 @@ object ChannelNameNormalizer {
 
     /** `[dazn][N]serie a|b[N][web]<team>`, on group keys. */
     private val TEAM_FEED = Regex("""^(?:dazn)?\d*serie[ab]\d*(?:web)?([a-z].{2,})$""")
-
-    /** Provider typos and alternative names of the same channel, by group key. */
-    private val KEY_ALIASES = mapOf(
-        "nicklodeon" to "nickelodeon",
-        "italianfisching" to "italianfishingtv",
-        "italianfischingtv" to "italianfishingtv",
-        "equtv" to "eqtv",
-        "slydocumentari" to "skydocumentaries",
-        "skydocumentaris" to "skydocumentaries",
-        "skycicrime" to "skycrime",
-        "mediaset20" to "20mediaset",
-        "27twentyseven" to "27mediaset",
-        "mediasetitalia2" to "italia2",
-        "bike" to "bikechannel",
-        "padrepio" to "padrepiotv",
-        "historychannel" to "history",
-        "skyseries" to "skyserie",
-        "skycinemasuspence" to "skycinemasuspense",
-        "skycinemasuspance" to "skycinemasuspense",
-        "trasformerschannel" to "transformerschannel",
-        "nickjunior" to "nickjr",
-        "hgvtv" to "hgtv",
-        "motogpsatellite" to "skysportmotogp",
-        // `SKY CINEMA UNO 24 H265` is the +24 feed with the plus sign lost.
-        "skycinemauno24" to "skycinemauno+24",
-        "skycinemadue24" to "skycinemadue+24",
-    )
 
     private val COMBINING_MARKS = Regex("""\p{Mn}+""")
     private val CAMEL_BOUNDARY = Regex("""([a-z])([A-Z])""")
