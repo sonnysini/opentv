@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,9 +100,10 @@ fun FullscreenLive(
     // While the user picks the channel to merge [mergingName] into, BACK calls this instead.
     mergingName: String?,
     onCancelMerge: () -> Unit,
-    // After a merge: the row to put focus back on, and the list as it was when OK was pressed —
-    // the move waits for the regrouped list, where the row may sit somewhere else.
-    refocus: Pair<Any, List<ChannelsViewModel.Row>>?,
+    // After a merge: the row to put focus back on, the row merged away, and the list as it was
+    // when OK was pressed. Regrouping re-emits the list a few times; focus follows the row each
+    // time until the merged-away row is gone, then [onRefocusDone].
+    refocus: Triple<Any, Any, List<ChannelsViewModel.Row>>?,
     onRefocusDone: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
@@ -256,8 +258,9 @@ fun FullscreenLive(
                 ?: fallbackKey(rows)?.let { key -> rows.indexOfFirst { it.key == key } }?.coerceAtLeast(0)
                 ?: 0
             // Keyed on the group so switching category re-focuses the new list's first row.
-            val jumpTo = refocus?.takeIf { rows !== it.second }
-                ?.let { (key, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
+            val jumpTo = refocus?.takeIf { rows !== it.third }
+                ?.let { (key, _, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
+            val refocusSettled = refocus != null && jumpTo != null && rows.none { it.key == refocus.second }
             LaunchedEffect(refocus) {
                 if (refocus != null) {
                     delay(5_000)
@@ -265,7 +268,13 @@ fun FullscreenLive(
                 }
             }
             androidx.compose.runtime.key(favouritesOnly, selectedCategory) {
-                FocusedList(count = rows.size, startIndex = startIndex, jumpTo = jumpTo, onJumped = onRefocusDone) { index, requester ->
+                FocusedList(
+                    count = rows.size,
+                    startIndex = startIndex,
+                    jumpTo = jumpTo,
+                    jumpVersion = rows,
+                    onJumped = { if (refocusSettled) onRefocusDone() },
+                ) { index, requester ->
                     val row = rows[index]
                     FullscreenChannelRow(
                         row = row,
@@ -295,6 +304,8 @@ private fun FocusedList(
     startIndex: Int,
     // Move focus to this row now (the list changed under it), then call [onJumped].
     jumpTo: Int? = null,
+    // A new value re-runs the jump even to the same index (the list changed under it).
+    jumpVersion: Any? = null,
     onJumped: () -> Unit = {},
     item: @Composable (index: Int, requester: Modifier) -> Unit,
 ) {
@@ -319,18 +330,20 @@ private fun FocusedList(
             runCatching { focusRequester.requestFocus() }
         }
     }
-    LaunchedEffect(jumpTo) {
+    val jumped by rememberUpdatedState(onJumped)
+    LaunchedEffect(jumpTo, jumpVersion) {
         val target = jumpTo ?: return@LaunchedEffect
-        if (target !in 0 until count) return@LaunchedEffect onJumped()
+        if (target !in 0 until count) return@LaunchedEffect jumped()
         focusedIndex = target
         if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
             listState.scrollToItem((target - 3).coerceAtLeast(0))
         }
-        repeat(20) {
+        // The requester moves to the target row on the next frame; ask until it takes.
+        for (attempt in 0 until 20) {
             delay(50)
-            if (runCatching { focusRequester.requestFocus() }.isSuccess) return@repeat
+            if (runCatching { focusRequester.requestFocus() }.isSuccess) break
         }
-        onJumped()
+        jumped()
     }
     LazyColumn(
         state = listState,
