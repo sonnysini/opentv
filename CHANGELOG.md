@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.8 — 18 October 2026
+
+- **Language is one row in Settings.** Display & playback shows the current language on a single
+  line; OK opens the list in a dialog, starting on the language in use, so the rest of the screen
+  is no longer pushed below thirty-odd options.
+
 ## 0.14.7 — 18 October 2026
 
 - **The same channel under two names is one row.** `Sky MTV` and `MTV`, `Discovery Giallo` and
