@@ -271,9 +271,14 @@ class AppSettings private constructor(context: Context) {
         _qualityFallbackMillis.value = ms
     }
 
-    /** Whole-UI zoom in percent (density multiplier), so a TV viewed from afar can fit more rows. */
+    /**
+     * Whole-UI zoom in percent, so a TV viewed from afar can fit more rows. 100% is
+     * [UI_SCALE_BASE] of the system density; the 0.14.5 pref (100% = system density) is migrated.
+     */
     private val _uiScalePercent = MutableStateFlow(
-        prefs.getInt(KEY_UI_SCALE, 100).coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
+        (if (prefs.contains(KEY_UI_SCALE)) prefs.getInt(KEY_UI_SCALE, 100)
+        else prefs.getInt(KEY_UI_SCALE_V1, 80).let { Math.round(it / UI_SCALE_BASE / UI_SCALE_STEP) * UI_SCALE_STEP })
+            .coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
     )
     val uiScalePercent: StateFlow<Int> = _uiScalePercent.asStateFlow()
 
@@ -606,11 +611,14 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK = "quality_fallback"
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
-        private const val KEY_UI_SCALE = "ui_scale_percent"
+        private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
+        private const val KEY_UI_SCALE = "ui_scale"
 
         const val MIN_UI_SCALE = 60
         const val MAX_UI_SCALE = 130
         const val UI_SCALE_STEP = 5
+        /** Density multiplier at 100%: the stock layout is roomier than a TV list needs. */
+        const val UI_SCALE_BASE = 0.8f
 
         const val MIN_FALLBACK_MILLIS = 500
         const val MAX_FALLBACK_MILLIS = 10_000

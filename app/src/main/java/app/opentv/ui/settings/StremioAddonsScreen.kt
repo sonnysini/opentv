@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -121,7 +120,7 @@ fun StremioAddonsScreen(onBack: () -> Unit) {
             stringResource(R.string.addons_note),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 760.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(16.dp))
@@ -134,7 +133,7 @@ fun StremioAddonsScreen(onBack: () -> Unit) {
             },
             label = { Text(stringResource(R.string.addons_url_label)) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 760.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(10.dp))
@@ -180,7 +179,7 @@ fun StremioAddonsScreen(onBack: () -> Unit) {
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.widthIn(max = 760.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 items(addons, key = { it.manifestUrl }) { addon ->
                     AddonRow(addon = addon, onRemove = { viewModel.remove(addon) })
