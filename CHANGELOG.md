@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.0 — 18 October 2026
+
+- **OwnTV-style focus.** Plain rows (settings, options, the language list) show a teal ring and a
+  soft teal fill instead of the grey highlight; channels, categories, the menu, posters, player
+  buttons and keyboard keys grow slightly when focused; buttons, switches and radios get a teal
+  focus glow. The Classic style keeps the old look.
+- **Fixed a crash on a key press in the live list** when it opened on a channel scrolled out of
+  view: focus now scrolls back to that row instead of pointing at a row that isn't there.
+
 ## 0.14.9 — 18 October 2026
 
 - **OwnTV style.** The app now uses OwnTV's look: a teal accent over a near-black with a green
