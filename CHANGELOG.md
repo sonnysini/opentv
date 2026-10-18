@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.5 — 18 October 2026
+
+- **Interface size.** Settings › Display & playback › Appearance › "Interface size" zooms the whole
+  app from 60% to 130% in 5% steps: lists, guide, menus, settings and the player bar (the video
+  always fills the screen). Shrink it to fit more channels on screen; changes apply instantly.
+
 ## 0.14.4 — 18 October 2026
 
 - **Updates in place, from the app.** The fork now has its own package (`app.opentv.sonny`, next to
