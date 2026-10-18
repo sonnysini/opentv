@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.4 — 18 October 2026
+
+- **Rai 4K keeps its name.** `Rai 4K RAW` was listed as plain "Rai"; brand-only UHD channels
+  (Rai 4K, Sky Sport 4K) now keep the 4K in the name and stay a channel of their own.
+
 ## 0.15.3 — 18 October 2026
 
 - **Fewer duplicate channels.** Restream sources written into channel names (`[STEL]`, `[KALI]`,

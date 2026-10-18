@@ -234,4 +234,13 @@ class ChannelNameNormalizerTest {
         assertThat(hdr.baseName).isEqualTo("Sky Sport Uno")
         assertThat(hdr.qualityLabel).isEqualTo("UHD HDR PLUS")
     }
+
+    @Test
+    fun `brand-only UHD channels keep their 4K`() {
+        assertThat(ChannelNameNormalizer.normalize("Rai 4K RAW").baseName).isEqualTo("Rai 4K")
+        assertThat(ChannelNameNormalizer.normalize("SKY SPORT 4K STELLINA").baseName).isEqualTo("SKY SPORT 4K")
+        assertThat(key("Rai 4K RAW")).isNotEqualTo(key("Rai 4"))
+        assertThat(key("Rai 2 4K")).isEqualTo(key("Rai 2 HD"))
+        assertThat(key("Sky Sport F1 4K")).isEqualTo(key("Sky Sport F1 HD"))
+    }
 }

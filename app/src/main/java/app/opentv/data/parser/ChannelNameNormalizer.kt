@@ -54,6 +54,11 @@ object ChannelNameNormalizer {
         "SD" to 100, "LQ" to 100, "480P" to 100, "576P" to 100,
     )
 
+    private const val UHD_RANK = 400
+
+    /** Group keys of brands whose UHD feed is a separate channel (`Rai 4K`), not a quality copy. */
+    private val BRANDS_WITH_UHD_CHANNEL = setOf("rai", "skysport")
+
     /** Tokens that describe the stream but not its resolution. Stripped, kept in the label. */
     private val EXTRA_TOKENS = setOf(
         "RAW", "HEVC", "H265", "H.265", "H264", "H.264", "AV1",
@@ -250,7 +255,9 @@ object ChannelNameNormalizer {
             takeSource(keptTokens.removeAt(0))
         }
 
-        val base = MULTI_SPACE.replace(keptTokens.joinToString(" "), " ").trim()
+        var base = MULTI_SPACE.replace(keptTokens.joinToString(" "), " ").trim()
+        // `Rai 4K` / `Sky Sport 4K` are channels of their own: stripping the 4K leaves just the brand.
+        if (bestRank >= UHD_RANK && groupKeyOf(base) in BRANDS_WITH_UHD_CHANNEL) base = "$base 4K"
         val key = groupKeyOf(base)
         val shift = timeshift
 
