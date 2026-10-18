@@ -1015,7 +1015,13 @@ class CatalogRepository(
             repeat(MAX_MERGE_HOPS) { k = merges[k] ?: return k }
             return k
         }
-        return channels.map { c -> if (c.groupKey in merges) c.copy(groupKey = target(c.groupKey)) else c }
+        // A timeshift copy follows its channel: merging `Sky Cinema Suspence` also takes `…+2`.
+        fun follow(key: String): String? {
+            if (key in merges) return target(key)
+            val base = key.substringBefore('+')
+            return if (base != key && base in merges) target(base) + key.substring(base.length) else null
+        }
+        return channels.map { c -> follow(c.groupKey)?.let { c.copy(groupKey = it) } ?: c }
     }
 
     /**

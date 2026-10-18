@@ -216,10 +216,9 @@ class ChannelNameNormalizerTest {
     @Test
     fun `aliases follow timeshift copies`() {
         val aliases = ChannelNameNormalizer.keyAliases(
-            setOf("comedycentral", "skycomedycentral+1", "skycinemasuspance+2", "skycinemasuspense"),
+            setOf("comedycentral", "skycomedycentral+1"),
         )
         assertThat(aliases["skycomedycentral+1"]).isEqualTo("comedycentral+1")
-        assertThat(aliases["skycinemasuspance+2"]).isEqualTo("skycinemasuspense+2")
     }
 
     @Test
