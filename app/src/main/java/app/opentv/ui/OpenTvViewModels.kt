@@ -19,6 +19,7 @@ import app.opentv.data.model.PlaybackPosition
 import app.opentv.data.model.Profile
 import app.opentv.data.model.Programme
 import app.opentv.data.model.Series
+import app.opentv.data.model.shownName
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StremioStream
