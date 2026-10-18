@@ -472,4 +472,19 @@
     <string name="player_quality_fallback">%1$s non disponibile → %2$s</string>
     <string name="player_channel_unavailable">Canale non disponibile</string>
     <string name="player_channel_unavailable_hint">OK per riprovare · ↑/↓ per cambiare canale</string>
+    <string name="settings_grouping_title">Raggruppamento canali</string>
+    <string name="settings_grouping_subtitle">Unisci i doppioni, annulla le unioni</string>
+    <string name="grouping_desc">Righe che sembrano lo stesso canale con due nomi. Unisci le mette in una sola riga, con tutti i flussi nel pannello Qualità. Le scelte restano a ogni sincronizzazione.</string>
+    <string name="grouping_suggestions_header">Possibili doppioni (%1$d)</string>
+    <string name="grouping_suggestions_loading">Cerco i doppioni…</string>
+    <string name="grouping_suggestions_none">Nessun possibile doppione trovato.</string>
+    <string name="grouping_merged_header">Unioni fatte (%1$d)</string>
+    <string name="grouping_merge">Unisci</string>
+    <string name="grouping_ignore">Ignora</string>
+    <string name="grouping_undo">Annulla</string>
+    <string name="grouping_applying">Raggruppo i canali…</string>
+    <string name="grouping_reason_guide">Stessa guida</string>
+    <string name="grouping_reason_words">Stesse parole</string>
+    <string name="grouping_reason_spelling">Scritto quasi uguale</string>
+    <string name="grouping_channel_count">%1$s · %2$d + %3$d canali</string>
 </resources>

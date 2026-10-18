@@ -6,6 +6,7 @@
 package app.opentv.core
 
 import android.content.Context
+import app.opentv.data.model.GroupMerge
 import app.opentv.data.model.StremioAddon
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -576,7 +577,42 @@ class AppSettings private constructor(context: Context) {
             prefs.getString(KEY_STREMIO_ADDONS, null)?.let { addonJson.decodeFromString<List<StremioAddon>>(it) }
         }.getOrNull() ?: emptyList()
 
+    /** Channel merges the user confirmed (Settings › Channel grouping), applied at every normalisation. */
+    private val _groupMerges = MutableStateFlow(readGroupMerges())
+    val groupMerges: StateFlow<List<GroupMerge>> = _groupMerges.asStateFlow()
+
+    /** Suggested pairs the user answered "Ignore" to, as [app.opentv.data.parser.MergeSuggester.pairId]. */
+    private val _ignoredMergePairs = MutableStateFlow(prefs.getStringSet(KEY_IGNORED_MERGE_PAIRS, emptySet())!!.toSet())
+    val ignoredMergePairs: StateFlow<Set<String>> = _ignoredMergePairs.asStateFlow()
+
+    fun addGroupMerge(merge: GroupMerge) {
+        // A row merged again replaces its old choice; rows that pointed at it follow it along.
+        val kept = _groupMerges.value.filterNot { it.fromKey == merge.fromKey }
+            .map { if (it.intoKey == merge.fromKey) it.copy(intoKey = merge.intoKey, intoName = merge.intoName) else it }
+        persistGroupMerges(kept + merge)
+    }
+
+    fun removeGroupMerge(fromKey: String) = persistGroupMerges(_groupMerges.value.filterNot { it.fromKey == fromKey })
+
+    fun ignoreMergePair(pairId: String) {
+        val next = _ignoredMergePairs.value + pairId
+        prefs.edit().putStringSet(KEY_IGNORED_MERGE_PAIRS, next).apply()
+        _ignoredMergePairs.value = next
+    }
+
+    private fun persistGroupMerges(list: List<GroupMerge>) {
+        prefs.edit().putString(KEY_GROUP_MERGES, addonJson.encodeToString(list)).apply()
+        _groupMerges.value = list
+    }
+
+    private fun readGroupMerges(): List<GroupMerge> =
+        runCatching {
+            prefs.getString(KEY_GROUP_MERGES, null)?.let { addonJson.decodeFromString<List<GroupMerge>>(it) }
+        }.getOrNull() ?: emptyList()
+
     companion object {
+        private const val KEY_GROUP_MERGES = "group_merges"
+        private const val KEY_IGNORED_MERGE_PAIRS = "ignored_merge_pairs"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_APP_STYLE = "app_style"
         private const val KEY_CHANNEL_LAYOUT = "channel_layout"

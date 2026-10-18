@@ -1395,10 +1395,6 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
     /** Live language rules — the "Italian only" and "international sport" switches. */
     val italianOnly: StateFlow<Boolean> = graph.settings.italianOnly
     val foreignSportOff: StateFlow<Boolean> = graph.settings.foreignSportOff
-    val mergeSources: StateFlow<Boolean> = graph.settings.mergeCategorySources
-
-    fun setMergeSources(on: Boolean) = graph.settings.setMergeCategorySources(on)
-
     fun selectKind(next: StreamKind) {
         kind.value = next
         query.value = ""
@@ -1431,5 +1427,67 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         if (needsRefresh) app.opentv.data.work.SyncWorker.refreshNow(getApplication())
+    }
+}
+
+/**
+ * Settings › Channel grouping: the "merge groups by source" switch, the likely duplicates to
+ * merge or ignore, and the merges already made (each undoable). A merge or undo regroups the
+ * stored channels on the spot — no sync needed — and re-runs the guide matcher for the new rows.
+ */
+class GroupingViewModel(app: Application) : AndroidViewModel(app) {
+    private val graph = ServiceLocator.get(app)
+
+    val mergeSources: StateFlow<Boolean> = graph.settings.mergeCategorySources
+    val merges: StateFlow<List<app.opentv.data.model.GroupMerge>> = graph.settings.groupMerges
+
+    /** Null while the first scan runs. */
+    private val _suggestions = MutableStateFlow<List<app.opentv.data.parser.MergeSuggester.Suggestion>?>(null)
+    val suggestions: StateFlow<List<app.opentv.data.parser.MergeSuggester.Suggestion>?> = _suggestions.asStateFlow()
+
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    private val regroupLock = Mutex()
+
+    init {
+        viewModelScope.launch { rescan() }
+    }
+
+    fun setMergeSources(on: Boolean) = graph.settings.setMergeCategorySources(on)
+
+    fun merge(s: app.opentv.data.parser.MergeSuggester.Suggestion) {
+        graph.settings.addGroupMerge(app.opentv.data.model.GroupMerge(s.from.key, s.into.key, s.from.name, s.into.name))
+        // Off the list at once; the rescan after regrouping drops the pairs it made moot.
+        _suggestions.value = _suggestions.value?.filterNot { it.from.key == s.from.key || it.into.key == s.from.key }
+        regroup()
+    }
+
+    fun ignore(s: app.opentv.data.parser.MergeSuggester.Suggestion) {
+        graph.settings.ignoreMergePair(s.pairId)
+        _suggestions.value = _suggestions.value?.filterNot { it.pairId == s.pairId }
+    }
+
+    fun undo(merge: app.opentv.data.model.GroupMerge) {
+        graph.settings.removeGroupMerge(merge.fromKey)
+        regroup()
+    }
+
+    private fun regroup() {
+        viewModelScope.launch {
+            regroupLock.withLock {
+                _busy.value = true
+                runCatching {
+                    graph.catalogRepository.renormalizeAll()
+                    graph.epgRepository.runMatcher()
+                }
+                rescan()
+                _busy.value = false
+            }
+        }
+    }
+
+    private suspend fun rescan() {
+        _suggestions.value = runCatching { graph.catalogRepository.mergeSuggestions() }.getOrDefault(emptyList())
     }
 }

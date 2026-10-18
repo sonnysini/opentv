@@ -539,4 +539,19 @@
     <string name="player_quality_fallback">%1$s not available → %2$s</string>
     <string name="player_channel_unavailable">Channel not available</string>
     <string name="player_channel_unavailable_hint">OK to try again · ↑/↓ to change channel</string>
+    <string name="settings_grouping_title">Channel grouping</string>
+    <string name="settings_grouping_subtitle">Merge duplicate channels, undo merges</string>
+    <string name="grouping_desc">Rows that look like one channel under two names. Merge puts them in one row, every feed in the Quality panel. Your choices survive every sync.</string>
+    <string name="grouping_suggestions_header">Possible duplicates (%1$d)</string>
+    <string name="grouping_suggestions_loading">Looking for duplicates…</string>
+    <string name="grouping_suggestions_none">No likely duplicates found.</string>
+    <string name="grouping_merged_header">Merges done (%1$d)</string>
+    <string name="grouping_merge">Merge</string>
+    <string name="grouping_ignore">Ignore</string>
+    <string name="grouping_undo">Undo</string>
+    <string name="grouping_applying">Regrouping channels…</string>
+    <string name="grouping_reason_guide">Same guide</string>
+    <string name="grouping_reason_words">Same words</string>
+    <string name="grouping_reason_spelling">Almost the same spelling</string>
+    <string name="grouping_channel_count">%1$s · %2$d + %3$d channels</string>
 </resources>

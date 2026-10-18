@@ -64,7 +64,6 @@ fun CategoriesScreen(
     val offCount by viewModel.offCount.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
     val italianOnly by viewModel.italianOnly.collectAsState()
-    val mergeSources by viewModel.mergeSources.collectAsState()
     val foreignSportOff by viewModel.foreignSportOff.collectAsState()
 
     Column(
@@ -134,13 +133,6 @@ fun CategoriesScreen(
                         stringResource(R.string.categories_foreign_sport_desc),
                         checked = !foreignSportOff,
                         onToggle = { keep -> viewModel.setForeignSportOff(!keep) },
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    RuleRow(
-                        stringResource(R.string.categories_merge_sources),
-                        stringResource(R.string.categories_merge_sources_desc),
-                        checked = mergeSources,
-                        onToggle = viewModel::setMergeSources,
                     )
                     Spacer(Modifier.height(10.dp))
                 }
@@ -222,7 +214,7 @@ private fun RuleRow(label: String, subtitle: String, checked: Boolean, onToggle:
     SwitchRow(label, subtitle, checked, onToggle, emphasised = true)
 
 @Composable
-private fun SwitchRow(
+internal fun SwitchRow(
     label: String,
     subtitle: String?,
     checked: Boolean,
