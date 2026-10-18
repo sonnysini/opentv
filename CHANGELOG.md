@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.5 — 18 October 2026
+
+- **DAZN team channels in one row.** `DAZN Serie A Milan`, `DAZN SERIE A 3 MILAN` and `Milan`
+  are now one channel with all feeds in the Quality picker; same for every Serie A/B team (also
+  the `WEB` feeds) whenever the list has the team's plain channel. No team list is built in.
+- **DAZN prefix folds.** `DAZN UFC 1`, `DAZN Amichevoli 01`, `IT DAZN| Eurosport 1`, Inter TV,
+  Milan TV, Red Bull TV… join the same channel without the prefix, when the list has it.
+- **More quality copies found.** `SERIE-A1-FHD/HD/SD` (dashes) and `[V] BOX 01` fold into one row;
+  `VH- 1` joins VH1.
+- **Heading rows** (`---- Basket Serie A2 ----`) no longer pull channels into their name.
+
 ## 0.15.4 — 18 October 2026
 
 - **Rai 4K keeps its name.** `Rai 4K RAW` was listed as plain "Rai"; brand-only UHD channels

@@ -243,4 +243,74 @@ class ChannelNameNormalizerTest {
         assertThat(key("Rai 2 4K")).isEqualTo(key("Rai 2 HD"))
         assertThat(key("Sky Sport F1 4K")).isEqualTo(key("Sky Sport F1 HD"))
     }
+
+    private fun folded(vararg names: String): Map<String, String> {
+        val keys = names.map { key(it) }
+        val aliases = ChannelNameNormalizer.keyAliases(keys.toSet())
+        return names.zip(keys).associate { (n, k) -> n to (aliases[k] ?: k) }
+    }
+
+    @Test
+    fun `DAZN team feeds join the bare team channel`() {
+        val f = folded(
+            "Milan FHD", "DAZN Serie A Milan HD", "DAZN SERIE A 3 FHD  MILAN",
+            "Cesena HD", "DAZN SERIE B Cesena FHD", "DAZN 5 SERIE B FHD CESENA", "DAZN 5 SERIE B WEB CESENA",
+            "Sassuolo HD", "DAZN SERIE A 13 WEB SASSUOLO",
+        )
+        assertThat(f.filterKeys { "MILAN" in it.uppercase() }.values.toSet()).containsExactly("milan")
+        assertThat(f.filterKeys { "CESENA" in it.uppercase() }.values.toSet()).containsExactly("cesena")
+        assertThat(f.filterKeys { "SASSUOLO" in it.uppercase() }.values.toSet()).containsExactly("sassuolo")
+    }
+
+    @Test
+    fun `DAZN team feeds stay put without a bare team channel`() {
+        val f = folded("DAZN Serie B Pisa HD", "DAZN 9 SERIE B FHD PISA", "SERIE A 01 RAW", "DAZN 1 HD")
+        assertThat(f["DAZN Serie B Pisa HD"]).isEqualTo("daznseriebpisa")
+        assertThat(f["DAZN 9 SERIE B FHD PISA"]).isEqualTo("dazn9seriebpisa")
+        assertThat(f["SERIE A 01 RAW"]).isEqualTo("seriea01")
+    }
+
+    @Test
+    fun `a DAZN prefix drops when the bare channel exists`() {
+        val f = folded(
+            "DAZN UFC 1 UHD", "UFC 1 HD", "IT DAZN| Eurosport 1", "Eurosport 1 HD",
+            "[DVS] DAZN-SERIE-A-WOMEN-1", "SERIE A WOMEN 1", "DAZN CHANNEL HD",
+        )
+        assertThat(f["DAZN UFC 1 UHD"]).isEqualTo("ufc1")
+        assertThat(f["IT DAZN| Eurosport 1"]).isEqualTo("eurosport1")
+        assertThat(f["[DVS] DAZN-SERIE-A-WOMEN-1"]).isEqualTo("serieawomen1")
+        assertThat(f["DAZN CHANNEL HD"]).isEqualTo("daznchannel")
+    }
+
+    @Test
+    fun `a brand prefix never leaves a bare number`() {
+        val f = folded("DAZN 1 HD", "VH- 1", "Sky 1 HD")
+        assertThat(f["DAZN 1 HD"]).isEqualTo("dazn1")
+        assertThat(f["Sky 1 HD"]).isEqualTo("sky1")
+    }
+
+    @Test
+    fun `a single bracketed letter in front is a source`() {
+        val n = ChannelNameNormalizer.normalize("[V] BOX 01 HD")
+        assertThat(n.groupKey).isEqualTo("box01")
+        assertThat(n.source).isNotNull()
+        assertThat(key("[V] BOX 01 HD")).isEqualTo(key("BOX 01 SD"))
+    }
+
+    @Test
+    fun `quality tags glued with dashes are found`() {
+        val n = ChannelNameNormalizer.normalize("SERIE-A1-FHD")
+        assertThat(n.baseName).isEqualTo("SERIE A1")
+        assertThat(n.qualityLabel).isEqualTo("FHD")
+        assertThat(key("SERIE-A1-SD")).isEqualTo(n.groupKey)
+        // No tag inside: the dashed name is left alone.
+        assertThat(ChannelNameNormalizer.normalize("Brixen-PALLAMANO-FEMMINILE").baseName).isEqualTo("Brixen-PALLAMANO-FEMMINILE")
+    }
+
+    @Test
+    fun `a country-like prefix that is the whole name stays`() {
+        assertThat(key("VH- 1")).isEqualTo(key("VH1"))
+        assertThat(ChannelNameNormalizer.normalize("VH- 1").region).isNull()
+        assertThat(ChannelNameNormalizer.normalize("UK| BBC ONE").region).isEqualTo("UK")
+    }
 }

@@ -85,6 +85,8 @@ object ChannelNameNormalizer {
     private val PAREN_SOURCE = Regex("""\(\s*([A-Za-z][A-Za-z+\-]{1,11})\s*\)""")
     /** `Sky Sport F1 FHD (Q)` / `(S)`: a single letter in brackets at the end names a feed. */
     private val PAREN_LETTER = Regex("""\(\s*([A-Z])\s*\)\s*$""")
+    /** `[V] BOX 01`: a single letter in square brackets at the start names a feed too. */
+    private val BRACKET_LETTER = Regex("""^\s*\[\s*([A-Za-z])\s*]\s*""")
     /** Bandwidth notes some lists append: `Sky Sport F1 4K RAW Richiede 30 Mbps`. */
     private val BANDWIDTH_NOTE = Regex("""\b(?:richiede|requires?)\s*\d+\s*mbps\b""", RegexOption.IGNORE_CASE)
     /** Timeshift: `+1`, `+ 1`, `+24`, also glued to the name (`Food Network+1`). */
@@ -189,6 +191,10 @@ object ChannelNameNormalizer {
             takeSource(m.groupValues[1])
             working = working.removeRange(m.range)
         }
+        BRACKET_LETTER.find(working)?.let { m ->
+            takeSource(m.groupValues[1].uppercase())
+            working = working.removeRange(m.range)
+        }
         // Timeshift is part of the identity (`Rai 1 +1` is not `Rai 11`): pulled out here and
         // put back as a `+N` suffix the key keeps, so aliases can work on the bare channel.
         var timeshift: String? = null
@@ -200,7 +206,8 @@ object ChannelNameNormalizer {
         // Country prefix BEFORE decoration stripping: the brackets in `[UK]` are the
         // delimiter, and the decoration pass would eat them and lose the tag.
         var region: String? = null
-        COUNTRY_PREFIX.find(working)?.let { match ->
+        // Only when a name is left after it: in `VH- 1` the "prefix" is the channel.
+        COUNTRY_PREFIX.find(working)?.takeIf { m -> working.removeRange(m.range).any { it.isLetter() } }?.let { match ->
             region = match.groupValues[1].ifEmpty { match.groupValues[2] }
             working = working.removeRange(match.range)
         }
@@ -213,6 +220,7 @@ object ChannelNameNormalizer {
         val keptTokens = ArrayList<String>()
 
         val tokens = working.split(' ', '\t', '/')
+            .flatMap(::splitDashedTags)
             .map { it.trim('.', ',', ':', ';', '|', '-', '(', ')', '[', ']') }
             .filter { it.isNotEmpty() }
         var i = 0
@@ -272,6 +280,17 @@ object ChannelNameNormalizer {
     }
 
     /**
+     * `SERIE-A1-FHD`: words glued with dashes hide the quality tag from the token pass. Split
+     * only when a part is a quality/stream tag, so `X-Men` or `Brixen-PALLAMANO` read as before.
+     */
+    private fun splitDashedTags(token: String): List<String> {
+        if ('-' !in token) return listOf(token)
+        val parts = token.split('-').filter { it.isNotEmpty() }
+        val tagged = parts.any { it.uppercase().let { u -> u in QUALITY_RANKS || u in EXTRA_TOKENS } }
+        return if (tagged) parts else listOf(token)
+    }
+
+    /**
      * Ranks HEVC and RAW feeds within their resolution tier: HEVC above RAW above plain.
      *
      * Measured on a real Italian list: "X HEVC" and "X RAW" with no resolution tag were all
@@ -322,6 +341,9 @@ object ChannelNameNormalizer {
      * plain typos (`Nicklodeon`). Returns old key → new key for the keys that change. A `Sky`/
      * `Discovery` prefix is dropped only when the bare channel exists in the same list, so `Sky Uno`
      * stays `Sky Uno`. `Sky Cinema X` is left alone: `Cinema X` is often a different 24/7 loop.
+     * `DAZN` / `IT DAZN|` work the same way, and so do DAZN team feeds (`DAZN Serie A Milan`,
+     * `DAZN SERIE A 3 MILAN`, `DAZN 5 SERIE B WEB CESENA`): they join the team's bare channel
+     * (`Milan`) when the list has one. No team list — the bare channel is the proof.
      */
     fun keyAliases(keys: Set<String>): Map<String, String> {
         // Timeshift copies (`skycomedycentral+1`) follow their channel: aliases work on the
@@ -331,15 +353,24 @@ object ChannelNameNormalizer {
         for (key in keys) {
             val base = key.substringBefore('+')
             val shift = key.substring(base.length)
-            val alias = KEY_ALIASES[base] ?: BRAND_PREFIXES.firstNotNullOfOrNull { p ->
-                base.removePrefix(p).takeIf { it != base && it.length >= 2 && !it.startsWith("cinema") }
-            }?.takeIf { it in bases }?.let { KEY_ALIASES[it] ?: it }
+            val candidates = BRAND_PREFIXES.map { base.removePrefix(it) }.filter {
+                // `DAZN 1` is not channel `1`: a bare number left over is no channel name.
+                it != base && it.length >= 2 && !it.startsWith("cinema") && !it.all(Char::isDigit)
+            } + listOfNotNull(teamOf(base))
+            val alias = KEY_ALIASES[base] ?: candidates.firstOrNull { it in bases }?.let { KEY_ALIASES[it] ?: it }
             if (alias != null && alias != base) out[key] = alias + shift
         }
         return out
     }
 
-    private val BRAND_PREFIXES = listOf("sky", "discovery")
+    /** The team in a DAZN team-feed key (`dazn5seriebwebcesena` → `cesena`), or null. */
+    private fun teamOf(base: String): String? =
+        TEAM_FEED.matchEntire(base)?.groupValues?.get(1)?.takeIf { !it.startsWith("women") }
+
+    private val BRAND_PREFIXES = listOf("sky", "discovery", "itdazn", "dazn")
+
+    /** `[dazn][N]serie a|b[N][web]<team>`, on group keys. */
+    private val TEAM_FEED = Regex("""^(?:dazn)?\d*serie[ab]\d*(?:web)?([a-z].{2,})$""")
 
     /** Provider typos and alternative names of the same channel, by group key. */
     private val KEY_ALIASES = mapOf(
