@@ -99,6 +99,10 @@ fun FullscreenLive(
     // While the user picks the channel to merge [mergingName] into, BACK calls this instead.
     mergingName: String?,
     onCancelMerge: () -> Unit,
+    // After a merge: the row to put focus back on, and the list as it was when OK was pressed —
+    // the move waits for the regrouped list, where the row may sit somewhere else.
+    refocus: Pair<Any, List<ChannelsViewModel.Row>>?,
+    onRefocusDone: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
 ) {
@@ -252,8 +256,16 @@ fun FullscreenLive(
                 ?: fallbackKey(rows)?.let { key -> rows.indexOfFirst { it.key == key } }?.coerceAtLeast(0)
                 ?: 0
             // Keyed on the group so switching category re-focuses the new list's first row.
+            val jumpTo = refocus?.takeIf { rows !== it.second }
+                ?.let { (key, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
+            LaunchedEffect(refocus) {
+                if (refocus != null) {
+                    delay(5_000)
+                    onRefocusDone()
+                }
+            }
             androidx.compose.runtime.key(favouritesOnly, selectedCategory) {
-                FocusedList(count = rows.size, startIndex = startIndex) { index, requester ->
+                FocusedList(count = rows.size, startIndex = startIndex, jumpTo = jumpTo, onJumped = onRefocusDone) { index, requester ->
                     val row = rows[index]
                     FullscreenChannelRow(
                         row = row,
@@ -281,6 +293,9 @@ fun FullscreenLive(
 private fun FocusedList(
     count: Int,
     startIndex: Int,
+    // Move focus to this row now (the list changed under it), then call [onJumped].
+    jumpTo: Int? = null,
+    onJumped: () -> Unit = {},
     item: @Composable (index: Int, requester: Modifier) -> Unit,
 ) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 3).coerceAtLeast(0))
@@ -303,6 +318,19 @@ private fun FocusedList(
             }
             runCatching { focusRequester.requestFocus() }
         }
+    }
+    LaunchedEffect(jumpTo) {
+        val target = jumpTo ?: return@LaunchedEffect
+        if (target !in 0 until count) return@LaunchedEffect onJumped()
+        focusedIndex = target
+        if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
+            listState.scrollToItem((target - 3).coerceAtLeast(0))
+        }
+        repeat(20) {
+            delay(50)
+            if (runCatching { focusRequester.requestFocus() }.isSuccess) return@repeat
+        }
+        onJumped()
     }
     LazyColumn(
         state = listState,
