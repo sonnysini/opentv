@@ -43,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
@@ -93,6 +94,11 @@ fun FullscreenLive(
     onFocusRow: (ChannelsViewModel.Row) -> Unit,
     onPlay: (ChannelsViewModel.Row) -> Unit,
     onToggleFavourite: (ChannelsViewModel.Row) -> Unit,
+    // Long-press OK on a channel: the host's channel menu.
+    onLongPress: (ChannelsViewModel.Row) -> Unit,
+    // While the user picks the channel to merge [mergingName] into, BACK calls this instead.
+    mergingName: String?,
+    onCancelMerge: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
 ) {
@@ -100,6 +106,8 @@ fun FullscreenLive(
     // Back climbs one level like ☰: channels → categories; from the categories it falls through
     // to the screen's usual Back (the exit prompt).
     BackHandler(enabled = !showCategories) { showCategories = true }
+    // Declared later, so it wins: BACK first leaves "merge with…".
+    BackHandler(enabled = mergingName != null) { onCancelMerge() }
 
     // After picking another category the old group's rows are still on hand for a moment; hold the
     // list back until the new ones arrive, so focus lands on the new group's first channel instead
@@ -181,6 +189,21 @@ fun FullscreenLive(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (mergingName != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.live_merge_banner, mergingName),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
         Spacer(Modifier.height(12.dp))
 
         if (showCategories) {
@@ -239,6 +262,7 @@ fun FullscreenLive(
                         onFocus = { onFocusRow(row) },
                         onPlay = { onPlay(row) },
                         onToggleFavourite = { onToggleFavourite(row) },
+                        onLongPress = { onLongPress(row) },
                         onLeft = onExitLeft,
                     )
                 }
@@ -347,6 +371,7 @@ private fun FullscreenChannelRow(
     onFocus: () -> Unit,
     onPlay: () -> Unit,
     onToggleFavourite: () -> Unit,
+    onLongPress: () -> Unit,
     onLeft: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -354,6 +379,7 @@ private fun FullscreenChannelRow(
     Row(
         modifier
             .leftReveals({ focused }, onLeft)
+            .longPressOk({ focused }, onLongPress)
             .fillMaxWidth()
             .focusLift(focused)
             .clip(shape)
@@ -451,5 +477,28 @@ private fun Modifier.leftReveals(isRowFocused: () -> Boolean, onLeft: () -> Unit
             false
         }
     }
+
+/**
+ * Holding OK on the row (not on the star) calls [onLongPress] once; the rest of that press —
+ * repeats and the release that would play the channel — is swallowed.
+ */
+private fun Modifier.longPressOk(isRowFocused: () -> Boolean, onLongPress: () -> Unit): Modifier = composed {
+    var held by remember { mutableStateOf(false) }
+    onPreviewKeyEvent { e ->
+        val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+        when {
+            !ok -> false
+            // A fresh press: the last one may have ended in a dialog that took its release.
+            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { held = false; false }
+            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.isLongPress && isRowFocused() -> {
+                held = true
+                onLongPress()
+                true
+            }
+            held && e.type == KeyEventType.KeyUp -> { held = false; true }
+            else -> held
+        }
+    }
+}
 
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())

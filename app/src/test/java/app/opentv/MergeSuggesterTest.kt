@@ -52,6 +52,18 @@ class MergeSuggesterTest {
     }
 
     @Test
+    fun `a timeshift that lost its plus joins the timeshift`() {
+        val s = MergeSuggester.suggest(listOf(g("skycinemauno24", "SKY CINEMA UNO 24", 3), g("skycinemauno+24", "Sky Cinema Uno +24")))
+        assertThat(s.single().from.key).isEqualTo("skycinemauno24")
+        assertThat(s.single().into.key).isEqualTo("skycinemauno+24")
+    }
+
+    @Test
+    fun `a one-hour timeshift is not a lost plus`() {
+        assertThat(MergeSuggester.suggest(listOf(g("rai1", "Rai 1"), g("rai+1", "Rai +1")))).isEmpty()
+    }
+
+    @Test
     fun `short words and numbers tell channels apart`() {
         val s = MergeSuggester.suggest(
             listOf(

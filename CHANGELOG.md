@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.7 — 18 October 2026
+
+- **Merge channels by hand.** Hold OK on a channel in the full-screen live list: the channel menu
+  (Watch, Record…) opens there too, with **Merge with…**. Pick the other channel — switching
+  category with ☰ if needed — and press OK: the two become one row, named after the one you
+  picked. BACK cancels; undo it in Settings › Channel grouping › Merges done.
+- **No more built-in typo list.** Provider misspellings (`Nicklodeon`, `HGVTV`…) are no longer
+  fixed silently: they show up in Possible duplicates for you to merge. New suggestion: a
+  timeshift that lost its plus (`Sky Cinema Uno 24` next to `Sky Cinema Uno +24`).
+- **Merges carry timeshifts.** Merging a channel takes its `+1`/`+2` copies along.
+- **Merged rows keep the right name.** The row is named after the channel merged into.
+
 ## 0.15.6 — 18 October 2026
 
 - **Settings › Channel grouping.** A new screen for how channels fold together:

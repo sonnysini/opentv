@@ -15,7 +15,8 @@ package app.opentv.data.parser
  * Three signals, strongest first:
  *  - **Same guide**: two rows whose channels point at the same guide id.
  *  - **Same words**: the same words in another order.
- *  - **Spelling**: one letter apart, on names long enough for that to mean a typo.
+ *  - **Spelling**: one letter apart, on names long enough for that to mean a typo, or a
+ *    timeshift that lost its plus sign (`Sky Cinema Uno 24` next to `Sky Cinema Uno +24`).
  *
  * Pure and fast on a 25k-channel list: no pairwise scan, everything goes through hash buckets.
  */
@@ -46,14 +47,15 @@ object MergeSuggester {
         val byKey = groups.filter { it.key.isNotEmpty() }.associateBy { it.key }
         val seen = HashSet<String>()
         val out = ArrayList<Suggestion>()
-        fun offer(a: String, b: String, reason: Reason) {
-            if (a == b || !compatible(a, b)) return
+        /** [intoB]: [b] keeps its name whatever the sizes. */
+        fun offer(a: String, b: String, reason: Reason, checked: Boolean = true, intoB: Boolean = false) {
+            if (a == b || (checked && !compatible(a, b))) return
             val id = pairId(a, b)
             if (id in ignored || !seen.add(id)) return
             val ga = byKey[a] ?: return
             val gb = byKey[b] ?: return
             // The bigger row keeps its name; a tie goes to the shorter, plainer key.
-            val aWins = ga.channels > gb.channels || (ga.channels == gb.channels && a.length <= b.length)
+            val aWins = !intoB && (ga.channels > gb.channels || (ga.channels == gb.channels && a.length <= b.length))
             out += if (aWins) Suggestion(gb, ga, reason) else Suggestion(ga, gb, reason)
         }
 
@@ -88,6 +90,15 @@ object MergeSuggester {
                 val b = byKey.getValue(distinct[j])
                 if (typoInLongWord(a.name, b.name)) offer(a.key, b.key, Reason.SPELLING)
             }
+        }
+
+        // `skycinemauno24` is `skycinemauno+24` with the plus lost. Two-digit shifts only:
+        // `Rai 1` is not `Rai +1`.
+        for (key in byKey.keys) {
+            val shift = key.substringAfter('+', "")
+            if (shift.length < 2 || !shift.all(Char::isDigit)) continue
+            val lost = key.replace("+", "")
+            if (lost in byKey) offer(lost, key, Reason.SPELLING, checked = false, intoB = true)
         }
 
         return out.sortedBy { it.reason.ordinal }.take(limit)

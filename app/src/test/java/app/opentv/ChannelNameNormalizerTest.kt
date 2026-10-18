@@ -161,10 +161,10 @@ class ChannelNameNormalizerTest {
     }
 
     @Test
-    fun `provider typos fold into the real channel`() {
+    fun `provider typos are left to the user, not folded`() {
         val aliases = ChannelNameNormalizer.keyAliases(setOf("nicklodeon", "nickelodeon", "skynickelodeon"))
 
-        assertThat(aliases).containsExactly("nicklodeon", "nickelodeon", "skynickelodeon", "nickelodeon")
+        assertThat(aliases).containsExactly("skynickelodeon", "nickelodeon")
     }
 
     private fun key(name: String) = ChannelNameNormalizer.normalize(name).groupKey
@@ -216,10 +216,9 @@ class ChannelNameNormalizerTest {
     @Test
     fun `aliases follow timeshift copies`() {
         val aliases = ChannelNameNormalizer.keyAliases(
-            setOf("comedycentral", "skycomedycentral+1", "skycinemasuspance+2", "skycinemasuspense"),
+            setOf("comedycentral", "skycomedycentral+1"),
         )
         assertThat(aliases["skycomedycentral+1"]).isEqualTo("comedycentral+1")
-        assertThat(aliases["skycinemasuspance+2"]).isEqualTo("skycinemasuspense+2")
     }
 
     @Test
