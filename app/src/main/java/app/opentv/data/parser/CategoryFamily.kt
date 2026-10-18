@@ -71,6 +71,21 @@ object CategoryFamily {
         return Family(if (base.isEmpty()) "" else "$country|$base", source, working.trim())
     }
 
+    /** Tags that say how a feed looks or when it airs, not who restreams it — kept in a lone name. */
+    private val KEEP_IN_NAME = setOf("4K", "RAW")
+
+    /**
+     * A lone category's name without its restream source — `🧸 Bambini (Hermes)` → `🧸 Bambini`,
+     * `🏀 Basket LNP | Serie A2 (Hermes)` → `🏀 Basket LNP | Serie A2` — or null when there is no
+     * source to drop. `F1 LIVE` and `Sky Primafila 4K` stay as they are.
+     */
+    fun displayName(name: String): String? {
+        val family = of(name)
+        val source = family.source ?: return null
+        if (source.uppercase() in KEEP_IN_NAME || family.key.isEmpty()) return null
+        return family.name.ifEmpty { null }
+    }
+
     private val PAREN_TAG = Regex("""\(\s*([A-Za-z][A-Za-z+\-]{1,11})\s*\)""")
 
     /** Bracketed words that describe a group's content or timing, never its source. */

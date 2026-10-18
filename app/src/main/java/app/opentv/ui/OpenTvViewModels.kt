@@ -253,11 +253,12 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             selectedSource,
             settings.mergeCategorySources,
-        ) { raw, sourceId, merge ->
+            settings.stripCategorySources,
+        ) { raw, sourceId, merge, strip ->
             // Scope the category rail to the chosen provider, so a second playlist's categories show
             // on their own (cardiodoc's "keep sources separate"); null folds across every provider.
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped, merge)
+            foldCategories(scoped, merge, strip)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -266,7 +267,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * underlying id at once. Shared by the guide's [categoryGroups] and the manager's
      * [managerCategoryGroups] so both group the rail identically.
      */
-    private fun foldCategories(raw: List<Category>, mergeSources: Boolean): List<CategoryGroup> {
+    private fun foldCategories(raw: List<Category>, mergeSources: Boolean, stripSources: Boolean): List<CategoryGroup> {
         // Pass 1: codec folding, as before — one entry per normalised name.
         data class Folded(val key: String, val label: String, val rawName: String, val ids: MutableList<String>)
         val folded = LinkedHashMap<String, Folded>()
@@ -284,10 +285,20 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
             families.getOrPut(family) { mutableListOf() } += f
         }
+        // With source merging off, 'Sky Sport (Hermes)' and '(SAT)' stay apart and keep their tag.
+        val lonePerFamily = families.values.filter { it.size == 1 }
+            .groupingBy { CategoryFamily.of(it.first().rawName).key }.eachCount()
         return families.values.map { members ->
             val first = members.first()
             if (members.size == 1) {
-                CategoryGroup(first.key, first.label, first.ids, first.rawName)
+                // A lone 'Bambini (Hermes)' still reads "Bambini"; the key stays, so saved picks hold.
+                val unique = lonePerFamily[CategoryFamily.of(first.rawName).key] == 1
+                val name = if (stripSources && unique) CategoryFamily.displayName(first.rawName) else null
+                if (name == null) {
+                    CategoryGroup(first.key, first.label, first.ids, first.rawName)
+                } else {
+                    CategoryGroup(first.key, ChannelNameNormalizer.normalize(name).baseName.ifEmpty { first.label }, first.ids, name)
+                }
             } else {
                 val name = CategoryFamily.of(first.rawName).name
                 CategoryGroup(
@@ -651,9 +662,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             managerSelectedSource,
             graph.settings.mergeCategorySources,
-        ) { raw, sourceId, merge ->
+            graph.settings.stripCategorySources,
+        ) { raw, sourceId, merge, strip ->
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped, merge)
+            foldCategories(scoped, merge, strip)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -1475,6 +1487,10 @@ class GroupingViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setMergeSources(on: Boolean) = graph.settings.setMergeCategorySources(on)
+
+    val stripSources: StateFlow<Boolean> = graph.settings.stripCategorySources
+
+    fun setStripSources(on: Boolean) = graph.settings.setStripCategorySources(on)
 
     fun merge(s: app.opentv.data.parser.MergeSuggester.Suggestion) {
         graph.settings.addGroupMerge(app.opentv.data.model.GroupMerge(s.from.key, s.into.key, s.from.name, s.into.name))

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.9 — 18 October 2026
+
+- **Group names without the source.** A group that comes from a single restream source drops the
+  tag from its name: `Bambini (Hermes)` reads "Bambini", `Basket LNP | Serie A2 (Hermes)` reads
+  "Basket LNP | Serie A2". Quality and timing (`4K`, `RAW`, `LIVE`) stay. Turn it off in
+  Settings › Channel grouping › Hide source in group names.
+
 ## 0.15.8 — 18 October 2026
 
 - **Focus stays on the merged row.** After Merge with…, focus lands on the merged channel instead

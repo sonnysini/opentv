@@ -52,6 +52,7 @@ fun GroupingScreen(
     viewModel: GroupingViewModel = viewModel(),
 ) {
     val mergeSources by viewModel.mergeSources.collectAsState()
+    val stripSources by viewModel.stripSources.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     val merges by viewModel.merges.collectAsState()
     val busy by viewModel.busy.collectAsState()
@@ -102,6 +103,15 @@ fun GroupingScreen(
                     stringResource(R.string.categories_merge_sources_desc),
                     checked = mergeSources,
                     onToggle = viewModel::setMergeSources,
+                    emphasised = true,
+                )
+            }
+            item(key = "strip_sources") {
+                SwitchRow(
+                    stringResource(R.string.categories_strip_sources),
+                    stringResource(R.string.categories_strip_sources_desc),
+                    checked = stripSources,
+                    onToggle = viewModel::setStripSources,
                     emphasised = true,
                 )
             }
