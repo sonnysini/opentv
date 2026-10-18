@@ -164,6 +164,8 @@ fun HomeScreen(
     var recordTarget by remember { mutableStateOf<Pair<ChannelsViewModel.Row, Programme>?>(null) }
     // The channel whose OK menu (Watch / Record / Schedule) is open.
     var channelMenu by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
+    // Long-press › Merge with…: the row waiting for the user to pick the channel it joins.
+    var mergeFrom by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
 
     // First time the user records or schedules while OpenTV isn't exempt from battery optimisation,
     // offer the exemption so the capture survives standby. Once per session; never blocks recording.
@@ -323,8 +325,19 @@ fun HomeScreen(
             onSelectCategory = viewModel::selectCategory,
             onSelectFavourites = viewModel::selectFavourites,
             onFocusRow = { highlightedRow = it },
-            onPlay = { requestLive(it.primary) },
+            onPlay = { row ->
+                val from = mergeFrom
+                if (from == null) requestLive(row.primary)
+                else if (row.key != from.key) {
+                    mergeFrom = null
+                    viewModel.mergeRows(from, row)
+                    Toast.makeText(context, context.getString(R.string.live_merge_done, row.primary.shownName), Toast.LENGTH_LONG).show()
+                }
+            },
             onToggleFavourite = { viewModel.toggleFavourite(it) },
+            onLongPress = { if (mergeFrom == null) channelMenu = it },
+            mergingName = mergeFrom?.primary?.shownName,
+            onCancelMerge = { mergeFrom = null },
             onExitLeft = onRevealNav,
             emptyContent = {
                 when {
@@ -767,6 +780,12 @@ fun HomeScreen(
                     RecordActionRow(stringResource(R.string.guide_watch)) {
                         channelMenu = null
                         requestLive(channel)
+                    }
+                    if (fullscreen && channel.groupKey.isNotEmpty()) {
+                        RecordActionRow(stringResource(R.string.live_merge_action)) {
+                            channelMenu = null
+                            mergeFrom = menuRow
+                        }
                     }
                     RecordActionRow(stringResource(R.string.guide_open_external)) {
                         channelMenu = null

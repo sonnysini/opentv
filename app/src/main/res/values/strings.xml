@@ -191,6 +191,9 @@
     <string name="live_categories_title">Categories</string>
     <string name="live_menu_hint">☰ Categories   ← Menu</string>
     <string name="live_menu_hint_categories">☰ Back to channels   ← Menu</string>
+    <string name="live_merge_action">Merge with…</string>
+    <string name="live_merge_banner">Merge %1$s with… pick the channel · BACK cancels</string>
+    <string name="live_merge_done">Merged into %1$s · undo in Settings › Channel grouping</string>
     <string name="live_group_empty">No channels in this group — back to categories…</string>
     <string name="settings_live_preview_title">Live preview in the guide</string>
     <string name="settings_live_preview_subtitle">Play the selected channel in the preview pane. Turn this off if the guide stutters on an older box.</string>

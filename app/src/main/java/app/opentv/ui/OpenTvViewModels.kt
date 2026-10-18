@@ -690,6 +690,25 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Folds [from] into [into] by hand (long-press › Merge with…): saved like a merge from
+     * Settings › Channel grouping, so it survives syncs and is undone there. [into] keeps its name.
+     */
+    fun mergeRows(from: Row, into: Row) {
+        val fromKey = from.primary.groupKey
+        val intoKey = into.primary.groupKey
+        if (fromKey.isEmpty() || intoKey.isEmpty() || fromKey == intoKey) return
+        graph.settings.addGroupMerge(
+            app.opentv.data.model.GroupMerge(fromKey, intoKey, from.primary.shownName, into.primary.shownName),
+        )
+        viewModelScope.launch {
+            runCatching {
+                graph.catalogRepository.renormalizeAll()
+                graph.epgRepository.runMatcher()
+            }
+        }
+    }
+
     fun toggleFavourite(row: Row) {
         viewModelScope.launch {
             // Favouriting the row favourites the logical channel: every variant follows,

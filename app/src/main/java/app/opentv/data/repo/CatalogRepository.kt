@@ -1003,13 +1003,16 @@ class CatalogRepository(
         )
         val folded = if (aliases.isEmpty()) stamped
         else stamped.map { c -> aliases[c.groupKey]?.let { c.copy(groupKey = it) } ?: c }
-        return withTidiestNames(withUserMerges(folded))
+        val (merged, moved) = withUserMerges(folded)
+        return withTidiestNames(merged, moved)
     }
 
     /** The merges the user confirmed in Settings › Channel grouping, chains followed (a → b → c). */
-    private fun withUserMerges(channels: List<Channel>): List<Channel> {
+    /** Also returns which channels a merge moved, so the row keeps the name of the one merged into. */
+    private fun withUserMerges(channels: List<Channel>): Pair<List<Channel>, BooleanArray> {
+        val moved = BooleanArray(channels.size)
         val merges = settings.groupMerges.value.associate { it.fromKey to it.intoKey }
-        if (merges.isEmpty()) return channels
+        if (merges.isEmpty()) return channels to moved
         fun target(key: String): String {
             var k = key
             repeat(MAX_MERGE_HOPS) { k = merges[k] ?: return k }
@@ -1021,7 +1024,9 @@ class CatalogRepository(
             val base = key.substringBefore('+')
             return if (base != key && base in merges) target(base) + key.substring(base.length) else null
         }
-        return channels.map { c -> follow(c.groupKey)?.let { c.copy(groupKey = it) } ?: c }
+        return channels.mapIndexed { i, c ->
+            follow(c.groupKey)?.let { moved[i] = true; c.copy(groupKey = it) } ?: c
+        } to moved
     }
 
     /**
@@ -1050,11 +1055,13 @@ class CatalogRepository(
     /**
      * One display name per channel: the variants of a group can be spelled `Sky Uno`, `SKY UNO`
      * and `Sky UNO` by different lists, and whichever plays first used to name the row. Prefer
-     * the most common spelling that isn't all capitals.
+     * the most common spelling that isn't all capitals. Channels a user merge [moved] in don't
+     * vote while the row has channels of its own: `Transformers Channel` merged into
+     * `Trasformers Channel` reads as the row the user picked.
      */
-    private fun withTidiestNames(channels: List<Channel>): List<Channel> {
-        val names = channels.groupBy { it.groupKey }.mapValues { (_, group) ->
-            val spellings = group.map { it.displayName }
+    private fun withTidiestNames(channels: List<Channel>, moved: BooleanArray): List<Channel> {
+        val names = channels.indices.groupBy { channels[it].groupKey }.mapValues { (_, idx) ->
+            val spellings = idx.filterNot { moved[it] }.ifEmpty { idx }.map { channels[it].displayName }
             spellings.filter { n -> n.any { it.isLowerCase() } }.ifEmpty { spellings }
                 .groupingBy { it }.eachCount()
                 .maxByOrNull { it.value }!!.key
