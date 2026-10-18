@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.2 — 18 October 2026
+
+- **Player pickers keep focus.** With Quality, Audio, Subtitles or Aspect open, left/right no longer
+  jump out of the list onto the bar buttons.
+
 ## 0.15.1 — 18 October 2026
 
 - **Icon-only player bar.** The buttons are just icons now; the focused one shows its name above

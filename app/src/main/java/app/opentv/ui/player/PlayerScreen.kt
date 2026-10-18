@@ -1038,6 +1038,9 @@ private fun OptionPanel(
 
     Column(
         Modifier
+            // The options are a vertical list: left/right mean nothing here, and without this they
+            // let focus escape sideways onto the bar (right from Quality landed on Record).
+            .onPreviewKeyEvent { it.key == Key.DirectionLeft || it.key == Key.DirectionRight }
             .widthIn(max = 460.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black.copy(alpha = 0.92f))
