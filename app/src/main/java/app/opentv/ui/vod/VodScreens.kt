@@ -60,6 +60,7 @@ import app.opentv.data.model.Source
 import app.opentv.data.parser.displayTitle
 import app.opentv.ui.VodViewModel
 import coil.compose.AsyncImage
+import app.opentv.ui.theme.focusLift
 
 /**
  * Movies: a modern, row-based home — Continue Watching, Recommended, Recently added and a row per
@@ -366,7 +367,7 @@ internal fun PosterCard(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(4.dp),
     ) {
         Box(
@@ -475,7 +476,7 @@ private fun ResumeCard(item: VodViewModel.ResumeItem, onClick: () -> Unit) {
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(4.dp),
     ) {
         Box(
@@ -598,9 +599,10 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
         maxLines = 1,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(20.dp))
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
@@ -618,13 +620,14 @@ private fun SearchAffordance(onOpenSearch: () -> Unit) {
     Row(
         Modifier
             .padding(horizontal = 16.dp, vertical = 12.dp)
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(
                 if (focused) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onOpenSearch)
+            .clickable(interactionSource = null, indication = null, onClick = onOpenSearch)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

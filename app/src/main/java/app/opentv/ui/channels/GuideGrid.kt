@@ -61,6 +61,7 @@ import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import app.opentv.ui.theme.focusLift
 
 /**
  * The programme guide: channels down the left, a scrolling time-line to the right, with
@@ -175,6 +176,7 @@ private fun ChannelListRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isSelected) MaterialTheme.colorScheme.primaryContainer
@@ -192,7 +194,7 @@ private fun ChannelListRow(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(onClick = onSelect)
+            .clickable(interactionSource = null, indication = null, onClick = onSelect)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -332,6 +334,7 @@ private fun GuideRow(
             Modifier
                 .width(CHANNEL_COLUMN)
                 .fillMaxSize()
+                .focusLift(focused)
                 .clip(RoundedCornerShape(8.dp))
                 .background(
                     if (isSelected) MaterialTheme.colorScheme.primaryContainer
@@ -353,7 +356,7 @@ private fun GuideRow(
                     focused = it.isFocused
                     if (it.isFocused) onFocus()
                 }
-                .clickable(onClick = onSelect)
+                .clickable(interactionSource = null, indication = null, onClick = onSelect)
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -474,6 +477,7 @@ private fun ProgrammeBlock(title: String, width: Dp, isNow: Boolean, progress: F
             .width(width)
             .fillMaxSize()
             .padding(end = 3.dp)
+            .focusLift(focused)
             .clip(RoundedCornerShape(6.dp))
             .background(
                 when {
@@ -491,7 +495,7 @@ private fun ProgrammeBlock(title: String, width: Dp, isNow: Boolean, progress: F
             )
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
     ) {
         Text(
             title,

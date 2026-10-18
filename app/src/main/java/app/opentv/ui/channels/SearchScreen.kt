@@ -59,6 +59,7 @@ import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import app.opentv.ui.theme.focusLift
 
 /**
  * Channel search with an on-screen keyboard.
@@ -177,13 +178,14 @@ private fun VodResultRow(name: String, posterUrl: String?, subtitle: String?, on
         Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
             .then(
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                 else Modifier,
             )
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -209,13 +211,14 @@ private fun SearchResultRow(row: ChannelsViewModel.Row, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
             .then(
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                 else Modifier,
             )
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

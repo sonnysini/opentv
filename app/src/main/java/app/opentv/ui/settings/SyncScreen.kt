@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
 import app.opentv.sync.SyncServer
 import app.opentv.ui.SyncViewModel
+import app.opentv.ui.theme.focusLift
 
 /**
  * Local watch-history sync between two OpenTV devices on the same wifi. No servers of ours: one
@@ -265,9 +266,10 @@ private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
         color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
@@ -297,13 +299,14 @@ private fun NumKey(label: String, onClick: () -> Unit) {
         Modifier
             .size(54.dp)
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .then(
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier,
             )
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = fg)

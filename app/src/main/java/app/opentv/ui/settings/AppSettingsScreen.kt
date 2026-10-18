@@ -199,7 +199,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clickable { showLanguagePicker = true }
-                    .padding(vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(currentName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -499,7 +499,7 @@ private fun SleepOption(label: String, selected: Boolean, onSelect: () -> Unit) 
         Modifier
             .fillMaxWidth()
             .selectable(selected = selected, onClick = onSelect)
-            .padding(vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onSelect)
@@ -532,7 +532,7 @@ private fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit) 
         Modifier
             .fillMaxWidth()
             .selectable(selected = selected, onClick = onSelect)
-            .padding(vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onSelect)
@@ -551,7 +551,8 @@ private fun ToggleRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable { onToggle(!checked) },
+            .clickable { onToggle(!checked) }
+            .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).widthIn(max = 640.dp)) {
@@ -588,7 +589,8 @@ private fun ContentToggleRow(
             Modifier
                 .weight(1f)
                 .widthIn(max = 640.dp)
-                .clickable { onToggle(!checked) },
+                .clickable { onToggle(!checked) }
+                .padding(8.dp),
         ) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(

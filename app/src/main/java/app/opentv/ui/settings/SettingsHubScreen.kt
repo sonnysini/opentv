@@ -51,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.opentv.R
+import app.opentv.ui.theme.focusLift
 
 /**
  * The one settings entry point. Every other settings surface is reached from here, so there is
@@ -124,6 +125,7 @@ private fun HubRow(entry: HubEntry) {
         Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(14.dp))
             .background(
                 if (focused) MaterialTheme.colorScheme.primaryContainer
@@ -133,7 +135,7 @@ private fun HubRow(entry: HubEntry) {
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
                 else Modifier,
             )
-            .clickable(onClick = entry.onClick)
+            .clickable(interactionSource = null, indication = null, onClick = entry.onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -172,9 +174,10 @@ internal fun HubTextButton(label: String, onClick: () -> Unit) {
         color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
     )
 }

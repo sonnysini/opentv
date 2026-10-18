@@ -66,6 +66,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import app.opentv.ui.theme.focusLift
 
 /**
  * Live TV as one full-screen list, TiviMate-style: no preview, no rail, no menu — just the channels
@@ -296,6 +297,7 @@ private fun CategoryEntry(label: String, selected: Boolean, modifier: Modifier, 
         modifier
             .leftReveals({ focused }, onLeft)
             .fillMaxWidth()
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(
                 when {
@@ -305,7 +307,7 @@ private fun CategoryEntry(label: String, selected: Boolean, modifier: Modifier, 
                 },
             )
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -340,6 +342,7 @@ private fun FullscreenChannelRow(
         modifier
             .leftReveals({ focused }, onLeft)
             .fillMaxWidth()
+            .focusLift(focused)
             .clip(shape)
             .background(if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
             .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
@@ -347,7 +350,7 @@ private fun FullscreenChannelRow(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(onClick = onPlay)
+            .clickable(interactionSource = null, indication = null, onClick = onPlay)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

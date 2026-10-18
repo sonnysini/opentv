@@ -72,6 +72,7 @@ import app.opentv.ui.channels.HomeScreen
 import app.opentv.ui.recordings.RecordingsScreen
 import app.opentv.ui.vod.MoviesScreen
 import app.opentv.ui.vod.SeriesScreen
+import app.opentv.ui.theme.focusLift
 
 /**
  * The shell: a slim navigation rail down the left over a content area. The rail sits collapsed as
@@ -383,10 +384,11 @@ private fun RailItem(
         modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

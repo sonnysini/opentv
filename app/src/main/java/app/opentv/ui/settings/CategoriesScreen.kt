@@ -43,6 +43,7 @@ import app.opentv.R
 import app.opentv.data.model.StreamKind
 import app.opentv.ui.CategoriesViewModel
 import app.opentv.ui.channels.OnScreenKeyboard
+import app.opentv.ui.theme.focusLift
 
 /**
  * Switch whole provider categories off. A switched-off category is never downloaded — its
@@ -198,6 +199,7 @@ private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
         },
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(shape)
             .background(
                 when {
@@ -206,7 +208,7 @@ private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
                     else -> MaterialTheme.colorScheme.surfaceVariant
                 },
             )
-            .toggleable(value = selected, role = Role.Tab, onValueChange = { onClick() })
+            .toggleable(interactionSource = null, indication = null, value = selected, role = Role.Tab, onValueChange = { onClick() })
             .padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
@@ -235,13 +237,14 @@ private fun SwitchRow(
         Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(shape)
             .background(
                 if (focused) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
             .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle)
+            .toggleable(interactionSource = null, indication = null, value = checked, role = Role.Switch, onValueChange = onToggle)
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
