@@ -270,6 +270,9 @@ object ChannelNameNormalizer {
         "mediasetitalia2" to "italia2",
         "bike" to "bikechannel",
         "padrepio" to "padrepiotv",
+        "historychannel" to "history",
+        "skyseries" to "skyserie",
+        "skyseries1" to "skyserie1",
     )
 
     private val CAMEL_BOUNDARY = Regex("""([a-z])([A-Z])""")
