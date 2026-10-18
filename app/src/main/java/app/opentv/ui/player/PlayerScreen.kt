@@ -13,7 +13,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -80,6 +79,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -199,6 +200,8 @@ fun PlayerScreen(
     var resizeMode by remember { mutableIntStateOf(settings.playerResizeMode.value) }
 
     var controlsVisible by remember { mutableStateOf(true) }
+    // Set on a Back key-down that will close a layer, so its key-up does the closing.
+    var backArmed by remember { mutableStateOf(false) }
     // What's on the current channel right now and next, from the guide. Null when it has no guide.
     var onAir by remember { mutableStateOf<OnAir?>(null) }
     var clock by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -480,11 +483,29 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
+                // Back closes one layer per press. Handled here, before the focused button sees it:
+                // otherwise Compose spends the first press just clearing the button's focus and the
+                // bar needs a second Back. From immersive it falls through to the BackHandler.
+                if (event.key == Key.Back || event.key == Key.Escape) {
+                    val layerUp = channelListVisible || panel != Panel.NONE || controlsVisible
+                    return@onPreviewKeyEvent when (event.type) {
+                        KeyEventType.KeyDown -> { backArmed = layerUp; layerUp }
+                        KeyEventType.KeyUp -> {
+                            if (!backArmed) return@onPreviewKeyEvent false
+                            backArmed = false
+                            when {
+                                channelListVisible -> channelListVisible = false
+                                panel != Panel.NONE -> { panel = Panel.NONE; interaction++ }
+                                else -> controlsVisible = false
+                            }
+                            true
+                        }
+                        else -> layerUp
+                    }
+                }
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val digit = keyToDigit(event.key)
                 when {
-                    // Never swallow Back/Escape — they must reach the back handler.
-                    event.key == Key.Back || event.key == Key.Escape -> false
                     // Typing a channel number jumps to it, TiviMate-style.
                     digit != null -> {
                         numberEntry = (numberEntry + digit).take(4)
@@ -718,12 +739,10 @@ fun PlayerScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                // Scrolls sideways when the chips don't all fit (seek + quality + record on a
-                // smaller dp width), instead of squeezing the last one into a wrapped label.
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                // Icon-only buttons; the focused one shows its name above it (BarChip), so the
+                // spacer above leaves room for that label.
+                Spacer(Modifier.height(20.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (controller.isSeekable) {
                         BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
                             controller.seekBackward(); interaction++
@@ -747,25 +766,28 @@ fun PlayerScreen(
                         }
                     }
 
-                    Spacer(Modifier.width(20.dp))
-                    BarChip(Icons.Filled.Subtitles, stringResource(R.string.player_subtitles), panel == Panel.SUBTITLES) {
-                        panel = if (panel == Panel.SUBTITLES) Panel.NONE else Panel.SUBTITLES; interaction++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    BarChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), panel == Panel.AUDIO) {
-                        panel = if (panel == Panel.AUDIO) Panel.NONE else Panel.AUDIO; interaction++
-                    }
+                    // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
+                    Spacer(Modifier.width(28.dp))
                     if (variants.size > 1) {
-                        Spacer(Modifier.width(10.dp))
                         BarChip(Icons.Filled.HighQuality, stringResource(R.string.player_quality), panel == Panel.QUALITY) {
                             panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
                         }
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    BarChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), panel == Panel.AUDIO) {
+                        panel = if (panel == Panel.AUDIO) Panel.NONE else Panel.AUDIO; interaction++
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    BarChip(Icons.Filled.Subtitles, stringResource(R.string.player_subtitles), panel == Panel.SUBTITLES) {
+                        panel = if (panel == Panel.SUBTITLES) Panel.NONE else Panel.SUBTITLES; interaction++
                     }
                     Spacer(Modifier.width(10.dp))
                     BarChip(Icons.Filled.AspectRatio, stringResource(R.string.player_aspect), panel == Panel.ASPECT) {
                         panel = if (panel == Panel.ASPECT) Panel.NONE else Panel.ASPECT; interaction++
                     }
-                    Spacer(Modifier.width(10.dp))
+
+                    // Record sits apart so it isn't hit by accident.
+                    Spacer(Modifier.width(28.dp))
                     val recordingThis = activeRecordings.any { it.channelId == currentId }
                     BarChip(
                         icon = Icons.Filled.FiberManualRecord,
@@ -1149,24 +1171,38 @@ private fun BarChip(
     }
     val content = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
 
-    Row(
-        modifier = Modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { focused = it.isFocused }
-            .focusLift(focused)
-            .clip(RoundedCornerShape(12.dp))
-            .background(container)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                else Modifier,
+    Box(contentAlignment = Alignment.TopCenter) {
+        Box(
+            modifier = Modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onFocusChanged { focused = it.isFocused }
+                .focusLift(focused)
+                .clip(RoundedCornerShape(12.dp))
+                .background(container)
+                .then(
+                    if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                    else Modifier,
+                )
+                .clickable(interactionSource = null, indication = null, onClick = onClick)
+                .padding(12.dp),
+        ) {
+            Icon(icon, contentDescription = label, tint = if (focused) content else (iconTint ?: content))
+        }
+        // The name floats above the focused button without taking space, so the row never shifts.
+        if (focused) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.layout { measurable, constraints ->
+                    val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+                    val gap = 8.dp.roundToPx()
+                    layout(0, 0) { p.place(-p.width / 2, -p.height - gap) }
+                },
             )
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = label, tint = if (focused) content else (iconTint ?: content))
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = content, maxLines = 1, softWrap = false)
+        }
     }
 }
 

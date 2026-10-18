@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.1 — 18 October 2026
+
+- **Icon-only player bar.** The buttons are just icons now; the focused one shows its name above
+  it. New order: rewind · pause · forward, then quality, audio, subtitles, aspect, and record set
+  apart on the right.
+- **One Back hides the bar.** The first press used to only clear the button's focus; now each Back
+  closes one layer (channel list, picker, bar) and leaves the player only when nothing is on screen.
+
 ## 0.15.0 — 18 October 2026
 
 - **OwnTV-style focus.** Plain rows (settings, options, the language list) show a teal ring and a
