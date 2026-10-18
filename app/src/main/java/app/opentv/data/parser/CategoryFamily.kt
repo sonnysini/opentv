@@ -71,10 +71,39 @@ object CategoryFamily {
         return Family(if (base.isEmpty()) "" else "$country|$base", source, working.trim())
     }
 
+    private val PAREN_TAG = Regex("""\(\s*([A-Za-z][A-Za-z+\-]{1,11})\s*\)""")
+
+    /** Bracketed words that describe a group's content or timing, never its source. */
+    private val NOT_SOURCES = setOf("LIVE", "EVENT", "EVENTS", "BAR", "BACKUP", "TV", "HD", "ITA", "IT")
+
+    /**
+     * Source tags this provider uses, learned from its own category names: a bracketed word that
+     * follows two or more different groups (`Sky Sport (Hermes)`, `Bambini (Hermes)`) is a
+     * restream source, not a topic. Returned uppercase, merged with the built-in list, so a
+     * provider that invents `(Zeus)` tomorrow gets `Sky Sport F1 Zeus` folded too — no update.
+     */
+    fun learnSourceTags(categoryNames: Collection<String>): Set<String> {
+        val stems = HashMap<String, MutableSet<String>>()
+        for (name in categoryNames) {
+            val folded = ChannelNameNormalizer.foldSuperscripts(name)
+            for (m in PAREN_TAG.findAll(folded)) {
+                val tag = m.groupValues[1].uppercase()
+                val stem = ChannelNameNormalizer.groupKeyOf(folded.removeRange(m.range))
+                if (stem.isNotEmpty()) stems.getOrPut(tag) { HashSet() } += stem
+            }
+        }
+        val learned = stems.filter { (tag, s) ->
+            s.size >= 2 && tag !in NOT_SOURCES &&
+                ChannelNameNormalizer.qualityRankOfToken(tag) == null &&
+                !ChannelNameNormalizer.isStreamMarker(tag)
+        }.keys
+        return ChannelNameNormalizer.BUILTIN_SOURCE_TAGS + learned
+    }
+
     /** How a source reads next to a quality: `FHD · Hermes`. "RAW / Power" reads as "Power" so the
      * RAW quality preference doesn't mistake a whole feed for raw streams; "Only Event" says
      * nothing about the source and yields null so the next tag can speak. */
-    private fun sourceLabel(tag: String): String? {
+    internal fun sourceLabel(tag: String): String? {
         val t = tag.trim().lowercase()
         return when {
             t == "only event" -> null

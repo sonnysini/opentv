@@ -964,8 +964,9 @@ class CatalogRepository(
         channels: List<Channel>,
         categoryNames: Map<String, String>,
     ): List<Channel> {
+        val sourceTags = CategoryFamily.learnSourceTags(categoryNames.values)
         val stamped = channels.map { channel ->
-            val n = ChannelNameNormalizer.normalize(channel.name)
+            val n = ChannelNameNormalizer.normalize(channel.name, sourceTags)
             var rank = n.qualityRank
             var label = n.qualityLabel
             if (label.isEmpty() || rank == 0) {
@@ -979,6 +980,10 @@ class CatalogRepository(
                     if (label.isEmpty()) label = c.qualityLabel
                     if (rank == 0) rank = c.qualityRank
                 }
+            }
+            // A source written into the name ('… FHD STELLINA') reads like a category's: 'FHD · Stellina'.
+            if (n.source != null && !label.contains(n.source, ignoreCase = true)) {
+                label = listOf(label, n.source).filter { it.isNotEmpty() }.joinToString(" · ")
             }
             channel.copy(
                 displayName = n.baseName,
@@ -1015,12 +1020,16 @@ class CatalogRepository(
         }
     }
 
-    /** Decorative list headings: starts AND ends with a run of banner characters. */
+    /**
+     * Decorative list headings: starts AND ends with a run of banner characters (`#### UK ####`,
+     * `--Sky Sport (Hermes)--`, `== DAZN AMICHEVOLI ==`), or is wrapped in a single ornament
+     * (`◈ DAZN KALI ◈`).
+     */
     private fun isSeparatorRow(rawName: String): Boolean {
         val t = rawName.trim()
-        return t.length >= 6 &&
-            t.take(3).all { it in SEPARATOR_CHARS } &&
-            t.takeLast(3).all { it in SEPARATOR_CHARS }
+        if (t.length < 6) return false
+        if (t.first() in ORNAMENT_CHARS && t.last() in ORNAMENT_CHARS) return true
+        return t.take(2).all { it in SEPARATOR_CHARS } && t.takeLast(2).all { it in SEPARATOR_CHARS }
     }
 
     /**
@@ -1179,13 +1188,14 @@ class CatalogRepository(
 
         /** Download cap for VOD syncs nobody is waiting on (~6 Mbit/s): leaves room for live HD. */
         const val VOD_BACKGROUND_BYTES_PER_SECOND = 768L * 1024
-        val SEPARATOR_CHARS = setOf('#', '*', '=', '~', '-', '_', '•', '█', '▓', '|')
+        val SEPARATOR_CHARS = setOf('#', '*', '=', '~', '-', '_', '•', '█', '▓', '|', '─', '━', '═', '▬')
+        val ORNAMENT_CHARS = setOf('◈', '◆', '◇', '►', '◄', '▶', '◀', '★', '☆', '✦', '❖')
 
         /**
          * Bump this whenever the normaliser changes in a way that should re-process
          * already-imported channels. The app compares it against a stored value on launch
          * and runs [renormalizeAll] once when it moves.
          */
-        const val NORMALIZER_VERSION = 4
+        const val NORMALIZER_VERSION = 5
     }
 }
