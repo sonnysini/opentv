@@ -164,6 +164,9 @@
 
     <!-- ============================ Display & playback settings ============================ -->
     <string name="settings_appearance">Appearance</string>
+    <string name="settings_style_title">Style</string>
+    <string name="settings_style_owntv">OwnTV — teal, Plus Jakarta Sans</string>
+    <string name="settings_style_classic">Classic — the original OpenTV blue</string>
     <string name="settings_theme_system">Follow system</string>
     <string name="settings_theme_dark">Dark</string>
     <string name="settings_theme_light">Light</string>

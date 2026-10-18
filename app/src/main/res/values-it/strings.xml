@@ -145,6 +145,9 @@
     <string name="settings_about_title">Informazioni</string>
     <string name="settings_about_subtitle">Versione, aggiornamenti, licenza e link</string>
     <string name="settings_appearance">Aspetto</string>
+    <string name="settings_style_title">Stile</string>
+    <string name="settings_style_owntv">OwnTV — verde acqua, Plus Jakarta Sans</string>
+    <string name="settings_style_classic">Classico — il blu originale di OpenTV</string>
     <string name="settings_theme_system">Segui sistema</string>
     <string name="settings_theme_dark">Scuro</string>
     <string name="settings_theme_light">Chiaro</string>
