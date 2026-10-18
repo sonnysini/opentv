@@ -271,6 +271,12 @@ private fun FocusedList(
         repeat(40) {
             delay(75)
             if (listHasFocus) return@LaunchedEffect
+            // The row may have been scrolled out of the composed window (rows arriving after the
+            // first frame); bring it back so its requester is attached before asking.
+            if (count > 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == focusedIndex }) {
+                focusedIndex = focusedIndex.coerceIn(0, count - 1)
+                listState.scrollToItem((focusedIndex - 3).coerceAtLeast(0))
+            }
             runCatching { focusRequester.requestFocus() }
         }
     }
@@ -278,7 +284,14 @@ private fun FocusedList(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .focusProperties { enter = { focusRequester } }
+            // Only redirect into the remembered row while it is composed: an unattached requester
+            // throws ("FocusRequester is not initialized") and took the app down on a key press.
+            .focusProperties {
+                enter = {
+                    if (listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
+                    else FocusRequester.Default
+                }
+            }
             .onFocusChanged { listHasFocus = it.hasFocus },
         contentPadding = PaddingValues(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
