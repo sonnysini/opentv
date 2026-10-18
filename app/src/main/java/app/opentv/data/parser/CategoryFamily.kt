@@ -106,7 +106,7 @@ object CategoryFamily {
     internal fun sourceLabel(tag: String): String? {
         val t = tag.trim().lowercase()
         return when {
-            t == "only event" -> null
+            t == "only event" || t == "live" -> null
             t.contains('/') -> "Power"
             t == "skynet" || t == "skynet+" -> "SkyNet"
             t == "hi-def" -> "HI-DEF"
