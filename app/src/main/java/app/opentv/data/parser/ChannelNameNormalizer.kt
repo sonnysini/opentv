@@ -241,7 +241,11 @@ object ChannelNameNormalizer {
     fun keyAliases(keys: Set<String>): Map<String, String> {
         val out = HashMap<String, String>()
         for (key in keys) {
-            KEY_ALIASES[key]?.let { out[key] = it; continue }
+            val alias = KEY_ALIASES[key]
+            if (alias != null) {
+                out[key] = alias
+                continue
+            }
             val bare = BRAND_PREFIXES.firstNotNullOfOrNull { p ->
                 key.removePrefix(p).takeIf { it != key && it.length >= 2 && !it.startsWith("cinema") }
             } ?: continue
