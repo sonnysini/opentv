@@ -61,6 +61,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
     val themeMode by settings.themeMode.collectAsState()
+    val uiScale by settings.uiScalePercent.collectAsState()
     val channelLayout by settings.channelLayout.collectAsState()
     val previewVideo by settings.guidePreviewVideo.collectAsState()
     val previewSound by settings.guidePreviewSound.collectAsState()
@@ -110,6 +111,28 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(R.string.settings_theme_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings_ui_scale, uiScale),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(
+                    onClick = { settings.setUiScalePercent(uiScale - AppSettings.UI_SCALE_STEP) },
+                    enabled = uiScale > AppSettings.MIN_UI_SCALE,
+                ) { Text("−") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { settings.setUiScalePercent(uiScale + AppSettings.UI_SCALE_STEP) },
+                    enabled = uiScale < AppSettings.MAX_UI_SCALE,
+                ) { Text("+") }
+            }
+            Text(
+                stringResource(R.string.settings_ui_scale_note),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

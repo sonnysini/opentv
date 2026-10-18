@@ -463,6 +463,8 @@
     <string name="settings_quality_best">Migliore disponibile</string>
     <string name="settings_quality_fallback_title">Fallback automatico qualità</string>
     <string name="settings_quality_fallback_subtitle">Se un canale va in errore o non mostra l\'immagine in tempo, passa alla qualità inferiore successiva.</string>
+    <string name="settings_ui_scale">Dimensione interfaccia: %1$d%%</string>
+    <string name="settings_ui_scale_note">Riduci per vedere più canali sullo schermo, aumenta per leggere da lontano.</string>
     <string name="settings_quality_timeout">Attesa prima di cambiare: %1$s s</string>
     <string name="player_quality_fallback">%1$s non disponibile → %2$s</string>
 </resources>

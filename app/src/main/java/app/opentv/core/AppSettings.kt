@@ -271,6 +271,18 @@ class AppSettings private constructor(context: Context) {
         _qualityFallbackMillis.value = ms
     }
 
+    /** Whole-UI zoom in percent (density multiplier), so a TV viewed from afar can fit more rows. */
+    private val _uiScalePercent = MutableStateFlow(
+        prefs.getInt(KEY_UI_SCALE, 100).coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
+    )
+    val uiScalePercent: StateFlow<Int> = _uiScalePercent.asStateFlow()
+
+    fun setUiScalePercent(percent: Int) {
+        val p = percent.coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
+        prefs.edit().putInt(KEY_UI_SCALE, p).apply()
+        _uiScalePercent.value = p
+    }
+
     // ---- Recording behaviour -----------------------------------------------------------------
 
     /** Minutes to start a scheduled recording early, so a late start isn't clipped. */
@@ -594,6 +606,11 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK = "quality_fallback"
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
+        private const val KEY_UI_SCALE = "ui_scale_percent"
+
+        const val MIN_UI_SCALE = 60
+        const val MAX_UI_SCALE = 130
+        const val UI_SCALE_STEP = 5
 
         const val MIN_FALLBACK_MILLIS = 500
         const val MAX_FALLBACK_MILLIS = 10_000
