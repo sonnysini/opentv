@@ -467,4 +467,6 @@
     <string name="settings_ui_scale_note">Riduci per vedere più canali sullo schermo, aumenta per leggere da lontano.</string>
     <string name="settings_quality_timeout">Attesa prima di cambiare: %1$s s</string>
     <string name="player_quality_fallback">%1$s non disponibile → %2$s</string>
+    <string name="player_channel_unavailable">Canale non disponibile</string>
+    <string name="player_channel_unavailable_hint">OK per riprovare · ↑/↓ per cambiare canale</string>
 </resources>

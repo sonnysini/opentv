@@ -991,7 +991,10 @@ class CatalogRepository(
             )
         }
 
-        return withTidiestNames(stamped)
+        val aliases = ChannelNameNormalizer.keyAliases(stamped.mapTo(HashSet()) { it.groupKey })
+        val folded = if (aliases.isEmpty()) stamped
+        else stamped.map { c -> aliases[c.groupKey]?.let { c.copy(groupKey = it) } ?: c }
+        return withTidiestNames(folded)
     }
 
     /**
@@ -1183,6 +1186,6 @@ class CatalogRepository(
          * already-imported channels. The app compares it against a stored value on launch
          * and runs [renormalizeAll] once when it moves.
          */
-        const val NORMALIZER_VERSION = 3
+        const val NORMALIZER_VERSION = 4
     }
 }

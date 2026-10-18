@@ -188,6 +188,8 @@ fun PlayerScreen(
     var started by remember { mutableStateOf(false) }
     var attempt by remember { mutableIntStateOf(0) }
     var fallbackNotice by remember { mutableStateOf<String?>(null) }
+    // Every variant of the channel failed or timed out: say so instead of spinning forever.
+    var unavailable by remember { mutableStateOf(false) }
     // The channel we were on before this one — powers the "Last channel" recall in the list.
     var previousId by remember { mutableStateOf<Long?>(null) }
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
@@ -242,6 +244,7 @@ fun PlayerScreen(
         paused = false
         tried = tried + channel.id
         started = false
+        unavailable = false
         attempt++
         settings.lastChannelId = channel.id
         scope.launch {
@@ -275,9 +278,14 @@ fun PlayerScreen(
 
     /** The current variant didn't start: move on to the next untried quality, if there is one. */
     fun fallBack() {
-        if (!settings.qualityFallback.value || started) return
-        val failed = tryOrder.firstOrNull { it.id == currentId } ?: return
-        val next = tryOrder.firstOrNull { it.id !in tried } ?: return
+        if (started || unavailable) return
+        val next = if (settings.qualityFallback.value) tryOrder.firstOrNull { it.id !in tried } else null
+        if (next == null) {
+            unavailable = true
+            controller.stop()
+            return
+        }
+        val failed = tryOrder.firstOrNull { it.id == currentId } ?: variants.firstOrNull { it.id == currentId } ?: next
         fallbackNotice = context.getString(
             R.string.player_quality_fallback,
             failed.qualityLabel.ifBlank { failed.shownName },
@@ -345,9 +353,10 @@ fun PlayerScreen(
         }
     }
 
-    // No picture within the configured wait (a stream stuck "loading" never errors): next quality.
+    // No picture within the configured wait (a stream stuck "loading" never errors): next quality,
+    // or "channel not available" when none is left.
     LaunchedEffect(attempt) {
-        if (attempt == 0 || !settings.qualityFallback.value) return@LaunchedEffect
+        if (attempt == 0) return@LaunchedEffect
         delay(settings.qualityFallbackMillis.value.toLong())
         fallBack()
     }
@@ -502,6 +511,11 @@ fun PlayerScreen(
                     // channel banner, then it auto-hides.
                     event.key == Key.DirectionUp || event.key == Key.ChannelUp -> { zapBy(-1); reveal(); true }
                     event.key == Key.DirectionDown || event.key == Key.ChannelDown -> { zapBy(1); reveal(); true }
+                    // OK on "channel not available" tries the whole chain again.
+                    unavailable && (event.key == Key.DirectionCenter || event.key == Key.Enter) -> {
+                        listedChannel?.let { scope.launch { startChannel(it) } }
+                        true
+                    }
                     // With the bar up, left/right drive its buttons; let them through.
                     controlsVisible -> {
                         interaction++
@@ -567,7 +581,37 @@ fun PlayerScreen(
             }
         }
 
-        when (val current = state) {
+        if (unavailable) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(48.dp),
+                ) {
+                    Text(
+                        listedChannel?.shownName.orEmpty(),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(R.string.player_channel_unavailable),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.player_channel_unavailable_hint),
+                        color = Color.White.copy(alpha = 0.75f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        } else when (val current = state) {
             is PlayerController.State.Buffering -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

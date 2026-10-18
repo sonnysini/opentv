@@ -142,4 +142,28 @@ class ChannelNameNormalizerTest {
 
         assertThat(keys.distinct()).hasSize(1)
     }
+
+    @Test
+    fun `a trailing RS is a source label, not part of the name`() {
+        val n = ChannelNameNormalizer.normalize("Sky Uno HD RS")
+
+        assertThat(n.groupKey).isEqualTo("skyuno")
+        assertThat(n.qualityLabel).isEqualTo("HD RS")
+    }
+
+    @Test
+    fun `sky and discovery prefixes fold only when the bare channel exists`() {
+        val aliases = ChannelNameNormalizer.keyAliases(
+            setOf("skymtv", "mtv", "discoverygiallo", "giallo", "skyuno", "skycinemafamily", "cinemafamily"),
+        )
+
+        assertThat(aliases).containsExactly("skymtv", "mtv", "discoverygiallo", "giallo")
+    }
+
+    @Test
+    fun `provider typos fold into the real channel`() {
+        val aliases = ChannelNameNormalizer.keyAliases(setOf("nicklodeon", "nickelodeon", "skynickelodeon"))
+
+        assertThat(aliases).containsExactly("nicklodeon", "nickelodeon", "skynickelodeon", "nickelodeon")
+    }
 }

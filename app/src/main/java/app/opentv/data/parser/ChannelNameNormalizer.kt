@@ -163,6 +163,8 @@ object ChannelNameNormalizer {
 
             val rank = QUALITY_RANKS[upper]
             when {
+                // Trailing `RS` marks one restream source (`Sky Uno HD RS`): a label, not part of the name.
+                upper == "RS" && i == tokens.size && keptTokens.isNotEmpty() -> labelParts += upper
                 rank != null -> {
                     if (rank > bestRank) bestRank = rank
                     labelParts += upper
@@ -227,6 +229,44 @@ object ChannelNameNormalizer {
             .filter { it.isNotEmpty() }
             .joinToString("") { word -> NUMBER_WORDS[word] ?: word }
     }
+
+    /**
+     * Folds the group keys of one list so the same channel under two names lands in one row.
+     *
+     * Italian resellers ship `Sky MTV` next to `MTV`, `Discovery Giallo` next to `Giallo`, and
+     * plain typos (`Nicklodeon`). Returns old key → new key for the keys that change. A `Sky`/
+     * `Discovery` prefix is dropped only when the bare channel exists in the same list, so `Sky Uno`
+     * stays `Sky Uno`. `Sky Cinema X` is left alone: `Cinema X` is often a different 24/7 loop.
+     */
+    fun keyAliases(keys: Set<String>): Map<String, String> {
+        val out = HashMap<String, String>()
+        for (key in keys) {
+            KEY_ALIASES[key]?.let { out[key] = it; continue }
+            val bare = BRAND_PREFIXES.firstNotNullOfOrNull { p ->
+                key.removePrefix(p).takeIf { it != key && it.length >= 2 && !it.startsWith("cinema") }
+            } ?: continue
+            if (bare in keys) out[key] = KEY_ALIASES[bare] ?: bare
+        }
+        return out
+    }
+
+    private val BRAND_PREFIXES = listOf("sky", "discovery")
+
+    /** Provider typos and alternative names of the same channel, by group key. */
+    private val KEY_ALIASES = mapOf(
+        "nicklodeon" to "nickelodeon",
+        "italianfisching" to "italianfishingtv",
+        "italianfischingtv" to "italianfishingtv",
+        "equtv" to "eqtv",
+        "slydocumentari1" to "skydocumentaries1",
+        "skydocumentaris1" to "skydocumentaries1",
+        "skycicrime1" to "skycrime1",
+        "mediaset20" to "20mediaset",
+        "27twentyseven" to "27mediaset",
+        "mediasetitalia2" to "italia2",
+        "bike" to "bikechannel",
+        "padrepio" to "padrepiotv",
+    )
 
     private val CAMEL_BOUNDARY = Regex("""([a-z])([A-Z])""")
     private val NON_ALNUM = Regex("""[^a-zA-Z0-9]+""")
