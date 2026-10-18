@@ -1020,7 +1020,7 @@ class CatalogRepository(
 
     /**
      * Rows that are probably one channel under two names, for Settings › Channel grouping to offer.
-     * Hidden channels and heading rows are left out; pairs already answered "Ignore" too.
+     * Hidden channels are left out; pairs already answered "Ignore" too.
      */
     suspend fun mergeSuggestions(): List<MergeSuggester.Suggestion> = withContext(Dispatchers.Default) {
         val groups = channelDao.allForMatching()
@@ -1031,9 +1031,10 @@ class CatalogRepository(
                     key = key,
                     name = chans.first().displayName,
                     channels = chans.size,
+                    // The provider's guide id or the user's own pick only: the name matcher's guesses
+                    // ('Disney Plus Film' → Discovery's guide) would suggest its own mistakes.
                     guideIds = chans.mapNotNullTo(HashSet()) { c ->
-                        (c.epgOverrideId ?: c.epgChannelId?.takeIf { it.isNotBlank() } ?: c.matchedEpgId)
-                            ?.takeIf { it.isNotBlank() }
+                        (c.epgOverrideId ?: c.epgChannelId)?.takeIf { it.isNotBlank() }
                     },
                 )
             }
