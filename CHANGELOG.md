@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15.3 — 18 October 2026
+
+- **Fewer duplicate channels.** Restream sources written into channel names (`[STEL]`, `[KALI]`,
+  `Kaly`, `SAT`, `STELLINA`, `HERMES`, `QUALITY`, `(Q)`, `Duplicate`…) are taken out of the name:
+  the copies fold into one row and the source shows in the Quality picker (`FHD · SAT`). Tags are
+  also learned from the provider's own category names, so new sources fold with no update.
+- **Timeshift channels kept apart.** `Discovery +2` no longer merges with `Discovery 2`, and the
+  name fixes (Sky prefix, typos) now apply to +1/+2/+3 channels too.
+- **Accents and typos.** `Südtirol` = `SudTirol`; Suspence/Suspance, Trasformers, Nick Junior,
+  HGVTV fold into the right channel; the MotoGP satellite feed joins Sky Sport MotoGP.
+- **Heading rows hidden.** `--Sky Sport (Hermes)--`, `== … ==`, `◈ DAZN KALI ◈` are no longer
+  listed as channels.
+- **"Plus" stays in the name** (Disney Plus, Boing Plus) instead of reading as a quality.
+
 ## 0.15.2 — 18 October 2026
 
 - **Player pickers keep focus.** With Quality, Audio, Subtitles or Aspect open, left/right no longer

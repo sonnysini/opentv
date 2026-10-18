@@ -73,4 +73,15 @@ class CategoryFamilyTest {
         assertThat(CategoryFamily.of("⚡ DAZN KALI").source).isEqualTo("KALI")
         assertThat(CategoryFamily.of("🇮🇹 Top Italia").source).isNull()
     }
+
+    @Test
+    fun `learns a source used across groups, not a one-off bracket`() {
+        val tags = CategoryFamily.learnSourceTags(
+            listOf("⚽ Sky Sport (Zeus)", "🧸 Bambini (Zeus)", "⚽ Sky Calcio (Only Event)", "🎬 Cinema (4K)", "📺 Serie (4K)", "🌍 Nfl (Pay-Per-View)"),
+        )
+        assertThat(tags).contains("ZEUS")
+        assertThat(tags).contains("STELLINA") // built-in
+        assertThat(tags).doesNotContain("4K")
+        assertThat(tags).doesNotContain("PAY-PER-VIEW")
+    }
 }

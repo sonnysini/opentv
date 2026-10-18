@@ -41,6 +41,8 @@ object ChannelNameNormalizer {
         val qualityLabel: String,
         /** Country hint from a stripped prefix (`UK`, `US`…), or null. */
         val region: String?,
+        /** Restream source taken out of the name (`SAT`, `Hermes`, `STEL`…), or null. */
+        val source: String? = null,
     )
 
     /** Quality/codec tokens, matched as whole words, case-insensitively. */
@@ -56,8 +58,33 @@ object ChannelNameNormalizer {
     private val EXTRA_TOKENS = setOf(
         "RAW", "HEVC", "H265", "H.265", "H264", "H.264", "AV1",
         "50FPS", "60FPS", "25FPS", "30FPS", "FPS",
-        "HDR", "DOLBY", "VISION", "PLUS",
+        "HDR", "DOLBY", "VISION",
     )
+
+    /**
+     * Restream sources resellers write INTO channel names: `[STEL] DAZN-LIGUE-WOMEN-1`,
+     * `Sky Sport F1 HD (HERMES)`, `SKY SPORT BUSINESS 1 FHD STELLINA`, `Kaly ComoTV 1`. Same
+     * channel, other feed — so they are stripped from the name and kept as [Normalized.source].
+     * The list grows per provider with tags learned from its category names (see
+     * [app.opentv.data.parser.CategoryFamily.learnSourceTags]).
+     */
+    val BUILTIN_SOURCE_TAGS = setOf(
+        "STEL", "KALI", "KALY", "DVS", "SAT", "STELLINA", "HERMES", "QUALITY",
+        "SKYNET", "SKYNET+", "STEL-DVS",
+    )
+
+    /** Tags that also lead a name without brackets (`Kaly ComoTV 1`). Short ones like SAT don't. */
+    private val LEADING_SOURCE_TAGS = setOf("STEL", "KALI", "KALY")
+
+    private val BRACKET_SOURCE = Regex("""^\s*\[\s*([A-Za-z][A-Za-z+\-]{1,11})\s*]\s*""")
+    private val PAREN_SOURCE = Regex("""\(\s*([A-Za-z][A-Za-z+\-]{1,11})\s*\)""")
+    /** `Sky Sport F1 FHD (Q)` / `(S)`: a single letter in brackets at the end names a feed. */
+    private val PAREN_LETTER = Regex("""\(\s*([A-Z])\s*\)\s*$""")
+    /** Bandwidth notes some lists append: `Sky Sport F1 4K RAW Richiede 30 Mbps`. */
+    private val BANDWIDTH_NOTE = Regex("""\b(?:richiede|requires?)\s*\d+\s*mbps\b""", RegexOption.IGNORE_CASE)
+    /** Timeshift: `+1`, `+ 1`, `+24`, also glued to the name (`Food Network+1`). */
+    private val TIMESHIFT = Regex("""\+\s*(\d{1,2})(?!\d)""")
+    private val STRONG_MARKERS = setOf("HDR", "DOLBY", "VISION")
 
     /**
      * Unicode modifier/superscript letters folded to ASCII before tokenising.
@@ -129,9 +156,41 @@ object ChannelNameNormalizer {
     /** Whether a single token is a non-resolution stream marker (`RAW`, `HEVC`, `60FPS`, `HDR`…). */
     fun isStreamMarker(token: String): Boolean = token.uppercase() in EXTRA_TOKENS
 
-    fun normalize(raw: String): Normalized {
+    fun normalize(raw: String, sourceTags: Set<String> = BUILTIN_SOURCE_TAGS): Normalized {
         // Fold superscript decorations (ᴴᴰ → HD) so the token pass can see them.
         var working = foldSuperscripts(raw.trim())
+        var source: String? = null
+        fun takeSource(tag: String) {
+            if (source == null) source = CategoryFamily.sourceLabel(tag)
+        }
+
+        working = BANDWIDTH_NOTE.replace(working, " ")
+        // Source tags before the country prefix: `[STEL]` would otherwise pass for a country.
+        BRACKET_SOURCE.find(working)?.let { m ->
+            if (m.groupValues[1].uppercase() in sourceTags) {
+                takeSource(m.groupValues[1])
+                working = working.removeRange(m.range)
+            }
+        }
+        working = PAREN_SOURCE.replace(working) { m ->
+            if (m.groupValues[1].uppercase() in sourceTags) {
+                takeSource(m.groupValues[1])
+                " "
+            } else {
+                m.value
+            }
+        }
+        PAREN_LETTER.find(working)?.let { m ->
+            takeSource(m.groupValues[1])
+            working = working.removeRange(m.range)
+        }
+        // Timeshift is part of the identity (`Rai 1 +1` is not `Rai 11`): pulled out here and
+        // put back as a `+N` suffix the key keeps, so aliases can work on the bare channel.
+        var timeshift: String? = null
+        TIMESHIFT.find(working)?.let { m ->
+            timeshift = m.groupValues[1].trimStart('0').ifEmpty { "0" }
+            working = working.removeRange(m.range)
+        }
 
         // Country prefix BEFORE decoration stripping: the brackets in `[UK]` are the
         // delimiter, and the decoration pass would eat them and lose the tag.
@@ -163,6 +222,10 @@ object ChannelNameNormalizer {
 
             val rank = QUALITY_RANKS[upper]
             when {
+                // `HDR PLUS` is a stream marker; `Disney Plus` / `Boing Plus` are channels.
+                upper == "PLUS" && labelParts.lastOrNull()?.uppercase() in STRONG_MARKERS -> labelParts += bare
+                // `Sky Sport 256 FHD Duplicate`: a second copy of the same feed.
+                upper == "DUPLICATE" && keptTokens.isNotEmpty() -> if (source == null) source = "Alt"
                 // Trailing `RS` marks one restream source (`Sky Uno HD RS`): a label, not part of the name.
                 upper == "RS" && i == tokens.size && keptTokens.isNotEmpty() -> labelParts += upper
                 rank != null -> {
@@ -176,15 +239,28 @@ object ChannelNameNormalizer {
 
         bestRank = withCodecBonus(bestRank, labelParts)
 
+        // Source tags at the edges of what's left: `… Sat`, `… STELLINA`, `Kaly ComoTV 1`.
+        repeat(2) {
+            val last = keptTokens.lastOrNull()?.uppercase()
+            if (keptTokens.size > 1 && last != null && last in sourceTags) {
+                takeSource(keptTokens.removeAt(keptTokens.lastIndex))
+            }
+        }
+        if (keptTokens.size > 1 && keptTokens.first().uppercase() in LEADING_SOURCE_TAGS) {
+            takeSource(keptTokens.removeAt(0))
+        }
+
         val base = MULTI_SPACE.replace(keptTokens.joinToString(" "), " ").trim()
         val key = groupKeyOf(base)
+        val shift = timeshift
 
         return Normalized(
-            baseName = base.ifEmpty { raw.trim() },
-            groupKey = key.ifEmpty { groupKeyOf(raw) },
+            baseName = (base.ifEmpty { raw.trim() }).let { if (shift != null && base.isNotEmpty()) "$it +$shift" else it },
+            groupKey = key.ifEmpty { groupKeyOf(raw) }.let { if (shift != null && key.isNotEmpty()) "$it+$shift" else it },
             qualityRank = bestRank,
             qualityLabel = labelParts.joinToString(" "),
             region = region,
+            source = source,
         )
     }
 
@@ -223,7 +299,9 @@ object ChannelNameNormalizer {
         // Split CamelCase first so `BbcOne` sees the same words as `BBC One`, then fold
         // number WORDS to digits — whole words only, never substrings, or `money` becomes
         // `m1y` on one side of a match and not the other.
-        val spaced = CAMEL_BOUNDARY.replace(name, "$1 $2")
+        // Accents fold to the bare letter (`Südtirol` = `SudTirol`) instead of vanishing.
+        val plain = COMBINING_MARKS.replace(java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD), "")
+        val spaced = CAMEL_BOUNDARY.replace(plain, "$1 $2")
         return spaced.lowercase()
             .split(NON_ALNUM)
             .filter { it.isNotEmpty() }
@@ -239,17 +317,17 @@ object ChannelNameNormalizer {
      * stays `Sky Uno`. `Sky Cinema X` is left alone: `Cinema X` is often a different 24/7 loop.
      */
     fun keyAliases(keys: Set<String>): Map<String, String> {
+        // Timeshift copies (`skycomedycentral+1`) follow their channel: aliases work on the
+        // part before `+`, and the bare-channel check looks at every channel, shifted or not.
+        val bases = keys.mapTo(HashSet()) { it.substringBefore('+') }
         val out = HashMap<String, String>()
         for (key in keys) {
-            val alias = KEY_ALIASES[key]
-            if (alias != null) {
-                out[key] = alias
-                continue
-            }
-            val bare = BRAND_PREFIXES.firstNotNullOfOrNull { p ->
-                key.removePrefix(p).takeIf { it != key && it.length >= 2 && !it.startsWith("cinema") }
-            } ?: continue
-            if (bare in keys) out[key] = KEY_ALIASES[bare] ?: bare
+            val base = key.substringBefore('+')
+            val shift = key.substring(base.length)
+            val alias = KEY_ALIASES[base] ?: BRAND_PREFIXES.firstNotNullOfOrNull { p ->
+                base.removePrefix(p).takeIf { it != base && it.length >= 2 && !it.startsWith("cinema") }
+            }?.takeIf { it in bases }?.let { KEY_ALIASES[it] ?: it }
+            if (alias != null && alias != base) out[key] = alias + shift
         }
         return out
     }
@@ -262,9 +340,9 @@ object ChannelNameNormalizer {
         "italianfisching" to "italianfishingtv",
         "italianfischingtv" to "italianfishingtv",
         "equtv" to "eqtv",
-        "slydocumentari1" to "skydocumentaries1",
-        "skydocumentaris1" to "skydocumentaries1",
-        "skycicrime1" to "skycrime1",
+        "slydocumentari" to "skydocumentaries",
+        "skydocumentaris" to "skydocumentaries",
+        "skycicrime" to "skycrime",
         "mediaset20" to "20mediaset",
         "27twentyseven" to "27mediaset",
         "mediasetitalia2" to "italia2",
@@ -272,9 +350,18 @@ object ChannelNameNormalizer {
         "padrepio" to "padrepiotv",
         "historychannel" to "history",
         "skyseries" to "skyserie",
-        "skyseries1" to "skyserie1",
+        "skycinemasuspence" to "skycinemasuspense",
+        "skycinemasuspance" to "skycinemasuspense",
+        "trasformerschannel" to "transformerschannel",
+        "nickjunior" to "nickjr",
+        "hgvtv" to "hgtv",
+        "motogpsatellite" to "skysportmotogp",
+        // `SKY CINEMA UNO 24 H265` is the +24 feed with the plus sign lost.
+        "skycinemauno24" to "skycinemauno+24",
+        "skycinemadue24" to "skycinemadue+24",
     )
 
+    private val COMBINING_MARKS = Regex("""\p{Mn}+""")
     private val CAMEL_BOUNDARY = Regex("""([a-z])([A-Z])""")
     private val NON_ALNUM = Regex("""[^a-zA-Z0-9]+""")
     private val NUMBER_WORDS = mapOf(

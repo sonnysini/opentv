@@ -166,4 +166,72 @@ class ChannelNameNormalizerTest {
 
         assertThat(aliases).containsExactly("nicklodeon", "nickelodeon", "skynickelodeon", "nickelodeon")
     }
+
+    private fun key(name: String) = ChannelNameNormalizer.normalize(name).groupKey
+
+    @Test
+    fun `source tags in channel names fold into the plain channel`() {
+        assertThat(key("[STEL] DAZN-LIGUE-WOMEN-1")).isEqualTo(key("[DVS] DAZN-LIGUE-WOMEN-1"))
+        assertThat(key("Sky Sport F1 FHD (Q)")).isEqualTo(key("Sky Sport F1 FHD"))
+        assertThat(key("Sky Sport F1 HD (HERMES)")).isEqualTo(key("Sky Sport F1 HD"))
+        assertThat(key("SKY SPORT BUSINESS 1 FHD STELLINA")).isEqualTo(key("SKY SPORT BUSINESS 1 sAT"))
+        assertThat(key("Sky Sport Moto Gp Sat FHD")).isEqualTo(key("Sky Sport Moto GP HD"))
+        assertThat(key("Kaly ComoTV 1")).isEqualTo(key("COMO TV 1"))
+        assertThat(key("Sky Sport 256 FHD Duplicate")).isEqualTo(key("Sky Sport 256 HD"))
+        assertThat(key("Sky Sport F1 4K RAW Richiede 30 Mbps")).isEqualTo(key("Sky Sport F1 HD"))
+    }
+
+    @Test
+    fun `the stripped source is reported, the quality untouched`() {
+        val n = ChannelNameNormalizer.normalize("SKY SPORT BUSINESS 1 FHD STELLINA")
+        assertThat(n.baseName).isEqualTo("SKY SPORT BUSINESS 1")
+        assertThat(n.qualityLabel).isEqualTo("FHD")
+        assertThat(n.source).isEqualTo("Stellina")
+        assertThat(ChannelNameNormalizer.normalize("Sky Sport F1 FHD (Q)").source).isEqualTo("Q")
+    }
+
+    @Test
+    fun `a source tag alone is still a name`() {
+        assertThat(ChannelNameNormalizer.normalize("SAT").baseName).isEqualTo("SAT")
+        assertThat(key("Moto GP Satellite 4K RAW")).isEqualTo("motogpsatellite")
+    }
+
+    @Test
+    fun `learned tags strip only when the provider uses them`() {
+        assertThat(key("Sky Sport F1 Zeus")).isEqualTo("skysportf1zeus")
+        val tags = ChannelNameNormalizer.BUILTIN_SOURCE_TAGS + "ZEUS"
+        assertThat(ChannelNameNormalizer.normalize("Sky Sport F1 Zeus", tags).groupKey).isEqualTo(key("Sky Sport F1"))
+    }
+
+    @Test
+    fun `timeshift stays apart from channel numbers`() {
+        assertThat(key("Discovery HD +2")).isNotEqualTo(key("Discovery 2"))
+        assertThat(key("Grande Fratello VIP +1")).isNotEqualTo(key("Grande Fratello VIP 1"))
+        assertThat(key("Eurosport 1 +2")).isNotEqualTo(key("eurosport 12"))
+        assertThat(key("Rai 5 + 1")).isEqualTo(key("Rai 5 +1 HD"))
+        assertThat(key("Food Network+1")).isEqualTo(key("Food Network +1"))
+        assertThat(ChannelNameNormalizer.normalize("CANALE 5 +1 HD").baseName).isEqualTo("CANALE 5 +1")
+    }
+
+    @Test
+    fun `aliases follow timeshift copies`() {
+        val aliases = ChannelNameNormalizer.keyAliases(
+            setOf("comedycentral", "skycomedycentral+1", "skycinemasuspance+2", "skycinemasuspense"),
+        )
+        assertThat(aliases["skycomedycentral+1"]).isEqualTo("comedycentral+1")
+        assertThat(aliases["skycinemasuspance+2"]).isEqualTo("skycinemasuspense+2")
+    }
+
+    @Test
+    fun `accented letters fold instead of vanishing`() {
+        assertThat(key("DAZN SERIE B Südtirol")).isEqualTo(key("DAZN Serie B SudTirol"))
+    }
+
+    @Test
+    fun `Plus is part of a name unless it follows HDR`() {
+        assertThat(ChannelNameNormalizer.normalize("Disney Plus Film HD").baseName).isEqualTo("Disney Plus Film")
+        val hdr = ChannelNameNormalizer.normalize("Sky Sport Uno UHD HDR PLUS")
+        assertThat(hdr.baseName).isEqualTo("Sky Sport Uno")
+        assertThat(hdr.qualityLabel).isEqualTo("UHD HDR PLUS")
+    }
 }
