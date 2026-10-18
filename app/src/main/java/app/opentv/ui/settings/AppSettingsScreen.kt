@@ -13,9 +13,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +35,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,9 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import android.content.Context
 import android.widget.Toast
 import app.opentv.R
@@ -68,6 +76,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val captions by settings.subtitlesEnabled.collectAsState()
     val resumeLast by settings.resumeLastChannel.collectAsState()
     val language by settings.languageTag.collectAsState()
+    var showLanguagePicker by remember { mutableStateOf(false) }
     val liveEnabled by settings.liveEnabled.collectAsState()
     val moviesEnabled by settings.moviesEnabled.collectAsState()
     val seriesEnabled by settings.seriesEnabled.collectAsState()
@@ -173,12 +182,19 @@ fun AppSettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
 
         SettingsSection(stringResource(R.string.settings_section_language)) {
-            ThemeOption(stringResource(R.string.settings_language_system), language.isBlank()) {
-                changeLanguage(context, settings, "")
-            }
-            // Each language is listed in its own name (endonym), the convention users expect.
-            OpenTvLanguages.forEach { (tag, name) ->
-                ThemeOption(name, language == tag) { changeLanguage(context, settings, tag) }
+            // One row showing the current language; the full list opens in a dialog so the
+            // rest of the settings don't sit below 30-odd radio buttons.
+            val systemLabel = stringResource(R.string.settings_language_system)
+            val currentName = OpenTvLanguages.firstOrNull { it.first == language }?.second ?: systemLabel
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { showLanguagePicker = true }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(currentName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text("›", style = MaterialTheme.typography.titleLarge)
             }
             Spacer(Modifier.height(4.dp))
             Text(
@@ -285,6 +301,60 @@ fun AppSettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
 
         SleepTimerSection()
+    }
+
+    if (showLanguagePicker) {
+        LanguagePickerDialog(
+            current = language,
+            onPick = { tag ->
+                showLanguagePicker = false
+                changeLanguage(context, settings, tag)
+            },
+            onDismiss = { showLanguagePicker = false },
+        )
+    }
+}
+
+/**
+ * The language list as a dialog: "System default" first, then each language in its own name
+ * (endonym), the convention users expect. Focus starts on the current choice so a d-pad user
+ * doesn't scroll from the top.
+ */
+@Composable
+private fun LanguagePickerDialog(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val options = listOf("" to stringResource(R.string.settings_language_system)) + OpenTvLanguages
+    val selectedIndex = options.indexOfFirst { it.first == current }.coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedIndex - 3).coerceAtLeast(0))
+    val selectedFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { selectedFocus.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card {
+            Column(Modifier.padding(vertical = 16.dp).widthIn(min = 320.dp, max = 480.dp)) {
+                Text(
+                    stringResource(R.string.settings_section_language),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+                LazyColumn(state = listState, modifier = Modifier.heightIn(max = 420.dp)) {
+                    itemsIndexed(options) { index, (tag, name) ->
+                        val focus = if (index == selectedIndex) Modifier.focusRequester(selectedFocus) else Modifier
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .then(focus)
+                                .selectable(selected = tag == current, onClick = { onPick(tag) })
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = tag == current, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(name, style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
