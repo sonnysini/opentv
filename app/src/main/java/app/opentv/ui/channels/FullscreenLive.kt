@@ -261,6 +261,7 @@ fun FullscreenLive(
             val jumpTo = refocus?.takeIf { rows !== it.third }
                 ?.let { (key, _, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
             val refocusSettled = refocus != null && jumpTo != null && rows.none { it.key == refocus.second }
+            if (refocus != null) android.util.Log.w("OTVFOCUS", "rows=${rows.size} same=${rows === refocus.third} jumpTo=$jumpTo settled=$refocusSettled")
             LaunchedEffect(refocus) {
                 if (refocus != null) {
                     delay(5_000)
@@ -334,6 +335,7 @@ private fun FocusedList(
     LaunchedEffect(jumpTo, jumpVersion) {
         val target = jumpTo ?: return@LaunchedEffect
         if (target !in 0 until count) return@LaunchedEffect jumped()
+        android.util.Log.w("OTVFOCUS", "jump to $target (focused $focusedIndex)")
         focusedIndex = target
         if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
             listState.scrollToItem((target - 3).coerceAtLeast(0))
@@ -341,7 +343,9 @@ private fun FocusedList(
         // The requester moves to the target row on the next frame; ask until it takes.
         for (attempt in 0 until 20) {
             delay(50)
-            if (runCatching { focusRequester.requestFocus() }.isSuccess) break
+            val r = runCatching { focusRequester.requestFocus() }
+            android.util.Log.w("OTVFOCUS", "request $attempt ok=${r.isSuccess} ${r.exceptionOrNull()?.message}")
+            if (r.isSuccess) break
         }
         jumped()
     }
