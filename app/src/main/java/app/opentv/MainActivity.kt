@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
             val settings = remember { ServiceLocator.get(this).settings }
             val themeMode by settings.themeMode.collectAsState()
             val uiScale by settings.uiScalePercent.collectAsState()
+            val appStyle by settings.appStyle.collectAsState()
             val darkTheme = when (themeMode) {
                 AppSettings.ThemeMode.DARK -> true
                 AppSettings.ThemeMode.LIGHT -> false
@@ -120,7 +121,7 @@ class MainActivity : ComponentActivity() {
                 Density(baseDensity.density * AppSettings.UI_SCALE_BASE * uiScale / 100f, baseDensity.fontScale)
             }
             CompositionLocalProvider(LocalDensity provides scaledDensity) {
-                OpenTvTheme(darkTheme = darkTheme) {
+                OpenTvTheme(darkTheme = darkTheme, style = appStyle) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background,

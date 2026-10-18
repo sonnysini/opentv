@@ -69,6 +69,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
     val themeMode by settings.themeMode.collectAsState()
+    val appStyle by settings.appStyle.collectAsState()
     val uiScale by settings.uiScalePercent.collectAsState()
     val channelLayout by settings.channelLayout.collectAsState()
     val previewVideo by settings.guidePreviewVideo.collectAsState()
@@ -108,6 +109,14 @@ fun AppSettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(20.dp))
 
         SettingsSection(stringResource(R.string.settings_appearance)) {
+            Text(stringResource(R.string.settings_style_title), style = MaterialTheme.typography.titleMedium)
+            ThemeOption(stringResource(R.string.settings_style_owntv), appStyle == AppSettings.AppStyle.OWNTV) {
+                settings.setAppStyle(AppSettings.AppStyle.OWNTV)
+            }
+            ThemeOption(stringResource(R.string.settings_style_classic), appStyle == AppSettings.AppStyle.CLASSIC) {
+                settings.setAppStyle(AppSettings.AppStyle.CLASSIC)
+            }
+            Spacer(Modifier.height(8.dp))
             ThemeOption(stringResource(R.string.settings_theme_system), themeMode == AppSettings.ThemeMode.SYSTEM) {
                 settings.setThemeMode(AppSettings.ThemeMode.SYSTEM)
             }

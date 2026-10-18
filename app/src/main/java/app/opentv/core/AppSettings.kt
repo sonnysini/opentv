@@ -35,6 +35,22 @@ class AppSettings private constructor(context: Context) {
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
     /**
+     * The colour/font style: [AppStyle.OWNTV] (teal on green-black, Plus Jakarta Sans, after the
+     * OwnTV app) or [AppStyle.CLASSIC], the original indigo OpenTV look.
+     */
+    enum class AppStyle { OWNTV, CLASSIC }
+
+    private val _appStyle = MutableStateFlow(
+        runCatching { AppStyle.valueOf(prefs.getString(KEY_APP_STYLE, null) ?: "") }.getOrDefault(AppStyle.OWNTV),
+    )
+    val appStyle: StateFlow<AppStyle> = _appStyle.asStateFlow()
+
+    fun setAppStyle(style: AppStyle) {
+        prefs.edit().putString(KEY_APP_STYLE, style.name).apply()
+        _appStyle.value = style
+    }
+
+    /**
      * How the live-TV channel list is laid out: the scrolling EPG time-[ChannelLayout.GRID], or a
      * compact one-channel-per-row [ChannelLayout.LIST] (logo, name, now/next) for people who find
      * the full grid busy, or [ChannelLayout.FULLSCREEN]: the same list across the whole screen with
@@ -562,6 +578,7 @@ class AppSettings private constructor(context: Context) {
 
     companion object {
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_APP_STYLE = "app_style"
         private const val KEY_CHANNEL_LAYOUT = "channel_layout"
         private const val KEY_LAST_LIVE_GROUP = "last_live_group"
         private const val KEY_SUBTITLES = "subtitles_enabled"
