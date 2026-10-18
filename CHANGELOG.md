@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.9 — 18 October 2026
+
+- **OwnTV style.** The app now uses OwnTV's look: a teal accent over a near-black with a green
+  undertone, in dark and light, and the Plus Jakarta Sans typeface. Prefer the original indigo?
+  Settings › Display & playback › Appearance › Style › Classic.
+
 ## 0.14.8 — 18 October 2026
 
 - **Language is one row in Settings.** Display & playback shows the current language on a single
