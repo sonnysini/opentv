@@ -168,7 +168,10 @@ private fun HubRow(entry: HubEntry) {
 }
 
 @Composable
-internal fun HubTextButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun HubTextButton(label: String, onClick: () -> Unit) = HubTextButton(label, Modifier, onClick)
+
+@Composable
+internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Text(
         label,
