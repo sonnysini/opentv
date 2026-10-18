@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import app.opentv.ui.theme.focusLift
 
 class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = ServiceLocator.get(app)
@@ -428,10 +429,11 @@ private fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) 
     val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(10.dp),
     ) {
         Icon(icon, contentDescription = label, tint = fg)

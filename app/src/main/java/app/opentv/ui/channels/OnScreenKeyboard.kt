@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.opentv.R
+import app.opentv.ui.theme.focusLift
 
 /**
  * A d-pad-navigable on-screen keyboard, shared by every screen that needs text entry on a TV.
@@ -106,13 +107,14 @@ private fun KeyCap(
             .width((48 * wide + (wide - 1) * 8).dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .then(
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier,
             )
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         if (icon) {

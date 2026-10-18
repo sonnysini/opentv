@@ -67,6 +67,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import app.opentv.ui.theme.focusLift
 
 /**
  * A film's cinematic detail page: a backdrop hero with title, meta and Watch/Resume + favourite
@@ -225,9 +226,10 @@ private fun AddonStreamRow(stream: StremioStream, onPick: (StremioStream) -> Uni
         Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onPick(stream) }
+            .clickable(interactionSource = null, indication = null) { onPick(stream) }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -597,13 +599,14 @@ private fun PersonChip(name: String, onClick: () -> Unit) {
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(22.dp))
             .background(container)
             .then(
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp))
                 else Modifier,
             )
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     )
 }
@@ -631,13 +634,14 @@ private fun DetailButton(
     Row(
         modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(12.dp))
             .background(container)
             .then(
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
                 else Modifier,
             )
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -656,6 +660,7 @@ private fun EpisodeRow(ep: Episode, onPlay: (mediaKey: String, url: String, titl
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 3.dp)
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(
                 if (focused) MaterialTheme.colorScheme.primaryContainer
@@ -665,7 +670,7 @@ private fun EpisodeRow(ep: Episode, onPlay: (mediaKey: String, url: String, titl
                 if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier,
             )
-            .clickable {
+            .clickable(interactionSource = null, indication = null) {
                 onPlay("ep:${ep.id}", ep.streamUrl, "S${ep.season}E${ep.episodeNumber} · ${ep.title}")
             }
             .padding(14.dp),

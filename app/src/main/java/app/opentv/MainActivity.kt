@@ -86,6 +86,7 @@ import app.opentv.ui.vod.PersonScreen
 import app.opentv.ui.vod.SeriesDetailScreen
 import app.opentv.ui.vod.VodPlayerScreen
 import app.opentv.update.UpdateGate
+import app.opentv.ui.theme.focusLift
 
 class MainActivity : ComponentActivity() {
 
@@ -613,11 +614,12 @@ private fun RecordingSwitchBanner() {
                 style = MaterialTheme.typography.labelLarge,
                 color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
                 modifier = Modifier
+                    .focusLift(focused)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
                     .onFocusChanged { focused = it.isFocused }
                     .focusable()
-                    .clickable { app.opentv.core.RecordingSignals.suppress(current.recordingId) }
+                    .clickable(interactionSource = null, indication = null) { app.opentv.core.RecordingSignals.suppress(current.recordingId) }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }

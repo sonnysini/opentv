@@ -79,6 +79,7 @@ import app.opentv.recording.SmbConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import app.opentv.ui.theme.focusLift
 
 /**
  * Where recordings are written: this box's internal storage, a NAS over SMB (Synology and the
@@ -411,10 +412,11 @@ private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, en
     Box(
         Modifier
             .size(40.dp)
+            .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .focusable()
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(interactionSource = null, indication = null, enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = null, tint = if (enabled) fg else fg.copy(alpha = 0.4f))

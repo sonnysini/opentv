@@ -94,6 +94,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import app.opentv.ui.theme.focusLift
 
 /**
  * Live TV: a category rail on the left, the channel list on the right.
@@ -920,9 +921,10 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
         color = fg,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }

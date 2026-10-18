@@ -48,6 +48,7 @@ import app.opentv.core.ServiceLocator
 import app.opentv.pairing.QrCodes
 import app.opentv.update.UpdateChecker
 import kotlinx.coroutines.launch
+import app.opentv.ui.theme.focusLift
 
 /**
  * About: what this is, what version it is, and how to get involved. The update check here is the
@@ -197,12 +198,13 @@ private fun LinkLine(label: String, value: String, url: String = "https://$value
     Row(
         Modifier
             .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .then(
                 if (focused) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
                 else Modifier,
             )
-            .clickable {
+            .clickable(interactionSource = null, indication = null) {
                 runCatching {
                     context.startActivity(
                         Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

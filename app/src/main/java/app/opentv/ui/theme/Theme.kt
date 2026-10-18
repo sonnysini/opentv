@@ -5,12 +5,18 @@
  */
 package app.opentv.ui.theme
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -165,6 +171,7 @@ private fun openTvTypography(family: FontFamily = FontFamily.Default): Typograph
 private val ClassicTypography = openTvTypography()
 private val OwnTvTypography = openTvTypography(PlusJakartaSans)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OpenTvTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -172,14 +179,39 @@ fun OpenTvTheme(
     content: @Composable () -> Unit,
 ) {
     val ownTv = style == AppSettings.AppStyle.OWNTV
+    val scheme = when {
+        ownTv && darkTheme -> OwnTvDarkScheme
+        ownTv -> OwnTvLightScheme
+        darkTheme -> DarkScheme
+        else -> LightScheme
+    }
     MaterialTheme(
-        colorScheme = when {
-            ownTv && darkTheme -> OwnTvDarkScheme
-            ownTv -> OwnTvLightScheme
-            darkTheme -> DarkScheme
-            else -> LightScheme
-        },
+        colorScheme = scheme,
         typography = if (ownTv) OwnTvTypography else ClassicTypography,
-        content = content,
-    )
+    ) {
+        if (ownTv) {
+            // OwnTV focus: accent ring + tonal fill on plain clickables, and an accent-tinted
+            // focus layer on Material buttons, switches and radios instead of the grey one.
+            CompositionLocalProvider(
+                LocalOwnTvStyle provides true,
+                LocalIndication provides OwnTvFocusIndication(
+                    ring = scheme.primary,
+                    fill = scheme.primary.copy(alpha = 0.12f),
+                    press = scheme.primary.copy(alpha = 0.16f),
+                ),
+                LocalRippleConfiguration provides RippleConfiguration(
+                    color = scheme.primary,
+                    rippleAlpha = RippleAlpha(
+                        draggedAlpha = 0.16f,
+                        focusedAlpha = 0.28f,
+                        hoveredAlpha = 0.08f,
+                        pressedAlpha = 0.24f,
+                    ),
+                ),
+                content = content,
+            )
+        } else {
+            content()
+        }
+    }
 }
