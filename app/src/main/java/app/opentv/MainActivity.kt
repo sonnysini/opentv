@@ -71,6 +71,7 @@ import app.opentv.ui.player.PlayerScreen
 import app.opentv.ui.settings.AboutScreen
 import app.opentv.ui.settings.AppSettingsScreen
 import app.opentv.ui.settings.CategoriesScreen
+import app.opentv.ui.settings.GroupingScreen
 import app.opentv.ui.settings.EpgSettingsScreen
 import app.opentv.ui.settings.ParentalControlsScreen
 import app.opentv.ui.settings.ProfilesScreen
@@ -214,6 +215,7 @@ object Routes {
     const val PROFILES = "profiles"
     const val PARENTAL = "parental"
     const val CATEGORIES = "categories"
+    const val GROUPING = "grouping"
     const val SYNC = "sync"
     const val REC_SETTINGS = "recording-settings"
     const val ABOUT = "about"
@@ -428,6 +430,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },
                     onOpenChannels = { navController.navigate(Routes.CHANNELS) },
                     onOpenCategories = { navController.navigate(Routes.CATEGORIES) },
+                    onOpenGrouping = { navController.navigate(Routes.GROUPING) },
                     onOpenWebManager = { navController.navigate(Routes.WEB_MANAGER) },
                     onOpenDisplay = { navController.navigate(Routes.APP_SETTINGS) },
                     onOpenParental = { navController.navigate(Routes.PARENTAL) },
@@ -456,6 +459,10 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
             composable(Routes.CATEGORIES) {
                 CategoriesScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Routes.GROUPING) {
+                GroupingScreen(onBack = { navController.popBackStack() })
             }
 
             composable(Routes.PARENTAL) {

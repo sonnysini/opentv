@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
@@ -65,6 +66,7 @@ fun SettingsHubScreen(
     onOpenGuide: () -> Unit,
     onOpenChannels: () -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenGrouping: () -> Unit,
     onOpenWebManager: () -> Unit,
     onOpenDisplay: () -> Unit,
     onOpenParental: () -> Unit,
@@ -79,6 +81,7 @@ fun SettingsHubScreen(
         HubEntry(Icons.Filled.LiveTv, stringResource(R.string.settings_guide_title), stringResource(R.string.settings_guide_subtitle), onOpenGuide),
         HubEntry(Icons.Filled.GridView, stringResource(R.string.common_channels), stringResource(R.string.settings_channels_subtitle), onOpenChannels),
         HubEntry(Icons.Filled.Category, stringResource(R.string.settings_categories_title), stringResource(R.string.settings_categories_subtitle), onOpenCategories),
+        HubEntry(Icons.Filled.Link, stringResource(R.string.settings_grouping_title), stringResource(R.string.settings_grouping_subtitle), onOpenGrouping),
         HubEntry(Icons.Filled.PhoneAndroid, stringResource(R.string.settings_webmanager_title), stringResource(R.string.settings_webmanager_subtitle), onOpenWebManager),
         HubEntry(Icons.Filled.Tune, stringResource(R.string.settings_display_title), stringResource(R.string.settings_display_subtitle), onOpenDisplay),
         HubEntry(Icons.Filled.Storage, stringResource(R.string.settings_recording_title), stringResource(R.string.settings_recording_subtitle), onOpenRecordings),
@@ -165,14 +168,17 @@ private fun HubRow(entry: HubEntry) {
 }
 
 @Composable
-internal fun HubTextButton(label: String, onClick: () -> Unit) {
+internal fun HubTextButton(label: String, onClick: () -> Unit) = HubTextButton(label, Modifier, onClick)
+
+@Composable
+internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Text(
         label,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Medium,
         color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-        modifier = Modifier
+        modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))

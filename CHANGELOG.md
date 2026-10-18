@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.6 — 18 October 2026
+
+- **Settings › Channel grouping.** A new screen for how channels fold together:
+  - **Possible duplicates**: rows that look like one channel under two names (same provider guide
+    id, the same words in another order, or a one-letter typo) — **Merge** puts them in one row
+    with every feed in the Quality panel, **Ignore** stops suggesting the pair.
+  - **Merges done**: every merge listed, each with **Undo**.
+  - Choices are applied on the spot and kept through every sync.
+  - "Merge groups by source" moved here from Categories.
+
 ## 0.15.5 — 18 October 2026
 
 - **DAZN team channels in one row.** `DAZN Serie A Milan`, `DAZN SERIE A 3 MILAN` and `Milan`

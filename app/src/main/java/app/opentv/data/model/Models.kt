@@ -508,3 +508,16 @@ data class Reminder(
     /** Set once the alarm has fired, so a boot re-arm skips it and the list can grey it out. */
     val fired: Boolean = false,
 )
+
+/**
+ * A merge the user confirmed in Settings › Channel grouping: every channel of group [fromKey]
+ * joins [intoKey]. Applied on every (re)normalisation, so it survives syncs. The names are kept
+ * only to list the merge afterwards — the [fromKey] row no longer exists once it is applied.
+ */
+@kotlinx.serialization.Serializable
+data class GroupMerge(
+    val fromKey: String,
+    val intoKey: String,
+    val fromName: String,
+    val intoName: String,
+)

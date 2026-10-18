@@ -26,6 +26,7 @@ import app.opentv.data.model.StreamKind
 import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.M3uParser
+import app.opentv.data.parser.MergeSuggester
 import app.opentv.data.parser.VodTitleCleaner
 import app.opentv.data.remote.StalkerApi
 import app.opentv.data.remote.TmdbClient
@@ -1002,7 +1003,42 @@ class CatalogRepository(
         )
         val folded = if (aliases.isEmpty()) stamped
         else stamped.map { c -> aliases[c.groupKey]?.let { c.copy(groupKey = it) } ?: c }
-        return withTidiestNames(folded)
+        return withTidiestNames(withUserMerges(folded))
+    }
+
+    /** The merges the user confirmed in Settings › Channel grouping, chains followed (a → b → c). */
+    private fun withUserMerges(channels: List<Channel>): List<Channel> {
+        val merges = settings.groupMerges.value.associate { it.fromKey to it.intoKey }
+        if (merges.isEmpty()) return channels
+        fun target(key: String): String {
+            var k = key
+            repeat(MAX_MERGE_HOPS) { k = merges[k] ?: return k }
+            return k
+        }
+        return channels.map { c -> if (c.groupKey in merges) c.copy(groupKey = target(c.groupKey)) else c }
+    }
+
+    /**
+     * Rows that are probably one channel under two names, for Settings › Channel grouping to offer.
+     * Hidden channels are left out; pairs already answered "Ignore" too.
+     */
+    suspend fun mergeSuggestions(): List<MergeSuggester.Suggestion> = withContext(Dispatchers.Default) {
+        val groups = channelDao.allForMatching()
+            .filter { !it.hidden && it.groupKey.isNotEmpty() }
+            .groupBy { it.groupKey }
+            .map { (key, chans) ->
+                MergeSuggester.Group(
+                    key = key,
+                    name = chans.first().displayName,
+                    channels = chans.size,
+                    // The provider's guide id or the user's own pick only: the name matcher's guesses
+                    // ('Disney Plus Film' → Discovery's guide) would suggest its own mistakes.
+                    guideIds = chans.mapNotNullTo(HashSet()) { c ->
+                        (c.epgOverrideId ?: c.epgChannelId)?.takeIf { it.isNotBlank() }
+                    },
+                )
+            }
+        MergeSuggester.suggest(groups, settings.ignoredMergePairs.value)
     }
 
     /**
@@ -1201,5 +1237,6 @@ class CatalogRepository(
          * and runs [renormalizeAll] once when it moves.
          */
         const val NORMALIZER_VERSION = 7
+        private const val MAX_MERGE_HOPS = 8
     }
 }
