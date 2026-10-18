@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.8 — 18 October 2026
+
+- **Focus stays on the merged row.** After Merge with…, focus lands on the merged channel instead
+  of the row below it, even when regrouping moves it in the list.
+
 ## 0.15.7 — 18 October 2026
 
 - **Merge channels by hand.** Hold OK on a channel in the full-screen live list: the channel menu
