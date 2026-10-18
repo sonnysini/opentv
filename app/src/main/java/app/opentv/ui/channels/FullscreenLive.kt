@@ -164,6 +164,8 @@ fun FullscreenLive(
             .background(MaterialTheme.colorScheme.background)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // The user moved on before the regrouped list came back: don't yank focus later.
+                if (refocus != null) onRefocusDone()
                 when (e.key) {
                     Key.Menu -> { showCategories = !showCategories; true }
                     Key.DirectionLeft -> if (needsHolder) { onExitLeft(); true } else false
@@ -261,10 +263,10 @@ fun FullscreenLive(
             val jumpTo = refocus?.takeIf { rows !== it.third }
                 ?.let { (key, _, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
             val refocusSettled = refocus != null && jumpTo != null && rows.none { it.key == refocus.second }
-            if (refocus != null) android.util.Log.w("OTVFOCUS", "rows=${rows.size} same=${rows === refocus.third} jumpTo=$jumpTo settled=$refocusSettled")
+            // Regrouping a big list takes several seconds on a Fire stick.
             LaunchedEffect(refocus) {
                 if (refocus != null) {
-                    delay(5_000)
+                    delay(30_000)
                     onRefocusDone()
                 }
             }
@@ -335,7 +337,6 @@ private fun FocusedList(
     LaunchedEffect(jumpTo, jumpVersion) {
         val target = jumpTo ?: return@LaunchedEffect
         if (target !in 0 until count) return@LaunchedEffect jumped()
-        android.util.Log.w("OTVFOCUS", "jump to $target (focused $focusedIndex)")
         focusedIndex = target
         if (listState.layoutInfo.visibleItemsInfo.none { it.index == target }) {
             listState.scrollToItem((target - 3).coerceAtLeast(0))
@@ -343,9 +344,7 @@ private fun FocusedList(
         // The requester moves to the target row on the next frame; ask until it takes.
         for (attempt in 0 until 20) {
             delay(50)
-            val r = runCatching { focusRequester.requestFocus() }
-            android.util.Log.w("OTVFOCUS", "request $attempt ok=${r.isSuccess} ${r.exceptionOrNull()?.message}")
-            if (r.isSuccess) break
+            if (runCatching { focusRequester.requestFocus() }.isSuccess) break
         }
         jumped()
     }
