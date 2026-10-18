@@ -180,6 +180,7 @@ fun PlayerScreen(
     // The channel as listed in [queue]; [currentId] is whichever quality variant of it is playing,
     // which a fallback or a manual quality pick can change. Zapping and the list follow this one.
     var listedId by remember { mutableStateOf<Long?>(null) }
+    var listedChannel by remember { mutableStateOf<Channel?>(null) }
     // Quality fallback: the variants in try order (preferred first), the ones already tried for this
     // channel, and whether the current attempt has shown a picture yet. [attempt] restarts the timer.
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
@@ -262,10 +263,11 @@ fun PlayerScreen(
     /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
     suspend fun startChannel(channel: Channel) {
         listedId = channel.id
+        listedChannel = channel
         variants = graph.catalogRepository.variants(channel)
         val preferred = QualityPreference.order(variants, settings.preferredQuality.value)
         // The variant that worked last time this session goes first; the rest stay as fallback.
-        val known = WorkingVariants.forChannel(channel.id)?.let { id -> preferred.firstOrNull { it.id == id } }
+        val known = WorkingVariants.forChannel(channel)?.let { id -> preferred.firstOrNull { it.id == id } }
         tryOrder = if (known == null) preferred else listOf(known) + (preferred - known)
         tried = emptySet()
         tuneTo(tryOrder.firstOrNull() ?: channel)
@@ -333,7 +335,9 @@ fun PlayerScreen(
             when (s) {
                 is PlayerController.State.Playing -> {
                     started = true
-                    currentId?.let { id -> WorkingVariants.remember(variants.map { it.id } + id, id) }
+                    val listed = listedChannel
+                    val id = currentId
+                    if (listed != null && id != null) WorkingVariants.remember(listed, id)
                 }
                 is PlayerController.State.Error -> fallBack()
                 else -> Unit

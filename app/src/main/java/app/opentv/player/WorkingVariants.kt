@@ -5,6 +5,7 @@
  */
 package app.opentv.player
 
+import app.opentv.data.model.Channel
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -13,16 +14,18 @@ import java.util.concurrent.ConcurrentHashMap
  * fallback again.
  *
  * In memory only and cleared on every fresh launch: a better feed that comes back gets retried.
- * Keyed by every variant id of the channel, so it matches however the channel is reached.
+ * Keyed by the logical channel (its quality group), so it matches whichever copy the list holds.
  */
 object WorkingVariants {
-    private val byVariant = ConcurrentHashMap<Long, Long>()
+    private val byChannel = ConcurrentHashMap<String, Long>()
 
-    fun remember(variantIds: Collection<Long>, working: Long) {
-        variantIds.forEach { byVariant[it] = working }
+    private fun key(channel: Channel) = channel.groupKey.ifEmpty { "id:${channel.id}" }
+
+    fun remember(channel: Channel, workingVariantId: Long) {
+        byChannel[key(channel)] = workingVariantId
     }
 
-    fun forChannel(id: Long): Long? = byVariant[id]
+    fun forChannel(channel: Channel): Long? = byChannel[key(channel)]
 
-    fun clear() = byVariant.clear()
+    fun clear() = byChannel.clear()
 }
