@@ -534,4 +534,6 @@
     <string name="settings_ui_scale_note">Shrink to fit more channels on screen, enlarge to read from further away.</string>
     <string name="settings_quality_timeout">Wait before switching: %1$s s</string>
     <string name="player_quality_fallback">%1$s not available → %2$s</string>
+    <string name="player_channel_unavailable">Channel not available</string>
+    <string name="player_channel_unavailable_hint">OK to try again · ↑/↓ to change channel</string>
 </resources>

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.7 — 18 October 2026
+
+- **The same channel under two names is one row.** `Sky MTV` and `MTV`, `Discovery Giallo` and
+  `Giallo`, `Sky Nickelodeon` and `Nickelodeon` now fold together (only when both exist in your
+  list; `Sky Cinema …` channels are left apart). Common provider typos are folded too
+  (`Nicklodeon`, `Italian Fisching`, `EQUTV`, `Sly Documentari`, `History Channel`, `Sky Series`…),
+  and a trailing `RS` is shown as a source label instead of making a second channel. Existing
+  lists are re-folded on the next launch.
+- **"Channel not available" instead of an endless spinner.** When a channel has only one feed,
+  or every feed has failed, the player says so as soon as the fallback wait runs out. OK tries
+  again, up/down changes channel as usual.
+
 ## 0.14.6 — 18 October 2026
 
 - **Channel up/down after a quality fallback** now moves to the next channel instead of jumping
