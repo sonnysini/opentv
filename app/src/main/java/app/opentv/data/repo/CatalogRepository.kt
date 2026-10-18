@@ -996,7 +996,10 @@ class CatalogRepository(
             )
         }
 
-        val aliases = ChannelNameNormalizer.keyAliases(stamped.mapTo(HashSet()) { it.groupKey })
+        // Separator rows are headings: '---- Basket Serie A2 ----' must not pass for a bare channel.
+        val aliases = ChannelNameNormalizer.keyAliases(
+            stamped.filterNot { isSeparatorRow(it.name) }.mapTo(HashSet()) { it.groupKey },
+        )
         val folded = if (aliases.isEmpty()) stamped
         else stamped.map { c -> aliases[c.groupKey]?.let { c.copy(groupKey = it) } ?: c }
         return withTidiestNames(folded)
@@ -1197,6 +1200,6 @@ class CatalogRepository(
          * already-imported channels. The app compares it against a stored value on launch
          * and runs [renormalizeAll] once when it moves.
          */
-        const val NORMALIZER_VERSION = 6
+        const val NORMALIZER_VERSION = 7
     }
 }
