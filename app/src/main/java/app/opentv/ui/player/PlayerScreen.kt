@@ -108,6 +108,7 @@ import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
+import app.opentv.player.WorkingVariants
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
 import coil.compose.AsyncImage
@@ -176,6 +177,10 @@ fun PlayerScreen(
 
     var variants by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var currentId by remember { mutableStateOf<Long?>(null) }
+    // The channel as listed in [queue]; [currentId] is whichever quality variant of it is playing,
+    // which a fallback or a manual quality pick can change. Zapping and the list follow this one.
+    var listedId by remember { mutableStateOf<Long?>(null) }
+    var listedChannel by remember { mutableStateOf<Channel?>(null) }
     // Quality fallback: the variants in try order (preferred first), the ones already tried for this
     // channel, and whether the current attempt has shown a picture yet. [attempt] restarts the timer.
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
@@ -257,8 +262,13 @@ fun PlayerScreen(
 
     /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
     suspend fun startChannel(channel: Channel) {
+        listedId = channel.id
+        listedChannel = channel
         variants = graph.catalogRepository.variants(channel)
-        tryOrder = QualityPreference.order(variants, settings.preferredQuality.value)
+        val preferred = QualityPreference.order(variants, settings.preferredQuality.value)
+        // The variant that worked last time this session goes first; the rest stay as fallback.
+        val known = WorkingVariants.forChannel(channel)?.let { id -> preferred.firstOrNull { it.id == id } }
+        tryOrder = if (known == null) preferred else listOf(known) + (preferred - known)
         tried = emptySet()
         tuneTo(tryOrder.firstOrNull() ?: channel)
     }
@@ -279,16 +289,21 @@ fun PlayerScreen(
     fun playChannelId(id: Long) {
         // Remember where we came from so "Last channel" can bounce straight back. Quality switches
         // go through tuneTo directly, so they never count as a channel change here.
-        currentId?.let { if (it != id) previousId = it }
+        listedId?.let { if (it != id) previousId = it }
         scope.launch {
             val channel = graph.catalogRepository.channel(id) ?: return@launch
             startChannel(channel)
         }
     }
 
+    /** Position of the playing channel in [queue], matched by any of its quality variants. */
+    fun queueIndex(): Int = queue.indexOfFirst { item ->
+        item.id == listedId || item.id == currentId || variants.any { it.id == item.id }
+    }
+
     fun zapBy(delta: Int) {
         if (queue.isEmpty()) return
-        val cur = queue.indexOfFirst { it.id == currentId }.let { if (it < 0) 0 else it }
+        val cur = queueIndex().let { if (it < 0) 0 else it }
         val next = (cur + delta).coerceIn(0, queue.size - 1)
         if (next != cur) playChannelId(queue[next].id)
     }
@@ -318,7 +333,12 @@ fun PlayerScreen(
     LaunchedEffect(Unit) {
         controller.state.collect { s ->
             when (s) {
-                is PlayerController.State.Playing -> started = true
+                is PlayerController.State.Playing -> {
+                    started = true
+                    val listed = listedChannel
+                    val id = currentId
+                    if (listed != null && id != null) WorkingVariants.remember(listed, id)
+                }
                 is PlayerController.State.Error -> fallBack()
                 else -> Unit
             }
@@ -726,7 +746,7 @@ fun PlayerScreen(
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.CenterStart),
         ) {
-            val currentIndex = queue.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+            val currentIndex = queueIndex().coerceAtLeast(0)
             val listState = rememberLazyListState()
             LaunchedEffect(Unit) { runCatching { listState.scrollToItem(currentIndex) } }
             Column(
@@ -745,7 +765,7 @@ fun PlayerScreen(
                 Spacer(Modifier.height(8.dp))
                 // A quick "jump back to the channel you just left" pin, TiviMate-style.
                 val lastItem = previousId?.let { pid -> queue.firstOrNull { it.id == pid } }
-                if (lastItem != null && lastItem.id != currentId) {
+                if (lastItem != null && lastItem.id != queue.getOrNull(queueIndex())?.id) {
                     ChannelListRow(
                         item = lastItem,
                         playing = false,
@@ -762,7 +782,7 @@ fun PlayerScreen(
                     itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
                         ChannelListRow(
                             item = item,
-                            playing = item.id == currentId,
+                            playing = item.id == queue.getOrNull(currentIndex)?.id,
                             focusRequester = if (index == currentIndex) listFocus else null,
                             onClick = {
                                 playChannelId(item.id)

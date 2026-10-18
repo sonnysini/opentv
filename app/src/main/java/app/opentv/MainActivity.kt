@@ -97,6 +97,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A fresh launch (not a rotation/recreate) retries every channel's preferred quality.
+        if (savedInstanceState == null) app.opentv.player.WorkingVariants.clear()
         enableEdgeToEdge()
         handlePlayIntent(intent)
         val isTelevision = isRunningOnTelevision(this)
@@ -115,7 +117,7 @@ class MainActivity : ComponentActivity() {
             // the screen, so only overlays and lists change size.
             val baseDensity = LocalDensity.current
             val scaledDensity = remember(baseDensity, uiScale) {
-                Density(baseDensity.density * uiScale / 100f, baseDensity.fontScale)
+                Density(baseDensity.density * AppSettings.UI_SCALE_BASE * uiScale / 100f, baseDensity.fontScale)
             }
             CompositionLocalProvider(LocalDensity provides scaledDensity) {
                 OpenTvTheme(darkTheme = darkTheme) {

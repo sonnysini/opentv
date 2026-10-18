@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.6 — 18 October 2026
+
+- **Channel up/down after a quality fallback** now moves to the next channel instead of jumping
+  back to the first one of the list (same for the in-player list and "Last channel").
+- **The quality that worked is remembered.** Zapping back to a channel whose preferred feed is
+  down starts straight on the one that played (or the one you picked by hand). Forgotten when the
+  app is reopened, so a better feed that comes back gets tried again.
+- **Interface size: the old 80% is the new 100%.** Your setting is converted automatically.
+- **Settings use the full screen width** at any interface size.
+
 ## 0.14.5 — 18 October 2026
 
 - **Interface size.** Settings › Display & playback › Appearance › "Interface size" zooms the whole

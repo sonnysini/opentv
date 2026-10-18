@@ -5,6 +5,11 @@
  */
 package app.opentv.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -60,11 +65,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -154,7 +154,7 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
             stringResource(R.string.recset_desc),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 720.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(20.dp))
@@ -507,7 +507,7 @@ private fun BackgroundStatus() {
 
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.widthIn(max = 720.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
