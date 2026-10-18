@@ -14,8 +14,8 @@ android {
         applicationId = "app.opentv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 38
-        versionName = "0.15.5"
+        versionCode = 39
+        versionName = "0.15.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
