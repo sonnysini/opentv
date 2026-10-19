@@ -1508,6 +1508,10 @@ class GroupingViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setStripSources(on: Boolean) = graph.settings.setStripCategorySources(on)
 
+    val groupBadges: StateFlow<Boolean> = graph.settings.groupBadges
+
+    fun setGroupBadges(on: Boolean) = graph.settings.setGroupBadges(on)
+
     fun merge(s: app.opentv.data.parser.MergeSuggester.Suggestion) {
         graph.settings.addGroupMerge(app.opentv.data.model.GroupMerge(s.from.key, s.into.key, s.from.name, s.into.name))
         // Off the list at once; the rescan after regrouping drops the pairs it made moot.

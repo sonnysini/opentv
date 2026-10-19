@@ -193,6 +193,15 @@ class AppSettings private constructor(context: Context) {
         _stripCategorySources.value = on
     }
 
+    /** Logo, flag or emoji beside each group in the category list (see GroupBadge). */
+    private val _groupBadges = pref { prefs.getBoolean(KEY_GROUP_BADGES, true) }
+    val groupBadges: StateFlow<Boolean> = _groupBadges.asStateFlow()
+
+    fun setGroupBadges(on: Boolean) {
+        prefs.edit().putBoolean(KEY_GROUP_BADGES, on).apply()
+        _groupBadges.value = on
+    }
+
     private val _foreignSportOff = pref { prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false) }
     val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
 
@@ -732,6 +741,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_ITALIAN_ONLY = "italian_only"
         private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
         private const val KEY_STRIP_CATEGORY_SOURCES = "strip_category_sources"
+        private const val KEY_GROUP_BADGES = "group_badges"
         private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"
@@ -780,7 +790,7 @@ class AppSettings private constructor(context: Context) {
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
             listOf(
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
-                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
+                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
                 KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }

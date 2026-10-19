@@ -225,13 +225,15 @@ fun FullscreenLive(
                 val badge: GroupBadge.Badge? = null,
                 val pick: () -> Unit,
             )
+            val badges = LocalGroupBadges.current
+            fun shown(name: String) = if (badges) GroupBadge.of(name) else GroupBadge.Result(name, null)
             val entries = buildList {
-                val fav = GroupBadge.of(favouritesLabel)
+                val fav = shown(favouritesLabel)
                 add(Entry("fav", fav.label, favouritesOnly, fav.badge) { onSelectFavourites() })
                 add(Entry("all", allLabel, !favouritesOnly && selectedCategory == null) { onSelectCategory(null) })
                 categories.forEach { g ->
-                    val shown = GroupBadge.of(g.rawName)
-                    add(Entry("cat-${g.key}", shown.label, !favouritesOnly && selectedCategory in g.memberKeys, shown.badge) { onSelectCategory(g.key) })
+                    val s = shown(g.rawName)
+                    add(Entry("cat-${g.key}", s.label, !favouritesOnly && selectedCategory in g.memberKeys, s.badge) { onSelectCategory(g.key) })
                 }
             }
             val startIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
@@ -240,6 +242,7 @@ fun FullscreenLive(
                 CategoryEntry(
                     label = entry.label,
                     badge = entry.badge,
+                    showBadges = badges,
                     selected = entry.selected,
                     modifier = requester,
                     onLeft = onExitLeft,
@@ -387,6 +390,7 @@ private fun FocusedList(
 private fun CategoryEntry(
     label: String,
     badge: GroupBadge.Badge?,
+    showBadges: Boolean,
     selected: Boolean,
     modifier: Modifier,
     onLeft: () -> Unit,
@@ -408,25 +412,27 @@ private fun CategoryEntry(
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = if (showBadges) 10.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Every row keeps the badge's room, so the names line up whether a group has one or not.
-        Box(Modifier.size(width = 96.dp, height = 48.dp), contentAlignment = Alignment.Center) {
-            when (badge) {
-                is GroupBadge.Image -> AsyncImage(
-                    model = badge.url,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
-                )
-                // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
-                is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
-                    Text(badge.text, fontSize = 30.sp, maxLines = 1)
+        if (showBadges) {
+            // Every row keeps the badge's room, so the names line up whether a group has one or not.
+            Box(Modifier.size(width = 96.dp, height = 48.dp), contentAlignment = Alignment.Center) {
+                when (badge) {
+                    is GroupBadge.Image -> AsyncImage(
+                        model = badge.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
+                    )
+                    // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
+                    is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
+                        Text(badge.text, fontSize = 30.sp, maxLines = 1)
+                    }
+                    null -> Unit
                 }
-                null -> Unit
             }
+            Spacer(Modifier.width(16.dp))
         }
-        Spacer(Modifier.width(16.dp))
         Text(
             label,
             style = MaterialTheme.typography.titleLarge,

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.6 — 19 October 2026
+
+- **Logos beside channel groups.** The category list (☰) shows a badge next to each group:
+  the broadcaster's logo when the name starts with one (Sky Sport, Sky Calcio, Sky Cinema,
+  Sky Primafila, DAZN, Discovery, Disney+, Eleven Sports, F1 — loaded from tv-logos, nothing
+  bundled), the country flag for a flag emoji, otherwise the provider's own leading emoji, shown
+  big and dropped from the name. Emoji the device's font can't draw leave the slot empty.
+  Turn it off in **Settings › Channel grouping › Logos beside groups**.
+
 ## 0.16.5 — 19 October 2026
 
 - **Channel logos from the guide.** Channels your provider ships without a logo now take the one
