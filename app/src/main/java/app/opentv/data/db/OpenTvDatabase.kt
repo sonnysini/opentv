@@ -71,7 +71,7 @@ class Converters {
         SeriesRule::class,
         Reminder::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -291,13 +291,20 @@ abstract class OpenTvDatabase : RoomDatabase() {
         }
 
         /**
-         * v12 → v13: guide channels keep their `<icon>`, and each channel the logo of the guide it
+         * v12 → v14: guide channels keep their `<icon>`, and each channel the logo of the guide it
          * is matched to (`guideLogoUrl`), shown when the provider has none or the user prefers
-         * guide logos. Empty until the next guide refresh.
+         * guide logos. Empty until the next guide refresh. (v13, with only the first column, was
+         * a test build; [MIGRATION_13_14] brings it level.)
          */
-        private val MIGRATION_12_13 = object : Migration(12, 13) {
+        private val MIGRATION_12_14 = object : Migration(12, 14) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `epg_channels` ADD COLUMN `iconUrl` TEXT")
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `guideLogoUrl` TEXT")
+            }
+        }
+
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `channels` ADD COLUMN `guideLogoUrl` TEXT")
             }
         }
@@ -310,7 +317,7 @@ abstract class OpenTvDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                     MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-                    MIGRATION_12_13,
+                    MIGRATION_12_14, MIGRATION_13_14,
                 )
                 /*
                  * Pre-1.0 policy: schema changes drop and rebuild the database. Everything
