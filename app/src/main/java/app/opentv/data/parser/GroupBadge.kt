@@ -45,13 +45,16 @@ object GroupBadge {
     fun of(rawName: String): Result {
         val name = rawName.trim()
         val lead = leadingSymbols(name)
-        val label = name.substring(lead.length).trim().ifEmpty { name }
+        // "⭐ Serie A Replay ⭐": the closing emoji goes with the opening one.
+        val emoji = lead.trim()
+        val label = name.substring(lead.length).trim()
+            .let { if (emoji.isNotEmpty() && it.endsWith(emoji)) it.dropLast(emoji.length).trim() else it }
+            .ifEmpty { name }
         val key = brandKey(label)
         BRANDS.firstOrNull { (prefix, _) -> key == prefix || key.startsWith("$prefix ") }?.let {
             return Result(label, Image(TV_LOGOS + it.second))
         }
         flagCountry(lead)?.let { return Result(label, Image("https://flagcdn.com/w160/$it.png")) }
-        val emoji = lead.trim()
         return if (emoji.isNotEmpty() && emoji.any { it.code > 0x2000 }) {
             Result(label, Emoji(emoji))
         } else {

@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.channels
 
+import android.graphics.Paint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -225,7 +226,8 @@ fun FullscreenLive(
                 val pick: () -> Unit,
             )
             val entries = buildList {
-                add(Entry("fav", favouritesLabel, favouritesOnly) { onSelectFavourites() })
+                val fav = GroupBadge.of(favouritesLabel)
+                add(Entry("fav", fav.label, favouritesOnly, fav.badge) { onSelectFavourites() })
                 add(Entry("all", allLabel, !favouritesOnly && selectedCategory == null) { onSelectCategory(null) })
                 categories.forEach { g ->
                     val shown = GroupBadge.of(g.rawName)
@@ -417,7 +419,10 @@ private fun CategoryEntry(
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
                 )
-                is GroupBadge.Emoji -> Text(badge.text, fontSize = 30.sp, maxLines = 1)
+                // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
+                is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
+                    Text(badge.text, fontSize = 30.sp, maxLines = 1)
+                }
                 null -> Unit
             }
         }

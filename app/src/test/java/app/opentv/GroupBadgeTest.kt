@@ -35,6 +35,12 @@ class GroupBadgeTest {
     }
 
     @Test
+    fun closingEmojiGoesToo() {
+        assertThat(GroupBadge.of("⭐ Serie A Replay ⭐")).isEqualTo(GroupBadge.Result("Serie A Replay", GroupBadge.Emoji("⭐")))
+        assertThat(GroupBadge.of("★ Preferiti")).isEqualTo(GroupBadge.Result("Preferiti", GroupBadge.Emoji("★")))
+    }
+
+    @Test
     fun plainNamesStayAsTheyAre() {
         assertThat(GroupBadge.of("Notizie")).isEqualTo(GroupBadge.Result("Notizie", null))
         assertThat(GroupBadge.of("?")).isEqualTo(GroupBadge.Result("?", null))
