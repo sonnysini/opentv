@@ -39,7 +39,8 @@ object XmltvParser {
     )
 
     /**
-     * @param onChannelAlias called with (channelId, displayName) for each `<channel>` element.
+     * @param onChannelAlias called with (channelId, displayName, iconUrl) for each `<channel>`
+     *   element; the icon is the channel's logo, used where the provider ships none.
      * @param onProgramme called for each successfully parsed `<programme>`.
      *
      * [onProgramme] is a suspending callback, and this function is therefore suspending too.
@@ -54,7 +55,7 @@ object XmltvParser {
     suspend fun parse(
         input: InputStream,
         feedId: Long,
-        onChannelAlias: (id: String, displayName: String?) -> Unit = { _, _ -> },
+        onChannelAlias: (id: String, displayName: String?, iconUrl: String?) -> Unit = { _, _, _ -> },
         onProgramme: suspend (Programme) -> Unit,
     ): Stats {
         var channelCount = 0
@@ -71,10 +72,10 @@ object XmltvParser {
                 when (parser.name) {
                     "channel" -> {
                         val id = parser.getAttributeValue(null, "id")
-                        val displayName = readChannelDisplayName(parser)
+                        val (displayName, iconUrl) = readChannel(parser)
                         if (!id.isNullOrBlank()) {
                             channelCount++
-                            onChannelAlias(id, displayName)
+                            onChannelAlias(id, displayName, iconUrl)
                         }
                     }
 
@@ -95,23 +96,31 @@ object XmltvParser {
         return Stats(channelCount, programmeCount, skipped)
     }
 
-    private fun readChannelDisplayName(parser: XmlPullParser): String? {
+    /** A `<channel>`'s first non-empty display name and its first `<icon src>`. */
+    private fun readChannel(parser: XmlPullParser): Pair<String?, String?> {
         var displayName: String? = null
+        var iconUrl: String? = null
         var depth = 1
         while (depth > 0) {
             when (parser.next()) {
                 XmlPullParser.START_TAG -> {
                     depth++
-                    if (parser.name == "display-name" && displayName == null) {
-                        displayName = parser.nextText().trim().takeIf { it.isNotEmpty() }
-                        depth--
+                    when (parser.name) {
+                        "display-name" -> if (displayName == null) {
+                            displayName = parser.nextText().trim().takeIf { it.isNotEmpty() }
+                            depth--
+                        }
+                        "icon" -> if (iconUrl == null) {
+                            iconUrl = parser.getAttributeValue(null, "src")?.trim()
+                                ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                        }
                     }
                 }
                 XmlPullParser.END_TAG -> depth--
-                XmlPullParser.END_DOCUMENT -> return displayName
+                XmlPullParser.END_DOCUMENT -> return displayName to iconUrl
             }
         }
-        return displayName
+        return displayName to iconUrl
     }
 
     private fun readProgramme(parser: XmlPullParser, feedId: Long): Programme? {

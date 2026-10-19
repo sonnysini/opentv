@@ -261,6 +261,8 @@ data class EpgChannelAlias(
     val displayName: String,
     /** ChannelNameNormalizer.groupKeyOf(displayName), precomputed for the matcher. */
     val normalizedKey: String,
+    /** The guide's `<icon>` for this channel: the logo for matched channels the provider left bare. */
+    val iconUrl: String? = null,
 )
 
 /**

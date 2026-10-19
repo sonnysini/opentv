@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.5 — 19 October 2026
+
+- **Channel logos from the guide.** Channels your provider ships without a logo now take the one
+  from their matched TV guide (the `<icon>` in XMLTV), instead of showing just their initials.
+  A logo from the provider always wins. Logos appear after the next guide refresh.
+
 ## 0.16.4 — 19 October 2026
 
 - **New player bar layout.** The channel logo sits large on the left and the rest of the bar runs
