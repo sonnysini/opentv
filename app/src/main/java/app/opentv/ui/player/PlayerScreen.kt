@@ -403,10 +403,10 @@ fun PlayerScreen(
     // While watching: a stream that stops moving — stuck loading, an error the silent restart can't
     // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
     val stallFallback by settings.stallFallback.collectAsState()
-    val stallSeconds by settings.stallFallbackSeconds.collectAsState()
-    LaunchedEffect(started, paused, stallFallback, stallSeconds, currentId, watchEpoch) {
+    val stallMillis by settings.stallFallbackMillis.collectAsState()
+    LaunchedEffect(started, paused, stallFallback, stallMillis, currentId, watchEpoch) {
         if (!started || paused || !stallFallback) return@LaunchedEffect
-        val watch = StallWatch(stallSeconds * 1_000L)
+        val watch = StallWatch(stallMillis.toLong())
         while (true) {
             delay(StallWatch.SAMPLE_MILLIS)
             // Paused from outside the bar (lifecycle, PiP): not a stall.

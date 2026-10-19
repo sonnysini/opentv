@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.2 — 19 October 2026
+
+- **Wait-time sliders you can actually use with the remote.** "Wait before switching" and
+  "Frozen for" are now a bar: move onto it and press ←/→ to change the seconds. The old −/+
+  buttons lost focus when one of them hit its limit, so changing the value was hit-and-miss.
+- **Same range for both waits:** 1 to 10 s in half-second steps (the freeze wait used to be
+  1–15 s in whole seconds; values above 10 s become 10 s).
+
 ## 0.16.1 — 19 October 2026
 
 - **Switch stream if it freezes.** While you watch, a channel whose picture freezes or keeps

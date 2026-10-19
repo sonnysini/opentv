@@ -5,6 +5,19 @@
  */
 package app.opentv.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -85,7 +98,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val qualityFallback by settings.qualityFallback.collectAsState()
     val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
     val stallFallback by settings.stallFallback.collectAsState()
-    val stallSeconds by settings.stallFallbackSeconds.collectAsState()
+    val stallMillis by settings.stallFallbackMillis.collectAsState()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -283,25 +296,17 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 onToggle = settings::setQualityFallback,
             )
             if (qualityFallback) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(
-                            R.string.settings_quality_timeout,
-                            DecimalFormat("0.#").format(fallbackMillis / 1_000.0),
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedButton(
-                        onClick = { settings.setQualityFallbackMillis(fallbackMillis - AppSettings.FALLBACK_STEP_MILLIS) },
-                        enabled = fallbackMillis > AppSettings.MIN_FALLBACK_MILLIS,
-                    ) { Text("−") }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(
-                        onClick = { settings.setQualityFallbackMillis(fallbackMillis + AppSettings.FALLBACK_STEP_MILLIS) },
-                        enabled = fallbackMillis < AppSettings.MAX_FALLBACK_MILLIS,
-                    ) { Text("+") }
-                }
+                StepSlider(
+                    label = stringResource(
+                        R.string.settings_quality_timeout,
+                        DecimalFormat("0.#").format(fallbackMillis / 1_000.0),
+                    ),
+                    value = fallbackMillis,
+                    min = AppSettings.MIN_FALLBACK_MILLIS,
+                    max = AppSettings.MAX_FALLBACK_MILLIS,
+                    step = AppSettings.FALLBACK_STEP_MILLIS,
+                    onChange = settings::setQualityFallbackMillis,
+                )
             }
             Spacer(Modifier.height(8.dp))
             ToggleRow(
@@ -311,22 +316,17 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 onToggle = settings::setStallFallback,
             )
             if (stallFallback) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(R.string.settings_stall_timeout, stallSeconds),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedButton(
-                        onClick = { settings.setStallFallbackSeconds(stallSeconds - 1) },
-                        enabled = stallSeconds > AppSettings.MIN_STALL_SECONDS,
-                    ) { Text("−") }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(
-                        onClick = { settings.setStallFallbackSeconds(stallSeconds + 1) },
-                        enabled = stallSeconds < AppSettings.MAX_STALL_SECONDS,
-                    ) { Text("+") }
-                }
+                StepSlider(
+                    label = stringResource(
+                        R.string.settings_stall_timeout,
+                        DecimalFormat("0.#").format(stallMillis / 1_000.0),
+                    ),
+                    value = stallMillis,
+                    min = AppSettings.MIN_FALLBACK_MILLIS,
+                    max = AppSettings.MAX_FALLBACK_MILLIS,
+                    step = AppSettings.FALLBACK_STEP_MILLIS,
+                    onChange = settings::setStallFallbackMillis,
+                )
             }
         }
 
@@ -565,6 +565,72 @@ private fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit) 
         RadioButton(selected = selected, onClick = onSelect)
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/**
+ * A d-pad slider: the whole row takes focus, ←/→ move [value] by [step] within [min]..[max].
+ * Replaces the old −/+ buttons, which lost focus when one of them became disabled at an end.
+ */
+@Composable
+private fun StepSlider(
+    label: String,
+    value: Int,
+    min: Int,
+    max: Int,
+    step: Int,
+    onChange: (Int) -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .clip(shape)
+            .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
+            .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, shape)
+            .onPreviewKeyEvent { event ->
+                val delta = when (event.key) {
+                    Key.DirectionLeft -> -step
+                    Key.DirectionRight -> step
+                    else -> return@onPreviewKeyEvent false
+                }
+                if (event.type == KeyEventType.KeyDown) onChange((value + delta).coerceIn(min, max))
+                true
+            }
+            .focusable()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (focused) {
+                Text(
+                    "◀  ▶",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        val fraction = if (max > min) (value - min).toFloat() / (max - min) else 1f
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+            )
+        }
     }
 }
 
