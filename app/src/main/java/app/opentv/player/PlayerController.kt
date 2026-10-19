@@ -300,6 +300,18 @@ class PlayerController(
         }
     }
 
+    /** Playback position, frames drawn so far and whether there's a picture, for [StallWatch]. */
+    data class Progress(val positionMillis: Long, val renderedFrames: Long, val hasVideo: Boolean)
+
+    fun progress(): Progress {
+        val counters = player.videoDecoderCounters
+        return Progress(
+            positionMillis = player.currentPosition,
+            renderedFrames = counters?.renderedOutputBufferCount?.toLong() ?: 0L,
+            hasVideo = player.videoFormat != null && counters != null,
+        )
+    }
+
     fun retry() {
         current?.let { play(it, debounce = false) }
     }

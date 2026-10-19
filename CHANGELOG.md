@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.1 — 19 October 2026
+
+- **Switch stream if it freezes.** While you watch, a channel whose picture freezes or keeps
+  loading moves on its own to the channel's next stream ("HEVC · SAT froze → HEVC · Stel-dvs").
+  Streams take turns, so one that only hiccuped comes back later; if every other one fails to
+  start, it goes back to the one that was playing. A channel with a single stream restarts it.
+  Settings › Display & playback › Playback: on by default, wait 1–15 s (default 3). Pause,
+  rewind and fast-forward never count as a freeze.
+
 ## 0.16.0 — 19 October 2026
 
 - **Italian TV guides built in.** Settings › TV guide lists *Italia — iptv-epg.org* (~300
