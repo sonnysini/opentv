@@ -194,6 +194,9 @@ fun PlayerScreen(
     var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // Every variant of the channel failed or timed out: say so instead of spinning forever.
     var unavailable by remember { mutableStateOf(false) }
+    // The variant that was playing before a stall switch: if every other one then fails to start,
+    // go back to it rather than give up — it was working a moment ago.
+    var stallReturnId by remember { mutableStateOf<Long?>(null) }
     // The channel we were on before this one — powers the "Last channel" recall in the list.
     var previousId by remember { mutableStateOf<Long?>(null) }
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
@@ -281,6 +284,7 @@ fun PlayerScreen(
         val known = WorkingVariants.forChannel(channel)?.let { id -> preferred.firstOrNull { it.id == id } }
         tryOrder = if (known == null) preferred else listOf(known) + (preferred - known)
         tried = emptySet()
+        stallReturnId = null
         tuneTo(tryOrder.firstOrNull() ?: channel)
     }
 
@@ -288,6 +292,12 @@ fun PlayerScreen(
     fun fallBack() {
         if (started || unavailable) return
         val next = if (settings.qualityFallback.value) tryOrder.firstOrNull { it.id !in tried } else null
+        val back = stallReturnId?.let { id -> variants.firstOrNull { it.id == id } }
+        if (next == null && back != null) {
+            stallReturnId = null
+            tuneTo(back)
+            return
+        }
         if (next == null) {
             unavailable = true
             controller.stop()
@@ -318,6 +328,7 @@ fun PlayerScreen(
         )
         // The frozen feed sits out the start-up fallback this time round; it comes back in rotation later.
         tried = setOfNotNull(currentId)
+        stallReturnId = currentId
         tuneTo(next)
     }
 
@@ -370,6 +381,7 @@ fun PlayerScreen(
             when (s) {
                 is PlayerController.State.Playing -> {
                     started = true
+                    stallReturnId = null
                     val listed = listedChannel
                     val id = currentId
                     if (listed != null && id != null) WorkingVariants.remember(listed, id)
