@@ -310,6 +310,7 @@ class PlayerController(
 
             consecutiveFailures = 0
             httpFactory.setDefaultRequestProperties(mapOf("User-Agent" to request.userAgent))
+            bytesLoaded.set(0)
             _state.value = State.Buffering(request.title)
 
             val mediaItem = MediaItem.Builder()

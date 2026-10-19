@@ -83,6 +83,7 @@ class StreamInfoTest {
         // Nothing new this second (between HLS segments), but the window still has the segment.
         val quiet = meter.sample(2_000, stats(null, null, frames = 0, bytes = 2_000_000))
         assertThat(quiet.download).isEqualTo("8.0 Mb/s")
+        assertThat(quiet.downloaded).isEqualTo("2.0 MB")
     }
 
     @Test

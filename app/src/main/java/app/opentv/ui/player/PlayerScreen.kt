@@ -1037,7 +1037,8 @@ private fun StreamInfoPanel(info: StreamInfo.Snapshot?, modifier: Modifier = Mod
                 )
             }
             info.container?.let { add(stringResource(R.string.stream_info_format) to it) }
-            info.download?.let { add(stringResource(R.string.stream_info_network) to it) }
+            listOfNotNull(info.download, info.downloaded).takeIf { it.isNotEmpty() }
+                ?.let { add(stringResource(R.string.stream_info_network) to it.joinToString(" · ")) }
             add(stringResource(R.string.stream_info_buffer) to String.format(Locale.getDefault(), "%.1f s", info.bufferedSeconds))
             info.liveDelaySeconds?.let {
                 add(stringResource(R.string.stream_info_live_delay) to String.format(Locale.getDefault(), "%.1f s", it))

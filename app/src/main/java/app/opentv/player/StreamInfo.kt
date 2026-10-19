@@ -111,6 +111,14 @@ object StreamInfo {
         else -> "${(bitsPerSecond / 1000.0).roundToInt()} kb/s"
     }
 
+    /** `850 KB`, `12.4 MB`, `1.2 GB`. */
+    fun sizeLabel(bytes: Long): String? = when {
+        bytes <= 0 -> null
+        bytes >= 1_000_000_000 -> String.format(Locale.ROOT, "%.1f GB", bytes / 1e9)
+        bytes >= 1_000_000 -> String.format(Locale.ROOT, "%.1f MB", bytes / 1e6)
+        else -> "${(bytes / 1000.0).roundToInt()} KB"
+    }
+
     /** `48 kHz`, `44.1 kHz`. */
     fun sampleRateLabel(hz: Int): String? {
         if (hz <= 0) return null
@@ -148,6 +156,7 @@ object StreamInfo {
         val renderedFrames: Long,
         val droppedFrames: Int,
         val download: String?,
+        val downloaded: String?,
         val bufferedSeconds: Float,
         val liveDelaySeconds: Float?,
     ) {
@@ -171,8 +180,8 @@ object StreamInfo {
     class Meter {
         private class Point(val at: Long, val frames: Long, val bytes: Long)
 
-        // The last few seconds of samples: HLS arrives a segment at a time, so a one-second
-        // window would often see nothing downloaded at all.
+        // The last few seconds of samples: HLS arrives a segment (6–10 s of video) at a time, so a
+        // short window would often see nothing downloaded at all.
         private val window = ArrayDeque<Point>()
         private var fps = 0f
         private var bitsPerSecond = 0L
@@ -220,6 +229,7 @@ object StreamInfo {
                 renderedFrames = stats.renderedFrames,
                 droppedFrames = stats.droppedFrames,
                 download = bitrateLabel(bitsPerSecond),
+                downloaded = sizeLabel(stats.bytesLoaded),
                 bufferedSeconds = stats.bufferedMillis / 1000f,
                 liveDelaySeconds = stats.liveOffsetMillis.takeIf { it != C.TIME_UNSET && it >= 0 }?.let { it / 1000f },
             )
@@ -227,7 +237,7 @@ object StreamInfo {
 
         private companion object {
             const val MIN_SPAN_MILLIS = 500L
-            const val WINDOW_MILLIS = 5_000L
+            const val WINDOW_MILLIS = 15_000L
         }
     }
 
