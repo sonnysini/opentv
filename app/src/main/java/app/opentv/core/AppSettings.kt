@@ -165,6 +165,15 @@ class AppSettings private constructor(context: Context) {
         _mergeCategorySources.value = on
     }
 
+    /** Drop the restream source from a lone group's name: 'Bambini (Hermes)' reads "Bambini". */
+    private val _stripCategorySources = MutableStateFlow(prefs.getBoolean(KEY_STRIP_CATEGORY_SOURCES, true))
+    val stripCategorySources: StateFlow<Boolean> = _stripCategorySources.asStateFlow()
+
+    fun setStripCategorySources(on: Boolean) {
+        prefs.edit().putBoolean(KEY_STRIP_CATEGORY_SOURCES, on).apply()
+        _stripCategorySources.value = on
+    }
+
     private val _foreignSportOff = MutableStateFlow(prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false))
     val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
 
@@ -626,6 +635,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_FORCED_ON_CATS = "forced_on_categories"
         private const val KEY_ITALIAN_ONLY = "italian_only"
         private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
+        private const val KEY_STRIP_CATEGORY_SOURCES = "strip_category_sources"
         private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"

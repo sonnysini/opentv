@@ -75,6 +75,19 @@ class CategoryFamilyTest {
     }
 
     @Test
+    fun `lone group name drops its source but keeps quality and timing`() {
+        assertThat(CategoryFamily.displayName("🧸 Bambini (Hermes)")).isEqualTo("🧸 Bambini")
+        assertThat(CategoryFamily.displayName("🏀 Basket LNP | Serie A2 (Hermes)")).isEqualTo("🏀 Basket LNP | Serie A2")
+        assertThat(CategoryFamily.displayName("🏀 Basket LNP| STELLINA")).isEqualTo("🏀 Basket LNP")
+        assertThat(CategoryFamily.displayName("🇮🇹 Top Italia (HI-DEF)")).isEqualTo("🇮🇹 Top Italia")
+        assertThat(CategoryFamily.displayName("🏐 Volley Pass Kaly")).isEqualTo("🏐 Volley Pass")
+        assertThat(CategoryFamily.displayName("🏎️ F1 LIVE")).isNull()
+        assertThat(CategoryFamily.displayName("📺 Sky Primafila 4K")).isNull()
+        assertThat(CategoryFamily.displayName("🎬 DAZN RAW")).isNull()
+        assertThat(CategoryFamily.displayName("🇮🇹 Top Italia")).isNull()
+    }
+
+    @Test
     fun `learns a source used across groups, not a one-off bracket`() {
         val tags = CategoryFamily.learnSourceTags(
             listOf("⚽ Sky Sport (Zeus)", "🧸 Bambini (Zeus)", "⚽ Sky Calcio (Only Event)", "🎬 Cinema (4K)", "📺 Serie (4K)", "🌍 Nfl (Pay-Per-View)"),
