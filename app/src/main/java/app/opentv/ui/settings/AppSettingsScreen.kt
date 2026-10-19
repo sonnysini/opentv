@@ -84,6 +84,8 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val preferredQuality by settings.preferredQuality.collectAsState()
     val qualityFallback by settings.qualityFallback.collectAsState()
     val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
+    val stallFallback by settings.stallFallback.collectAsState()
+    val stallSeconds by settings.stallFallbackSeconds.collectAsState()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -298,6 +300,31 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                     OutlinedButton(
                         onClick = { settings.setQualityFallbackMillis(fallbackMillis + AppSettings.FALLBACK_STEP_MILLIS) },
                         enabled = fallbackMillis < AppSettings.MAX_FALLBACK_MILLIS,
+                    ) { Text("+") }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = stringResource(R.string.settings_stall_fallback_title),
+                subtitle = stringResource(R.string.settings_stall_fallback_subtitle),
+                checked = stallFallback,
+                onToggle = settings::setStallFallback,
+            )
+            if (stallFallback) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.settings_stall_timeout, stallSeconds),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedButton(
+                        onClick = { settings.setStallFallbackSeconds(stallSeconds - 1) },
+                        enabled = stallSeconds > AppSettings.MIN_STALL_SECONDS,
+                    ) { Text("−") }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = { settings.setStallFallbackSeconds(stallSeconds + 1) },
+                        enabled = stallSeconds < AppSettings.MAX_STALL_SECONDS,
                     ) { Text("+") }
                 }
             }

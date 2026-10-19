@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.player
 
+import android.os.SystemClock
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -109,6 +110,7 @@ import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
+import app.opentv.player.StallWatch
 import app.opentv.player.WorkingVariants
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
@@ -197,6 +199,8 @@ fun PlayerScreen(
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
     var numberEntry by remember { mutableStateOf("") }
     var paused by remember { mutableStateOf(false) }
+    // Bumped on a seek or a same-stream retry so the stall watch starts its clock over.
+    var watchEpoch by remember { mutableIntStateOf(0) }
     var resizeMode by remember { mutableIntStateOf(settings.playerResizeMode.value) }
 
     var controlsVisible by remember { mutableStateOf(true) }
@@ -298,6 +302,25 @@ fun PlayerScreen(
         tuneTo(next)
     }
 
+    /** A playing stream stopped moving: on to the next variant, wrapping round, or retry the only one. */
+    fun stallSwitch() {
+        val next = StallWatch.nextAfter(tryOrder.ifEmpty { variants }, currentId) { it.id }
+        if (next == null) {
+            controller.retry()
+            watchEpoch++
+            return
+        }
+        val stalled = variants.firstOrNull { it.id == currentId }
+        fallbackNotice = context.getString(
+            R.string.player_stall_fallback,
+            stalled?.let { it.qualityLabel.ifBlank { it.shownName } }.orEmpty(),
+            next.qualityLabel.ifBlank { next.shownName },
+        )
+        // The frozen feed sits out the start-up fallback this time round; it comes back in rotation later.
+        tried = setOfNotNull(currentId)
+        tuneTo(next)
+    }
+
     fun playChannelId(id: Long) {
         // Remember where we came from so "Last channel" can bounce straight back. Quality switches
         // go through tuneTo directly, so they never count as a channel change here.
@@ -363,6 +386,25 @@ fun PlayerScreen(
         if (attempt == 0) return@LaunchedEffect
         delay(settings.qualityFallbackMillis.value.toLong())
         fallBack()
+    }
+
+    // While watching: a stream that stops moving — stuck loading, an error the silent restart can't
+    // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
+    val stallFallback by settings.stallFallback.collectAsState()
+    val stallSeconds by settings.stallFallbackSeconds.collectAsState()
+    LaunchedEffect(started, paused, stallFallback, stallSeconds, currentId, watchEpoch) {
+        if (!started || paused || !stallFallback) return@LaunchedEffect
+        val watch = StallWatch(stallSeconds * 1_000L)
+        while (true) {
+            delay(StallWatch.SAMPLE_MILLIS)
+            // Paused from outside the bar (lifecycle, PiP): not a stall.
+            if (!controller.player.playWhenReady) { watch.reset(); continue }
+            val p = controller.progress()
+            if (watch.sample(SystemClock.elapsedRealtime(), p.positionMillis, p.renderedFrames, p.hasVideo)) {
+                stallSwitch()
+                return@LaunchedEffect
+            }
+        }
     }
 
     LaunchedEffect(fallbackNotice) {
@@ -745,7 +787,7 @@ fun PlayerScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (controller.isSeekable) {
                         BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
-                            controller.seekBackward(); interaction++
+                            controller.seekBackward(); watchEpoch++; interaction++
                         }
                         Spacer(Modifier.width(10.dp))
                     }
@@ -762,7 +804,7 @@ fun PlayerScreen(
                     if (controller.isSeekable) {
                         Spacer(Modifier.width(10.dp))
                         BarChip(Icons.Filled.FastForward, stringResource(R.string.player_forward), false) {
-                            controller.seekForward(); interaction++
+                            controller.seekForward(); watchEpoch++; interaction++
                         }
                     }
 

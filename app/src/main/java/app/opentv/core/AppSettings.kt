@@ -297,6 +297,26 @@ class AppSettings private constructor(context: Context) {
         _qualityFallbackMillis.value = ms
     }
 
+    /** While watching, a stream that stops moving for [stallFallbackSeconds] moves to the next variant. */
+    private val _stallFallback = MutableStateFlow(prefs.getBoolean(KEY_STALL_FALLBACK, true))
+    val stallFallback: StateFlow<Boolean> = _stallFallback.asStateFlow()
+
+    fun setStallFallback(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_STALL_FALLBACK, enabled).apply()
+        _stallFallback.value = enabled
+    }
+
+    private val _stallFallbackSeconds = MutableStateFlow(
+        prefs.getInt(KEY_STALL_FALLBACK_SECONDS, DEFAULT_STALL_SECONDS).coerceIn(MIN_STALL_SECONDS, MAX_STALL_SECONDS),
+    )
+    val stallFallbackSeconds: StateFlow<Int> = _stallFallbackSeconds.asStateFlow()
+
+    fun setStallFallbackSeconds(seconds: Int) {
+        val s = seconds.coerceIn(MIN_STALL_SECONDS, MAX_STALL_SECONDS)
+        prefs.edit().putInt(KEY_STALL_FALLBACK_SECONDS, s).apply()
+        _stallFallbackSeconds.value = s
+    }
+
     /**
      * Whole-UI zoom in percent, so a TV viewed from afar can fit more rows. 100% is
      * [UI_SCALE_BASE] of the system density; the 0.14.5 pref (100% = system density) is migrated.
@@ -674,6 +694,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK = "quality_fallback"
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
+        private const val KEY_STALL_FALLBACK = "stall_fallback"
+        private const val KEY_STALL_FALLBACK_SECONDS = "stall_fallback_seconds"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
         private const val KEY_UI_SCALE = "ui_scale"
 
@@ -687,6 +709,9 @@ class AppSettings private constructor(context: Context) {
         const val MAX_FALLBACK_MILLIS = 10_000
         const val FALLBACK_STEP_MILLIS = 500
         private const val DEFAULT_FALLBACK_SECONDS = 4
+        const val MIN_STALL_SECONDS = 1
+        const val MAX_STALL_SECONDS = 15
+        private const val DEFAULT_STALL_SECONDS = 3
 
         @Volatile private var instance: AppSettings? = null
 
