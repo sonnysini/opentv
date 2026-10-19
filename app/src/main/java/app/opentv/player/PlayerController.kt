@@ -8,17 +8,24 @@ package app.opentv.player
 import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -31,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Owns the single [ExoPlayer] instance and everything about switching what it is playing.
@@ -117,6 +125,11 @@ class PlayerController(
     private var current: Request? = null
     private var consecutiveFailures = 0
 
+    /** Bytes read off the network so far, for the download speed in the stream info panel. */
+    private val bytesLoaded = AtomicLong()
+    @Volatile private var videoDecoderName: String? = null
+    @Volatile private var audioDecoderName: String? = null
+
     /**
      * Held so the User-Agent can be swapped per source before each tune.
      *
@@ -127,6 +140,14 @@ class PlayerController(
      */
     private val httpFactory = OkHttpDataSource.Factory(httpClient).apply {
         setDefaultRequestProperties(mapOf("User-Agent" to DEFAULT_USER_AGENT))
+        setTransferListener(object : TransferListener {
+            override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+                bytesLoaded.addAndGet(bytesTransferred.toLong())
+            }
+        })
     }
 
     private val dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
@@ -214,6 +235,25 @@ class PlayerController(
         )
         .build()
         .apply {
+            addAnalyticsListener(object : AnalyticsListener {
+                override fun onVideoDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long,
+                ) {
+                    videoDecoderName = decoderName
+                }
+
+                override fun onAudioDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long,
+                ) {
+                    audioDecoderName = decoderName
+                }
+            })
             addListener(object : Player.Listener {
                 override fun onTracksChanged(tracks: Tracks) {
                     _tracks.value = tracks
@@ -270,6 +310,7 @@ class PlayerController(
 
             consecutiveFailures = 0
             httpFactory.setDefaultRequestProperties(mapOf("User-Agent" to request.userAgent))
+            bytesLoaded.set(0)
             _state.value = State.Buffering(request.title)
 
             val mediaItem = MediaItem.Builder()
@@ -310,6 +351,48 @@ class PlayerController(
             renderedFrames = counters?.renderedOutputBufferCount?.toLong() ?: 0L,
             hasVideo = player.videoFormat != null && counters != null,
         )
+    }
+
+    /** Raw facts about the stream on screen, sampled for the info badges and panel. */
+    data class Stats(
+        val video: Format?,
+        val audio: Format?,
+        val width: Int,
+        val height: Int,
+        val videoDecoder: String?,
+        val audioDecoder: String?,
+        val renderedFrames: Long,
+        val droppedFrames: Int,
+        val bufferedMillis: Long,
+        val liveOffsetMillis: Long,
+        val bytesLoaded: Long,
+        /** HLS, DASH or MPEG-TS, told from the stream's address; null when it doesn't say. */
+        val streamMime: String?,
+    )
+
+    fun stats(): Stats {
+        val size = player.videoSize
+        val video = player.videoFormat
+        return Stats(
+            video = video,
+            audio = player.audioFormat,
+            width = size.width.takeIf { it > 0 } ?: video?.width ?: 0,
+            height = size.height.takeIf { it > 0 } ?: video?.height ?: 0,
+            videoDecoder = videoDecoderName.takeIf { video != null },
+            audioDecoder = audioDecoderName.takeIf { player.audioFormat != null },
+            renderedFrames = player.videoDecoderCounters?.renderedOutputBufferCount?.toLong() ?: 0L,
+            droppedFrames = player.videoDecoderCounters?.droppedBufferCount ?: 0,
+            bufferedMillis = player.totalBufferedDuration,
+            liveOffsetMillis = player.currentLiveOffset,
+            bytesLoaded = bytesLoaded.get(),
+            streamMime = player.currentMediaItem?.localConfiguration?.let { streamMimeOf(it.uri, it.mimeType) },
+        )
+    }
+
+    private fun streamMimeOf(uri: android.net.Uri, declared: String?): String? = when (Util.inferContentTypeForUriAndMimeType(uri, declared)) {
+        C.CONTENT_TYPE_HLS -> MimeTypes.APPLICATION_M3U8
+        C.CONTENT_TYPE_DASH -> MimeTypes.APPLICATION_MPD
+        else -> if (uri.path.orEmpty().endsWith(".ts", ignoreCase = true)) MimeTypes.VIDEO_MP2T else null
     }
 
     fun retry() {

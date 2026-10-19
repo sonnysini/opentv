@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.16.4 — 19 October 2026
+
+- **New player bar layout.** The channel logo sits large on the left and the rest of the bar runs
+  to the right edge of the screen: channel name, clock, the programme with its progress bar and
+  the minutes left, a wider synopsis and what's on next.
+- **Stream specs, Kodi-style.** Next to the channel name, small tags show what's actually on
+  screen: resolution, video codec, frame rate, HDR and the audio format (e.g. `1080p` `HEVC`
+  `50fps` `AC3 5.1`).
+- **Info button** in the bar: opens a technical panel (top right) with video and audio details,
+  hardware or software decoder, frames shown and dropped, download speed, buffer and delay
+  behind live, updated every second. It stays up while you zap until you turn it off.
+
 ## 0.16.3 — 19 October 2026
 
 - **Back up and restore your settings.** On the phone page (Settings › Manage on phone or laptop),

@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -87,6 +88,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -111,6 +113,7 @@ import app.opentv.data.model.shownName
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
 import app.opentv.player.StallWatch
+import app.opentv.player.StreamInfo
 import app.opentv.player.WorkingVariants
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
@@ -213,6 +216,9 @@ fun PlayerScreen(
     var onAir by remember { mutableStateOf<OnAir?>(null) }
     var clock by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var panel by remember { mutableStateOf(Panel.NONE) }
+    // The Kodi-style technical panel (top right). Stays up across zaps until toggled off.
+    var showInfo by remember { mutableStateOf(false) }
+    var streamInfo by remember { mutableStateOf<StreamInfo.Snapshot?>(null) }
     var channelListVisible by remember { mutableStateOf(false) }
     var interaction by remember { mutableIntStateOf(0) }
     // Offered once per session the first time the user records here while OpenTV isn't exempt from
@@ -445,11 +451,23 @@ fun PlayerScreen(
         }
     }
 
-    // Keep the progress bar moving while the panel is on screen.
+    // Keep the clock and progress bar moving while the panel is on screen; ticks on the minute.
     LaunchedEffect(controlsVisible) {
         while (controlsVisible) {
-            clock = System.currentTimeMillis()
-            delay(15_000L)
+            val now = System.currentTimeMillis()
+            clock = now
+            delay((60_000L - now % 60_000L).coerceAtMost(15_000L))
+        }
+    }
+
+    // Stream specs for the bar's badges and the info panel, sampled once a second while either
+    // is on screen. A new variant starts a fresh meter so its frame rate isn't averaged with the old.
+    LaunchedEffect(controlsVisible, showInfo, currentId) {
+        if (!controlsVisible && !showInfo) return@LaunchedEffect
+        val meter = StreamInfo.Meter()
+        while (true) {
+            streamInfo = meter.sample(SystemClock.elapsedRealtime(), controller.stats())
+            delay(STREAM_INFO_SAMPLE_MILLIS)
         }
     }
 
@@ -643,6 +661,10 @@ fun PlayerScreen(
             }
         }
 
+        if (showInfo && !inPip) {
+            StreamInfoPanel(streamInfo, Modifier.align(Alignment.TopEnd).padding(32.dp))
+        }
+
         // The channel number as you type it, top-right, until it resolves.
         if (numberEntry.isNotEmpty() && !inPip) {
             Box(
@@ -777,83 +799,126 @@ fun PlayerScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                if (channelTitle.isNotEmpty()) {
-                    Text(
-                        channelTitle,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                onAir?.let { info ->
-                    OnAirPanel(info, clock)
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                // Icon-only buttons; the focused one shows its name above it (BarChip), so the
-                // spacer above leaves room for that label.
-                Spacer(Modifier.height(20.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (controller.isSeekable) {
-                        BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
-                            controller.seekBackward(); watchEpoch++; interaction++
+                // The channel's logo, large, on the left; everything else runs from it to the right edge.
+                val logoUrl = (variants.firstOrNull { it.id == currentId }?.logoUrl ?: listedChannel?.logoUrl)
+                    ?.takeIf { it.isNotBlank() }
+                Row {
+                    if (logoUrl != null) {
+                        Box(
+                            Modifier
+                                .padding(top = 4.dp)
+                                .size(LOGO_SIZE)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .padding(14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AsyncImage(
+                                model = logoUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(28.dp))
                     }
-                    BarChip(
-                        icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                        label = if (paused) stringResource(R.string.common_play) else stringResource(R.string.player_pause),
-                        selected = false,
-                        focusRequester = barFocus,
-                    ) {
-                        paused = !paused
-                        controller.player.playWhenReady = !paused
-                        interaction++
-                    }
-                    if (controller.isSeekable) {
-                        Spacer(Modifier.width(10.dp))
-                        BarChip(Icons.Filled.FastForward, stringResource(R.string.player_forward), false) {
-                            controller.seekForward(); watchEpoch++; interaction++
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    channelTitle,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                streamInfo?.badges?.takeIf { it.isNotEmpty() }?.let { badges ->
+                                    Spacer(Modifier.width(16.dp))
+                                    StreamBadges(badges)
+                                }
+                            }
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                clockText(clock),
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = Color.White.copy(alpha = 0.9f),
+                            )
                         }
-                    }
+                        Spacer(Modifier.height(12.dp))
 
-                    // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
-                    Spacer(Modifier.width(28.dp))
-                    if (variants.size > 1) {
-                        BarChip(Icons.Filled.HighQuality, stringResource(R.string.player_quality), panel == Panel.QUALITY) {
-                            panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
+                        onAir?.let { info ->
+                            OnAirPanel(info, clock)
+                            Spacer(Modifier.height(16.dp))
                         }
-                        Spacer(Modifier.width(10.dp))
-                    }
-                    BarChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), panel == Panel.AUDIO) {
-                        panel = if (panel == Panel.AUDIO) Panel.NONE else Panel.AUDIO; interaction++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    BarChip(Icons.Filled.Subtitles, stringResource(R.string.player_subtitles), panel == Panel.SUBTITLES) {
-                        panel = if (panel == Panel.SUBTITLES) Panel.NONE else Panel.SUBTITLES; interaction++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    BarChip(Icons.Filled.AspectRatio, stringResource(R.string.player_aspect), panel == Panel.ASPECT) {
-                        panel = if (panel == Panel.ASPECT) Panel.NONE else Panel.ASPECT; interaction++
-                    }
 
-                    // Record sits apart so it isn't hit by accident.
-                    Spacer(Modifier.width(28.dp))
-                    val recordingThis = activeRecordings.any { it.channelId == currentId }
-                    BarChip(
-                        icon = Icons.Filled.FiberManualRecord,
-                        label = if (recordingThis) stringResource(R.string.common_stop) else stringResource(R.string.player_record),
-                        selected = recordingThis,
-                        iconTint = Color(0xFFE53935),
-                    ) { toggleRecord() }
-                    if (pipSupported) {
-                        Spacer(Modifier.width(10.dp))
-                        BarChip(Icons.Filled.PictureInPictureAlt, stringResource(R.string.player_pop_out), false) {
-                            (context.findActivity() as? app.opentv.MainActivity)?.enterPipNow()
-                            interaction++
+                        // Icon-only buttons; the focused one shows its name above it (BarChip), so the
+                        // spacer above leaves room for that label.
+                        Spacer(Modifier.height(20.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (controller.isSeekable) {
+                                BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
+                                    controller.seekBackward(); watchEpoch++; interaction++
+                                }
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            BarChip(
+                                icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                                label = if (paused) stringResource(R.string.common_play) else stringResource(R.string.player_pause),
+                                selected = false,
+                                focusRequester = barFocus,
+                            ) {
+                                paused = !paused
+                                controller.player.playWhenReady = !paused
+                                interaction++
+                            }
+                            if (controller.isSeekable) {
+                                Spacer(Modifier.width(10.dp))
+                                BarChip(Icons.Filled.FastForward, stringResource(R.string.player_forward), false) {
+                                    controller.seekForward(); watchEpoch++; interaction++
+                                }
+                            }
+
+                            // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
+                            Spacer(Modifier.width(28.dp))
+                            if (variants.size > 1) {
+                                BarChip(Icons.Filled.HighQuality, stringResource(R.string.player_quality), panel == Panel.QUALITY) {
+                                    panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
+                                }
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            BarChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), panel == Panel.AUDIO) {
+                                panel = if (panel == Panel.AUDIO) Panel.NONE else Panel.AUDIO; interaction++
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            BarChip(Icons.Filled.Subtitles, stringResource(R.string.player_subtitles), panel == Panel.SUBTITLES) {
+                                panel = if (panel == Panel.SUBTITLES) Panel.NONE else Panel.SUBTITLES; interaction++
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            BarChip(Icons.Filled.AspectRatio, stringResource(R.string.player_aspect), panel == Panel.ASPECT) {
+                                panel = if (panel == Panel.ASPECT) Panel.NONE else Panel.ASPECT; interaction++
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            BarChip(Icons.Filled.Info, stringResource(R.string.player_info), showInfo) {
+                                showInfo = !showInfo; interaction++
+                            }
+
+                            // Record sits apart so it isn't hit by accident.
+                            Spacer(Modifier.width(28.dp))
+                            val recordingThis = activeRecordings.any { it.channelId == currentId }
+                            BarChip(
+                                icon = Icons.Filled.FiberManualRecord,
+                                label = if (recordingThis) stringResource(R.string.common_stop) else stringResource(R.string.player_record),
+                                selected = recordingThis,
+                                iconTint = Color(0xFFE53935),
+                            ) { toggleRecord() }
+                            if (pipSupported) {
+                                Spacer(Modifier.width(10.dp))
+                                BarChip(Icons.Filled.PictureInPictureAlt, stringResource(R.string.player_pop_out), false) {
+                                    (context.findActivity() as? app.opentv.MainActivity)?.enterPipNow()
+                                    interaction++
+                                }
+                            }
                         }
                     }
                 }
@@ -930,10 +995,90 @@ fun PlayerScreen(
 /** The guide's current and following programme for the channel on screen; either may be missing. */
 private data class OnAir(val now: Programme?, val next: Programme?)
 
+/** The stream's specs as small outlined tags next to the channel name, Kodi-style. */
+@Composable
+private fun StreamBadges(badges: List<String>) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        badges.forEach { badge ->
+            Text(
+                badge,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.9f),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .border(1.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(5.dp))
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+/** The full technical read-out, like Kodi's codec info: what the stream is and how it's playing. */
+@Composable
+private fun StreamInfoPanel(info: StreamInfo.Snapshot?, modifier: Modifier = Modifier) {
+    val hardware = stringResource(R.string.stream_info_hardware)
+    val software = stringResource(R.string.stream_info_software)
+    val rows = buildList {
+        if (info != null) {
+            listOfNotNull(info.size, info.videoCodec, info.frameRate?.let { "$it fps" }, info.hdr ?: "SDR".takeIf { info.videoCodec != null }, info.videoBitrate)
+                .takeIf { it.isNotEmpty() }
+                ?.let { add(stringResource(R.string.stream_info_video) to it.joinToString(" · ")) }
+            listOfNotNull(info.audioCodec, info.channels, info.sampleRate, info.audioBitrate, info.audioLanguage)
+                .takeIf { it.isNotEmpty() }
+                ?.let { add(stringResource(R.string.stream_info_audio) to it.joinToString(" · ")) }
+            info.videoDecoder?.let { name ->
+                add(stringResource(R.string.stream_info_decoder) to "${if (info.videoDecoderSoftware) software else hardware} · $name")
+            }
+            if (info.videoDecoder != null) {
+                add(
+                    stringResource(R.string.stream_info_frames) to
+                        stringResource(R.string.stream_info_frames_value, info.renderedFrames, info.droppedFrames),
+                )
+            }
+            info.container?.let { add(stringResource(R.string.stream_info_format) to it) }
+            listOfNotNull(info.download, info.downloaded).takeIf { it.isNotEmpty() }
+                ?.let { add(stringResource(R.string.stream_info_network) to it.joinToString(" · ")) }
+            add(stringResource(R.string.stream_info_buffer) to String.format(Locale.getDefault(), "%.1f s", info.bufferedSeconds))
+            info.liveDelaySeconds?.let {
+                add(stringResource(R.string.stream_info_live_delay) to String.format(Locale.getDefault(), "%.1f s", it))
+            }
+        }
+    }
+    Column(
+        modifier
+            .widthIn(max = 560.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.Black.copy(alpha = 0.82f))
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+    ) {
+        Text(
+            stringResource(R.string.stream_info_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(10.dp))
+        if (info == null || (info.videoCodec == null && info.audioCodec == null)) {
+            Text(stringResource(R.string.stream_info_waiting), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+        }
+        rows.forEach { (label, value) ->
+            Row(Modifier.padding(vertical = 2.dp)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.width(150.dp),
+                )
+                Text(value, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            }
+        }
+    }
+}
+
 /** "What's on" block in the player bar: title, times and progress, a short synopsis, then what's next. */
 @Composable
 private fun OnAirPanel(info: OnAir, clock: Long) {
-    Column(Modifier.widthIn(max = 900.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         info.now?.let { now ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -954,18 +1099,28 @@ private fun OnAirPanel(info: OnAir, clock: Long) {
             val progress = if (now.durationMillis > 0) {
                 ((clock - now.startUtcMillis).toFloat() / now.durationMillis).coerceIn(0f, 1f)
             } else 0f
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = 0.25f)),
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
-                        .fillMaxWidth(progress)
+                        .weight(1f)
                         .height(4.dp)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.25f)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(progress)
+                            .height(4.dp)
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                // Rounded up, so the last minute still reads "−1 min" rather than nothing.
+                val minutesLeft = ((now.endUtcMillis - clock + 59_999L) / 60_000L).coerceAtLeast(0L)
+                Text(
+                    stringResource(R.string.player_minutes_left, minutesLeft.toInt()),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White.copy(alpha = 0.75f),
                 )
             }
             now.description?.takeIf { it.isNotBlank() }?.let { desc ->
@@ -1267,6 +1422,8 @@ private const val CONTROLS_TIMEOUT_MILLIS = 5_000L
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
+private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
+private val LOGO_SIZE = 128.dp
 
 /** Maps a remote's number keys (top row and numeric keypad) to a digit, or null for other keys. */
 private fun keyToDigit(key: Key): Char? = when (key) {
