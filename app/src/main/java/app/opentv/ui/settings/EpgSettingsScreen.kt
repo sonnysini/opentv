@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
@@ -51,6 +52,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
+import app.opentv.core.ServiceLocator
 import app.opentv.data.model.EpgFeed
 import app.opentv.ui.EpgViewModel
 
@@ -69,6 +71,9 @@ fun EpgSettingsScreen(
     viewModel: EpgViewModel = viewModel(),
 ) {
     val ui by viewModel.ui.collectAsState()
+    val context = LocalContext.current
+    val settings = remember { ServiceLocator.get(context).settings }
+    val preferGuideLogos by settings.preferGuideLogos.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     var newName by remember { mutableStateOf("") }
@@ -108,6 +113,14 @@ fun EpgSettingsScreen(
         Spacer(Modifier.height(16.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+                SwitchRow(
+                    label = stringResource(R.string.epg_prefer_logos),
+                    subtitle = stringResource(R.string.epg_prefer_logos_desc),
+                    checked = preferGuideLogos,
+                    onToggle = settings::setPreferGuideLogos,
+                )
+            }
             items(ui.feeds, key = { it.id }) { feed ->
                 FeedRow(
                     feed = feed,

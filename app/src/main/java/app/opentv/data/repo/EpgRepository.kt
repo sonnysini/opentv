@@ -241,12 +241,13 @@ class EpgRepository(
                 val stats = XmltvParser.parse(
                     input = stream,
                     feedId = feed.id,
-                    onChannelAlias = { id, displayName ->
+                    onChannelAlias = { id, displayName, iconUrl ->
                         aliases += EpgChannelAlias(
                             feedId = feed.id,
                             epgId = id,
                             displayName = displayName ?: id,
                             normalizedKey = ChannelNameNormalizer.normalize(displayName ?: id).groupKey,
+                            iconUrl = iconUrl,
                         )
                     },
                     onProgramme = { programme ->
@@ -330,21 +331,42 @@ class EpgRepository(
         // guide that lists a channel but never fills it (epgshare's empty `TG.NORBA.24.it`)
         // must not win over another guide that does.
         val counts = programmeDao.programmeCounts().associate { it.epgId to it.n }
-        val enabledFeeds = feedDao.enabled().map { it.id }.toHashSet()
+        val enabled = feedDao.enabled()
+        val enabledFeeds = enabled.map { it.id }.toHashSet()
+        val providerFeeds = enabled.filter { it.providerSourceId != null }.map { it.id }.toHashSet()
+        val guideChannels = aliasDao.all().filter { it.feedId in enabledFeeds && (counts[it.epgId] ?: 0) > 0 }
         val index = EpgMatcher.buildIndexOf(
-            aliasDao.all()
-                .filter { it.feedId in enabledFeeds && (counts[it.epgId] ?: 0) > 0 }
-                .map { EpgMatcher.GuideChannel(it.epgId, it.displayName, it.feedId, counts[it.epgId] ?: 0) },
+            guideChannels.map { EpgMatcher.GuideChannel(it.epgId, it.displayName, it.feedId, counts[it.epgId] ?: 0) },
         )
         fun populated(id: String?) = id != null && (counts[id] ?: 0) > 0
 
+        // Each channel's guide logo: shown where the provider has none, or instead of the
+        // provider's by choice. Still the user's data (their guide feeds), never bundled. The
+        // provider's own guide mostly repeats the provider's logos, so a free or added guide's
+        // icon wins: by the channel's own key first, then by the key of the guide it is matched to.
+        val guideIcons = HashMap<String, String>()
+        val freeIconByKey = HashMap<String, String>()
+        val keyOfGuide = HashMap<String, String>()
+        for (alias in guideChannels) {
+            keyOfGuide.putIfAbsent(alias.epgId, alias.normalizedKey)
+            val icon = alias.iconUrl ?: continue
+            guideIcons.putIfAbsent(alias.epgId, icon)
+            if (alias.feedId !in providerFeeds) freeIconByKey.putIfAbsent(alias.normalizedKey, icon)
+        }
+        fun guideLogoOf(groupKey: String, guideId: String?): String? =
+            freeIconByKey[groupKey]
+                ?: guideId?.let { keyOfGuide[it] }?.let(freeIconByKey::get)
+                ?: guideId?.let(guideIcons::get)
+
         val channels = channelDao.allForMatching()
         var matched = 0
+        var guideLogos = 0
 
         // Pass 1: ordinary channels. Remember each one's working guide and logo by key, for
         // the timeshift copies in pass 2.
         val baseGuide = HashMap<String, String>()
         val baseLogo = HashMap<String, String>()
+        val baseGuideLogo = HashMap<String, String>()
         val shifted = ArrayList<Pair<Channel, Pair<String, Int>>>()
         for (channel in channels) {
             val split = TimeShift.splitKey(channel.groupKey)
@@ -361,6 +383,10 @@ class EpgRepository(
                 baseGuide.putIfAbsent(channel.groupKey, working)
             }
             channel.logoUrl?.takeIf { it.isNotBlank() }?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
+            val guideLogo = guideLogoOf(channel.groupKey, working)
+            guideLogo?.let { baseGuideLogo.putIfAbsent(channel.groupKey, it) }
+            if (guideLogo != null) guideLogos++
+            if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
         }
 
         // Pass 2: `+1`/`+2`/`+3` copies. Their own guide if one exists; otherwise the base
@@ -380,12 +406,18 @@ class EpgRepository(
             if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
             if (populated(channel.epgOverrideId) || providerOwn != null || newMatch != null) matched++
             if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
+            // The base channel's logo first: a `+1` is the same channel, and guides often give
+            // the copies a poorer icon or a mismatched one.
+            val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own).firstOrNull(::populated)
+            val guideLogo = baseGuideLogo[baseKey] ?: ownGuide?.let { guideLogoOf(channel.groupKey, it) }
+            if (guideLogo != null) guideLogos++
+            if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
         }
 
         Log.i(
             TAG,
             "Matcher: $matched of ${channels.size} channels have a working guide " +
-                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies)",
+                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo)",
         )
         return matched to channels.size
     }

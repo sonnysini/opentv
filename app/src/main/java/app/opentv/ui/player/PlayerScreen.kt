@@ -117,6 +117,7 @@ import app.opentv.player.StreamInfo
 import app.opentv.player.WorkingVariants
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
+import app.opentv.ui.channels.shownLogo
 import coil.compose.AsyncImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -800,7 +801,7 @@ fun PlayerScreen(
                 }
 
                 // The channel's logo, large, on the left; everything else runs from it to the right edge.
-                val logoUrl = (variants.firstOrNull { it.id == currentId }?.logoUrl ?: listedChannel?.logoUrl)
+                val logoUrl = (variants.firstOrNull { it.id == currentId }?.shownLogo() ?: listedChannel?.shownLogo())
                     ?.takeIf { it.isNotBlank() }
                 Row {
                     if (logoUrl != null) {
@@ -1176,22 +1177,25 @@ private fun ChannelListRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // A "Last" tag, or the channel number if the provider gives one — a fixed-width slot so
-        // the logos and names line up down the list.
-        Text(
-            leadingLabel ?: item.number?.toString().orEmpty(),
-            style = MaterialTheme.typography.labelMedium,
-            color = fg.copy(alpha = 0.7f),
-            maxLines = 1,
-            modifier = Modifier.width(40.dp),
-        )
+        // No channel number (the provider's jump about): its room goes to the logo.
         AsyncImage(
             model = item.logoUrl,
             contentDescription = null,
-            modifier = Modifier.size(32.dp).clip(RoundedCornerShape(4.dp)),
+            modifier = Modifier.size(width = 72.dp, height = 36.dp).clip(RoundedCornerShape(4.dp)),
         )
         Spacer(Modifier.width(12.dp))
-        Text(item.name, style = MaterialTheme.typography.titleMedium, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            item.name,
+            style = MaterialTheme.typography.titleMedium,
+            color = fg,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (leadingLabel != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(leadingLabel, style = MaterialTheme.typography.labelMedium, color = fg.copy(alpha = 0.7f), maxLines = 1)
+        }
     }
 }
 

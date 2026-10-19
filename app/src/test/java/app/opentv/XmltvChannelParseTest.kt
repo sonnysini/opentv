@@ -31,20 +31,25 @@ class XmltvChannelParseTest {
 
     private data class Parsed(
         val aliases: List<Pair<String, String?>>,
+        val icons: Map<String, String?>,
         val programmes: List<Programme>,
         val stats: XmltvParser.Stats,
     )
 
     private suspend fun parse(xml: String): Parsed {
         val aliases = mutableListOf<Pair<String, String?>>()
+        val icons = mutableMapOf<String, String?>()
         val programmes = mutableListOf<Programme>()
         val stats = XmltvParser.parse(
             input = xml.byteInputStream(),
             feedId = 1L,
-            onChannelAlias = { id, name -> aliases += id to name },
+            onChannelAlias = { id, name, icon ->
+                aliases += id to name
+                icons[id] = icon
+            },
             onProgramme = { programmes += it },
         )
-        return Parsed(aliases, programmes, stats)
+        return Parsed(aliases, icons, programmes, stats)
     }
 
     @Test
@@ -90,7 +95,28 @@ class XmltvChannelParseTest {
             "BBCOne.uk" to "BBC One",
             "ITV1.uk" to "ITV1",
         )
+        assertThat(result.icons).containsExactly(
+            "BBCOne.uk", "https://example.invalid/bbc1.png",
+            "ITV1.uk", "https://example.invalid/itv1.png",
+        )
         assertThat(result.stats.channelCount).isEqualTo(2)
+    }
+
+    /** Only web icons count as logos; a relative or missing src leaves the channel without one. */
+    @Test
+    fun `ignores icons that are not web urls`() = runTest {
+        val result = parse(
+            """
+            <tv>
+              <channel id="a.it"><icon src="logos/a.png"/><display-name>A</display-name></channel>
+              <channel id="b.it"><display-name>B</display-name><icon/></channel>
+              <channel id="c.it"><display-name>C</display-name></channel>
+            </tv>
+            """.trimIndent(),
+        )
+
+        assertThat(result.aliases).containsExactly("a.it" to "A", "b.it" to "B", "c.it" to "C")
+        assertThat(result.icons).containsExactly("a.it", null, "b.it", null, "c.it", null)
     }
 
     /** Channels and programmes in one document — the normal case end to end. */

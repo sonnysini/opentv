@@ -306,6 +306,8 @@
     <!-- ============================ TV guide (EPG) settings ============================ -->
     <string name="epg_updating">Updating…</string>
     <string name="epg_update_now">Update guide now</string>
+    <string name="epg_prefer_logos">Logos from the guide</string>
+    <string name="epg_prefer_logos_desc">Show the TV guide\'s channel logos instead of your provider\'s. Off: the guide\'s logos are only used where the provider has none.</string>
     <string name="epg_desc">Your provider\'s guide is used automatically. If it\'s empty — many are — turn on a free guide for your country and channels are matched to it by name.</string>
     <string name="epg_add_own">Add your own guide (XMLTV URL)</string>
     <string name="epg_name_optional">Name (optional)</string>

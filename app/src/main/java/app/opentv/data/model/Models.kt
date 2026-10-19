@@ -126,7 +126,13 @@ data class Channel(
     /** `FHD`, `HD`, `RAW 60fps`… empty when unknown. */
     val qualityLabel: String = "",
     val categoryId: String?,
+    /** The provider's logo (or, for a `+1` copy shipped without one, its base channel's). */
     val logoUrl: String?,
+    /**
+     * The `<icon>` of the guide this channel is matched to, refreshed by the matcher. Shown when
+     * the provider has no logo, or instead of the provider's when the user prefers guide logos.
+     */
+    val guideLogoUrl: String? = null,
     /** Guide id supplied by the provider, when it bothers. Often blank. */
     val epgChannelId: String?,
     /** Guide id found by the name matcher. Recomputed after every guide sync. */
@@ -222,6 +228,12 @@ object TimeShift {
 /** What the UI should show for a channel: the user's rename if set, else the cleaned display name. */
 val Channel.shownName: String get() = customName?.takeIf { it.isNotBlank() } ?: displayName
 
+/** The logo to show: the provider's, else the guide's — or the other way round when [preferGuide]. */
+fun Channel.logo(preferGuide: Boolean): String? {
+    val provider = logoUrl?.takeIf { it.isNotBlank() }
+    return if (preferGuide) guideLogoUrl ?: provider else provider ?: guideLogoUrl
+}
+
 /**
  * One guide feed: where XMLTV comes from.
  *
@@ -261,6 +273,8 @@ data class EpgChannelAlias(
     val displayName: String,
     /** ChannelNameNormalizer.groupKeyOf(displayName), precomputed for the matcher. */
     val normalizedKey: String,
+    /** The guide's `<icon>` for this channel: the logo for matched channels the provider left bare. */
+    val iconUrl: String? = null,
 )
 
 /**

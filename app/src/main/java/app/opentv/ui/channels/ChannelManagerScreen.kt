@@ -360,7 +360,7 @@ private fun ManagerRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ChannelLogo(
-            logoUrl = row.primary.logoUrl,
+            logoUrl = row.primary.shownLogo(),
             name = row.primary.shownName,
             modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)),
         )

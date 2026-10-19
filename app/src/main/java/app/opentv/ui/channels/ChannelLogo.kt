@@ -15,11 +15,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import app.opentv.data.model.Channel
+import app.opentv.data.model.logo
 import coil.compose.AsyncImage
+
+/** Settings › TV guide › "Logos from the guide": the guide's logos win over the provider's. */
+val LocalPreferGuideLogos = staticCompositionLocalOf { false }
+
+/** This channel's logo under the user's choice of provider or guide logos. */
+@Composable
+fun Channel.shownLogo(): String? = logo(LocalPreferGuideLogos.current)
 
 /**
  * A channel's logo, or its initials on a tile when there is none (or it fails to load).

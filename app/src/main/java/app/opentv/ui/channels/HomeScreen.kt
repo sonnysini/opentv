@@ -82,6 +82,7 @@ import app.opentv.core.requestIgnoreBatteryOptimizations
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Programme
 import app.opentv.data.model.Reminder
+import app.opentv.data.model.logo
 import app.opentv.data.model.shownName
 import app.opentv.reminders.ReminderScheduler
 import app.opentv.player.PlaybackQueue
@@ -241,9 +242,10 @@ fun HomeScreen(
     // cuts the recording and can get a single-connection account banned. So every jump to full-screen
     // live is funnelled through [requestLive]: with a recording active it asks first.
     var pendingLiveChannel by remember { mutableStateOf<Channel?>(null) }
+    val preferGuideLogos = LocalPreferGuideLogos.current
     fun startLive(channel: Channel) {
         PlaybackQueue.items = rows.map {
-            PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logoUrl, it.primary.number)
+            PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logo(preferGuideLogos), it.primary.number)
         }
         previewController.stop()
         onPlayChannel(channel)
@@ -899,7 +901,7 @@ private suspend fun setReminder(
         Reminder(
             channelId = channel.id,
             channelName = channel.displayName,
-            logoUrl = channel.logoUrl,
+            logoUrl = channel.logo(graph.settings.preferGuideLogos.value),
             title = programme.title,
             startUtcMillis = programme.startUtcMillis,
             endUtcMillis = programme.endUtcMillis,
@@ -1012,7 +1014,7 @@ private fun ChannelRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ChannelLogo(
-            logoUrl = row.primary.logoUrl,
+            logoUrl = row.primary.shownLogo(),
             name = row.primary.shownName,
             modifier = Modifier
                 .size(48.dp)

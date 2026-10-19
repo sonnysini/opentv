@@ -65,6 +65,7 @@ import app.opentv.ui.ProfilesViewModel
 import app.opentv.ui.SourcesViewModel
 import app.opentv.ui.VodViewModel
 import app.opentv.ui.channels.ChannelManagerScreen
+import app.opentv.ui.channels.LocalPreferGuideLogos
 import app.opentv.ui.channels.SearchScreen
 import app.opentv.ui.onboarding.AddSourceScreen
 import app.opentv.ui.player.PlayerScreen
@@ -110,6 +111,7 @@ class MainActivity : ComponentActivity() {
             val themeMode by settings.themeMode.collectAsState()
             val uiScale by settings.uiScalePercent.collectAsState()
             val appStyle by settings.appStyle.collectAsState()
+            val preferGuideLogos by settings.preferGuideLogos.collectAsState()
             val darkTheme = when (themeMode) {
                 AppSettings.ThemeMode.DARK -> true
                 AppSettings.ThemeMode.LIGHT -> false
@@ -122,7 +124,10 @@ class MainActivity : ComponentActivity() {
             val scaledDensity = remember(baseDensity, uiScale) {
                 Density(baseDensity.density * AppSettings.UI_SCALE_BASE * uiScale / 100f, baseDensity.fontScale)
             }
-            CompositionLocalProvider(LocalDensity provides scaledDensity) {
+            CompositionLocalProvider(
+                LocalDensity provides scaledDensity,
+                LocalPreferGuideLogos provides preferGuideLogos,
+            ) {
                 OpenTvTheme(darkTheme = darkTheme, style = appStyle) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
