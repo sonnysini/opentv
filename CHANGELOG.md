@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.16.8 — 20 October 2026
+
+- **One-press feed switching.** In the player, OK on the Quality button now steps to the
+  channel's next feed (wrapping round), and a notice says which one is on. Hold OK to open the
+  full list as before. The button shows the quality playing (`4K`, `FHD 1`, `FHD 2`, `HD`…):
+  feeds of the same quality are numbered, and the list and notices name them the same way
+  (`FHD 2 · SAT`).
+- **Right opens the playback bar.** In full screen, → now brings up the playback bar instead of
+  the quality list.
+
 ## 0.16.7 — 19 October 2026
 
 - **Right guide logo when guides disagree.** If two TV guides give a channel different logos,
