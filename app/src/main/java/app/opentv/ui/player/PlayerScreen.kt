@@ -117,6 +117,7 @@ import app.opentv.player.StreamInfo
 import app.opentv.player.WorkingVariants
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
+import app.opentv.ui.channels.shownLogo
 import coil.compose.AsyncImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -800,7 +801,7 @@ fun PlayerScreen(
                 }
 
                 // The channel's logo, large, on the left; everything else runs from it to the right edge.
-                val logoUrl = (variants.firstOrNull { it.id == currentId }?.logoUrl ?: listedChannel?.logoUrl)
+                val logoUrl = (variants.firstOrNull { it.id == currentId }?.shownLogo() ?: listedChannel?.shownLogo())
                     ?.takeIf { it.isNotBlank() }
                 Row {
                     if (logoUrl != null) {

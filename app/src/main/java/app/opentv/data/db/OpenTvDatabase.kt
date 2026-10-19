@@ -291,12 +291,14 @@ abstract class OpenTvDatabase : RoomDatabase() {
         }
 
         /**
-         * v12 → v13: guide channels keep their `<icon>`, so a channel the provider ships without
-         * a logo can show the one from its matched guide. Empty until the next guide refresh.
+         * v12 → v13: guide channels keep their `<icon>`, and each channel the logo of the guide it
+         * is matched to (`guideLogoUrl`), shown when the provider has none or the user prefers
+         * guide logos. Empty until the next guide refresh.
          */
         private val MIGRATION_12_13 = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `epg_channels` ADD COLUMN `iconUrl` TEXT")
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `guideLogoUrl` TEXT")
             }
         }
 

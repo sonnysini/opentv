@@ -230,6 +230,9 @@ interface ChannelDao {
     @Query("UPDATE channels SET logoUrl = :logoUrl WHERE id = :id")
     suspend fun setLogo(id: Long, logoUrl: String?)
 
+    @Query("UPDATE channels SET guideLogoUrl = :logoUrl WHERE id = :id")
+    suspend fun setGuideLogo(id: Long, logoUrl: String?)
+
     /** The matcher's working set: id, group key, and what is already known. */
     @Query("SELECT * FROM channels")
     suspend fun allForMatching(): List<Channel>
@@ -289,6 +292,7 @@ interface ChannelDao {
                     // A logo borrowed from the base channel (timeshift copies) survives a
                     // refresh that still ships none; a real provider logo always wins.
                     logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: previous.logoUrl,
+                    guideLogoUrl = previous.guideLogoUrl,
                     lastSeenMillis = syncStamp,
                 )
             }

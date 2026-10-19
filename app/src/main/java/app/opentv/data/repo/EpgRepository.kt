@@ -338,8 +338,8 @@ class EpgRepository(
         )
         fun populated(id: String?) = id != null && (counts[id] ?: 0) > 0
 
-        // The guide's own logo per channel id, for channels the provider ships without one.
-        // Still the user's data (their guide feed), never anything bundled with the app.
+        // The guide's own logo per channel id: shown where the provider has none, or instead of
+        // the provider's by choice. Still the user's data (their guide feed), never bundled.
         val guideIcons = HashMap<String, String>()
         for (alias in guideChannels) alias.iconUrl?.let { guideIcons.putIfAbsent(alias.epgId, it) }
 
@@ -351,6 +351,7 @@ class EpgRepository(
         // the timeshift copies in pass 2.
         val baseGuide = HashMap<String, String>()
         val baseLogo = HashMap<String, String>()
+        val baseGuideLogo = HashMap<String, String>()
         val shifted = ArrayList<Pair<Channel, Pair<String, Int>>>()
         for (channel in channels) {
             val split = TimeShift.splitKey(channel.groupKey)
@@ -366,15 +367,11 @@ class EpgRepository(
                 matched++
                 baseGuide.putIfAbsent(channel.groupKey, working)
             }
-            var logo = channel.logoUrl?.takeIf { it.isNotBlank() }
-            if (logo == null) {
-                logo = working?.let(guideIcons::get)
-                if (logo != null) {
-                    channelDao.setLogo(channel.id, logo)
-                    guideLogos++
-                }
-            }
-            logo?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
+            channel.logoUrl?.takeIf { it.isNotBlank() }?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
+            val guideLogo = working?.let(guideIcons::get)
+            guideLogo?.let { baseGuideLogo.putIfAbsent(channel.groupKey, it) }
+            if (guideLogo != null) guideLogos++
+            if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
         }
 
         // Pass 2: `+1`/`+2`/`+3` copies. Their own guide if one exists; otherwise the base
@@ -393,17 +390,17 @@ class EpgRepository(
             }
             if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
             if (populated(channel.epgOverrideId) || providerOwn != null || newMatch != null) matched++
-            if (channel.logoUrl.isNullOrBlank()) {
-                val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own).firstOrNull(::populated)
-                val logo = baseLogo[baseKey] ?: ownGuide?.let(guideIcons::get)?.also { guideLogos++ }
-                logo?.let { channelDao.setLogo(channel.id, it) }
-            }
+            if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
+            val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own).firstOrNull(::populated)
+            val guideLogo = ownGuide?.let(guideIcons::get) ?: baseGuideLogo[baseKey]
+            if (guideLogo != null) guideLogos++
+            if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
         }
 
         Log.i(
             TAG,
             "Matcher: $matched of ${channels.size} channels have a working guide " +
-                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos logos taken from the guide)",
+                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo)",
         )
         return matched to channels.size
     }

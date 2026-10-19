@@ -274,6 +274,8 @@
     <string name="recset_background_toast">Registrazione in background attivata — le registrazioni continueranno in background.</string>
     <string name="epg_updating">Aggiornamento in corso…</string>
     <string name="epg_update_now">Aggiorna la guida ora</string>
+    <string name="epg_prefer_logos">Loghi dalla guida</string>
+    <string name="epg_prefer_logos_desc">Mostra i loghi dei canali della guida TV al posto di quelli del provider. Spento: i loghi della guida servono solo dove il provider non ne ha.</string>
     <string name="epg_desc">La guida del tuo provider viene usata automaticamente. Se è vuota — capita spesso — attiva una guida gratuita per il tuo paese e i canali verranno abbinati ad essa in base al nome.</string>
     <string name="epg_add_own">Aggiungi la tua guida (URL XMLTV)</string>
     <string name="epg_name_optional">Nome (facoltativo)</string>

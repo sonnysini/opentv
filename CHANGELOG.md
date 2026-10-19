@@ -4,7 +4,8 @@
 
 - **Channel logos from the guide.** Channels your provider ships without a logo now take the one
   from their matched TV guide (the `<icon>` in XMLTV), instead of showing just their initials.
-  A logo from the provider always wins. Logos appear after the next guide refresh.
+  The provider's logo wins unless you turn on **Settings › TV guide › Logos from the guide**,
+  which shows the guide's logos instead. Logos appear after the next guide refresh.
 
 ## 0.16.4 — 19 October 2026
 

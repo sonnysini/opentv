@@ -207,7 +207,7 @@ private fun ChannelListRow(
             )
         }
         ChannelLogo(
-            logoUrl = row.primary.logoUrl,
+            logoUrl = row.primary.shownLogo(),
             name = row.primary.shownName,
             modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)),
         )
@@ -369,7 +369,7 @@ private fun GuideRow(
                 )
             }
             ChannelLogo(
-                logoUrl = row.primary.logoUrl,
+                logoUrl = row.primary.shownLogo(),
                 name = row.primary.shownName,
                 modifier = Modifier.size(34.dp).clip(RoundedCornerShape(4.dp)),
             )

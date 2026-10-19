@@ -73,6 +73,18 @@ class AppSettings private constructor(context: Context) {
     private val _subtitlesEnabled = pref { prefs.getBoolean(KEY_SUBTITLES, true) }
     val subtitlesEnabled: StateFlow<Boolean> = _subtitlesEnabled.asStateFlow()
 
+    /**
+     * Channel logos from the matched TV guide instead of the provider's (off by default: the
+     * provider's win, the guide's only fill the gaps). See Channel.logo.
+     */
+    private val _preferGuideLogos = pref { prefs.getBoolean(KEY_PREFER_GUIDE_LOGOS, false) }
+    val preferGuideLogos: StateFlow<Boolean> = _preferGuideLogos.asStateFlow()
+
+    fun setPreferGuideLogos(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PREFER_GUIDE_LOGOS, enabled).apply()
+        _preferGuideLogos.value = enabled
+    }
+
     /** Whether the selected channel plays live inside the guide's preview pane. */
     private val _guidePreviewVideo = pref { prefs.getBoolean(KEY_PREVIEW_VIDEO, true) }
     val guidePreviewVideo: StateFlow<Boolean> = _guidePreviewVideo.asStateFlow()
@@ -711,6 +723,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_LAST_LIVE_GROUP = "last_live_group"
         private const val KEY_SUBTITLES = "subtitles_enabled"
         private const val KEY_PREVIEW_VIDEO = "guide_preview_video"
+        private const val KEY_PREFER_GUIDE_LOGOS = "prefer_guide_logos"
         private const val KEY_PREVIEW_SOUND = "guide_preview_sound"
         private const val KEY_PIN_HASH = "parental_pin_hash"
         private const val KEY_HIDDEN_CATS = "hidden_categories"
@@ -769,7 +782,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
                 KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
-                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK,
+                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,

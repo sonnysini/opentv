@@ -444,7 +444,7 @@ private fun FullscreenChannelRow(
             modifier = Modifier.width(48.dp),
         )
         ChannelLogo(
-            logoUrl = row.primary.logoUrl,
+            logoUrl = row.primary.shownLogo(),
             name = row.primary.shownName,
             modifier = Modifier.size(width = 72.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)),
         )

@@ -111,7 +111,7 @@ fun GuidePreview(
             // Logo sits behind everything as the fallback / shutter.
             if (row != null) {
                 AsyncImage(
-                    model = row.primary.logoUrl,
+                    model = row.primary.shownLogo(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(0.6f),
                 )
