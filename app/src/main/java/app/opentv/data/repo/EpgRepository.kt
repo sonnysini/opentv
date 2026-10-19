@@ -331,17 +331,32 @@ class EpgRepository(
         // guide that lists a channel but never fills it (epgshare's empty `TG.NORBA.24.it`)
         // must not win over another guide that does.
         val counts = programmeDao.programmeCounts().associate { it.epgId to it.n }
-        val enabledFeeds = feedDao.enabled().map { it.id }.toHashSet()
+        val enabled = feedDao.enabled()
+        val enabledFeeds = enabled.map { it.id }.toHashSet()
+        val providerFeeds = enabled.filter { it.providerSourceId != null }.map { it.id }.toHashSet()
         val guideChannels = aliasDao.all().filter { it.feedId in enabledFeeds && (counts[it.epgId] ?: 0) > 0 }
         val index = EpgMatcher.buildIndexOf(
             guideChannels.map { EpgMatcher.GuideChannel(it.epgId, it.displayName, it.feedId, counts[it.epgId] ?: 0) },
         )
         fun populated(id: String?) = id != null && (counts[id] ?: 0) > 0
 
-        // The guide's own logo per channel id: shown where the provider has none, or instead of
-        // the provider's by choice. Still the user's data (their guide feed), never bundled.
+        // Each channel's guide logo: shown where the provider has none, or instead of the
+        // provider's by choice. Still the user's data (their guide feeds), never bundled. The
+        // provider's own guide mostly repeats the provider's logos, so a free or added guide's
+        // icon wins: by the channel's own key first, then by the key of the guide it is matched to.
         val guideIcons = HashMap<String, String>()
-        for (alias in guideChannels) alias.iconUrl?.let { guideIcons.putIfAbsent(alias.epgId, it) }
+        val freeIconByKey = HashMap<String, String>()
+        val keyOfGuide = HashMap<String, String>()
+        for (alias in guideChannels) {
+            keyOfGuide.putIfAbsent(alias.epgId, alias.normalizedKey)
+            val icon = alias.iconUrl ?: continue
+            guideIcons.putIfAbsent(alias.epgId, icon)
+            if (alias.feedId !in providerFeeds) freeIconByKey.putIfAbsent(alias.normalizedKey, icon)
+        }
+        fun guideLogoOf(groupKey: String, guideId: String?): String? =
+            freeIconByKey[groupKey]
+                ?: guideId?.let { keyOfGuide[it] }?.let(freeIconByKey::get)
+                ?: guideId?.let(guideIcons::get)
 
         val channels = channelDao.allForMatching()
         var matched = 0
@@ -368,7 +383,7 @@ class EpgRepository(
                 baseGuide.putIfAbsent(channel.groupKey, working)
             }
             channel.logoUrl?.takeIf { it.isNotBlank() }?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
-            val guideLogo = working?.let(guideIcons::get)
+            val guideLogo = guideLogoOf(channel.groupKey, working)
             guideLogo?.let { baseGuideLogo.putIfAbsent(channel.groupKey, it) }
             if (guideLogo != null) guideLogos++
             if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
@@ -392,7 +407,7 @@ class EpgRepository(
             if (populated(channel.epgOverrideId) || providerOwn != null || newMatch != null) matched++
             if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
             val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own).firstOrNull(::populated)
-            val guideLogo = ownGuide?.let(guideIcons::get) ?: baseGuideLogo[baseKey]
+            val guideLogo = ownGuide?.let { guideLogoOf(channel.groupKey, it) } ?: baseGuideLogo[baseKey]
             if (guideLogo != null) guideLogos++
             if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
         }
