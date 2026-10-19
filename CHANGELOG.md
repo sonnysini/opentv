@@ -2,7 +2,7 @@
 
 ## 0.16.3 — 19 October 2026
 
-- **Back up and restore your settings.** On the phone page (Settings › Manage from phone),
+- **Back up and restore your settings.** On the phone page (Settings › Manage on phone or laptop),
   *Backup & restore settings* downloads one file with your settings, guide feeds and channel
   merges, and imports it back on this or another TV. On import you choose what to bring in:
   channel merges (added to the ones already on the TV) and/or settings (they replace the TV's).
