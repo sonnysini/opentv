@@ -406,8 +406,10 @@ class EpgRepository(
             if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
             if (populated(channel.epgOverrideId) || providerOwn != null || newMatch != null) matched++
             if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
+            // The base channel's logo first: a `+1` is the same channel, and guides often give
+            // the copies a poorer icon or a mismatched one.
             val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own).firstOrNull(::populated)
-            val guideLogo = ownGuide?.let { guideLogoOf(channel.groupKey, it) } ?: baseGuideLogo[baseKey]
+            val guideLogo = baseGuideLogo[baseKey] ?: ownGuide?.let { guideLogoOf(channel.groupKey, it) }
             if (guideLogo != null) guideLogos++
             if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
         }

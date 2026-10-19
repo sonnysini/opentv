@@ -403,7 +403,7 @@ private fun CategoryEntry(label: String, selected: Boolean, modifier: Modifier, 
 }
 
 /**
- * One channel across the full width: number, logo and name, with the programme on now and its
+ * One channel across the full width: logo and name, with the programme on now and its
  * progress underneath, and what's next on the right where a full-screen row has room for it.
  */
 @Composable
@@ -436,19 +436,14 @@ private fun FullscreenChannelRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            row.primary.number?.toString() ?: "",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            modifier = Modifier.width(48.dp),
-        )
+        // No channel number: the provider's numbers jump about and mean nothing. Its room goes
+        // to the logo, as tall as the two text lines beside it.
         ChannelLogo(
             logoUrl = row.primary.shownLogo(),
             name = row.primary.shownName,
-            modifier = Modifier.size(width = 72.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)),
+            modifier = Modifier.size(width = 128.dp, height = 64.dp).clip(RoundedCornerShape(6.dp)),
         )
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(20.dp))
         Column(Modifier.weight(0.6f)) {
             Text(
                 row.primary.shownName,
