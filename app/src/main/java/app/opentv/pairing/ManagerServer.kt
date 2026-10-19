@@ -5,13 +5,18 @@
  */
 package app.opentv.pairing
 
+import android.content.Context
 import android.util.Log
+import app.opentv.BuildConfig
 import app.opentv.core.AppSettings
+import app.opentv.core.SettingsBackup
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.shownName
 import app.opentv.data.repo.CatalogRepository
+import app.opentv.data.repo.EpgRepository
+import app.opentv.data.work.SyncWorker
 import app.opentv.data.repo.SourceRepository
 import app.opentv.recording.SmbClient
 import app.opentv.recording.SmbConfig
@@ -27,6 +32,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +72,8 @@ class ManagerServer(
     private val catalog: CatalogRepository,
     private val settings: AppSettings,
     private val sourceRepository: SourceRepository,
+    private val epg: EpgRepository,
+    private val appContext: Context,
 ) {
 
     data class Session(
@@ -236,6 +244,10 @@ class ManagerServer(
 
             method == "POST" && path == "/source/test" -> handleTestSource(output, body)
 
+            method == "GET" && path == "/backup" -> handleBackup(output)
+
+            method == "POST" && path == "/restore" -> handleRestore(output, body, query)
+
             else -> output.write(PairingHttp.httpResponse("404 Not Found", "text/plain", "Not found."))
         }
     }
@@ -244,9 +256,18 @@ class ManagerServer(
         val contentLength = (headers["content-length"]?.toIntOrNull() ?: 0)
             .coerceAtMost(MAX_BODY_BYTES)
         if (contentLength <= 0) return ""
-        val buffer = CharArray(contentLength)
-        val read = reader.read(buffer, 0, contentLength)
-        return if (read > 0) String(buffer, 0, read) else ""
+        // Content-Length counts bytes, the reader hands out chars, and one read() may stop short on
+        // a big body: keep reading until the UTF-8 size of what arrived reaches the declared length.
+        val body = StringBuilder()
+        val buffer = CharArray(8 * 1024)
+        var bytes = 0
+        while (bytes < contentLength) {
+            val read = reader.read(buffer, 0, minOf(buffer.size, contentLength - bytes))
+            if (read <= 0) break
+            body.append(buffer, 0, read)
+            bytes += String(buffer, 0, read).toByteArray(Charsets.UTF_8).size
+        }
+        return body.toString()
     }
 
     // ---- Routes --------------------------------------------------------------------------------
@@ -311,6 +332,77 @@ class ManagerServer(
             req.ids.forEachIndexed { index, id -> if (id > 0L) catalog.setChannelSortIndex(id, index) }
         }
         writeOk(output)
+    }
+
+    /** `GET /backup` → the settings file, as a download. */
+    private fun handleBackup(output: OutputStream) {
+        val file = runBlocking {
+            SettingsBackup.File(
+                app = BuildConfig.VERSION_NAME,
+                exportedAt = System.currentTimeMillis(),
+                settings = SettingsBackup.toJson(settings.backupSettings()),
+                guides = epg.feedsForBackup(),
+                merges = settings.groupMerges.value,
+                ignoredPairs = settings.ignoredMergePairs.value.sorted(),
+            )
+        }
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
+        output.write(
+            PairingHttp.httpResponse(
+                "200 OK", "application/json", SettingsBackup.encode(file),
+                mapOf("Content-Disposition" to "attachment; filename=\"opentv-settings-$day.json\""),
+            ),
+        )
+    }
+
+    /**
+     * `POST /restore?settings=1&merges=1` with a [SettingsBackup] file → apply the parts asked for:
+     * settings (and guide feeds) replace this TV's, merges add to the ones already here. The
+     * regroup and catalogue refresh run on their own scope, so leaving the screen doesn't stop them.
+     */
+    private fun handleRestore(output: OutputStream, body: String, query: Map<String, String>) {
+        val file = SettingsBackup.decode(body)
+        if (file == null) {
+            writeJson(output, RestoreDto(ok = false, error = "This isn't an OpenTV settings file."))
+            return
+        }
+        val withSettings = query["settings"] == "1" && file.settings != null
+        val withMerges = query["merges"] == "1"
+        if (!withSettings && !withMerges) {
+            writeJson(output, RestoreDto(ok = false, error = "Nothing selected to import."))
+            return
+        }
+        val language = settings.languageTag.value
+        val mergesBefore = settings.groupMerges.value.size
+        val guides = runBlocking {
+            if (withSettings) {
+                settings.restoreSettings(SettingsBackup.fromJson(file.settings!!, settings.backupKinds))
+                runCatching { epg.restoreFeeds(file.guides.orEmpty()) }.getOrDefault(0)
+            } else 0
+        }
+        if (withMerges) settings.addMergeChoices(file.merges.orEmpty(), file.ignoredPairs.orEmpty().toSet())
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching {
+                catalog.renormalizeAll()
+                epg.runMatcher()
+            }.onFailure { Log.w(TAG, "Regroup after restore failed", it) }
+            // Categories switched back on, content types and guide feeds only arrive with a sync.
+            if (withSettings) SyncWorker.refreshNow(appContext)
+        }
+        writeJson(
+            output,
+            RestoreDto(
+                ok = true,
+                settings = withSettings,
+                merges = settings.groupMerges.value.size - mergesBefore,
+                guides = guides,
+                languageChanged = settings.languageTag.value != language,
+            ),
+        )
+    }
+
+    private fun writeJson(output: OutputStream, dto: RestoreDto) {
+        output.write(PairingHttp.httpResponse("200 OK", "application/json", json.encodeToString(RestoreDto.serializer(), dto)))
     }
 
     private fun writeOk(output: OutputStream) {
@@ -485,8 +577,9 @@ class ManagerServer(
         const val IDLE_TIMEOUT_MINUTES = 30L
 
         // Generous next to pairing's 16 KB: a /reorder body carries every channel id in a
-        // category, which can be a few thousand on a big provider.
-        const val MAX_BODY_BYTES = 256 * 1024
+        // category, which can be a few thousand on a big provider, and a /restore file every
+        // switched-off category name.
+        const val MAX_BODY_BYTES = 1024 * 1024
     }
 }
 
@@ -512,6 +605,15 @@ class ManagerServer(
 )
 
 @Serializable private data class OkDto(val ok: Boolean = true)
+
+@Serializable private data class RestoreDto(
+    val ok: Boolean,
+    val settings: Boolean = false,
+    val merges: Int = 0,
+    val guides: Int = 0,
+    val languageChanged: Boolean = false,
+    val error: String? = null,
+)
 
 @Serializable private data class ChannelPatch(
     val id: Long,

@@ -6,6 +6,7 @@
 package app.opentv.data.repo
 
 import android.util.Log
+import app.opentv.core.SettingsBackup
 import app.opentv.data.db.ChannelDao
 import app.opentv.data.db.EpgChannelAliasDao
 import app.opentv.data.db.EpgFeedDao
@@ -121,6 +122,34 @@ class EpgRepository(
         programmeDao.deleteForFeed(feed.id)
         aliasDao.deleteForFeed(feed.id)
         feedDao.delete(feed.id)
+    }
+
+    /** Built-in and custom feeds for the settings backup; provider feeds come back with their source. */
+    suspend fun feedsForBackup(): List<SettingsBackup.Feed> = feedDao.all()
+        .filter { it.providerSourceId == null && !it.url.isNullOrBlank() }
+        .map { SettingsBackup.Feed(it.name, it.url!!, it.enabled, it.builtIn) }
+
+    /**
+     * Restores feeds from a backup: a URL already here takes the backup's on/off, a missing custom
+     * one is added. Feeds that aren't in the backup are left alone. Returns how many changed.
+     */
+    suspend fun restoreFeeds(feeds: List<SettingsBackup.Feed>): Int {
+        ensureFeeds()
+        var changed = 0
+        for (feed in feeds) {
+            val url = feed.url.trim()
+            val existing = feedDao.byUrl(url)
+            if (existing == null) {
+                if (feed.builtIn || url.isEmpty()) continue
+                addCustomFeed(feed.name, url)
+                if (!feed.enabled) feedDao.byUrl(url)?.let { setFeedEnabled(it.id, false) }
+                changed++
+            } else if (existing.enabled != feed.enabled) {
+                setFeedEnabled(existing.id, feed.enabled)
+                changed++
+            }
+        }
+        return changed
     }
 
     /**

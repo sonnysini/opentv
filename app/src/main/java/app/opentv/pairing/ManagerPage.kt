@@ -107,6 +107,8 @@ object ManagerPage {
           /* `.field { display:block }` above would otherwise override the [hidden] attribute, leaving
              a type's irrelevant fields (e.g. username/password on a Stalker portal) on screen. */
           .field[hidden] { display:none; }
+          .check { display:flex; align-items:center; gap:10px; margin:10px 0; cursor:pointer; }
+          .check input { width:20px; height:20px; accent-color:var(--accent); }
         </style>
         </head>
         <body>
@@ -157,6 +159,22 @@ object ManagerPage {
                   <input id="recPass" type="password" autocomplete="off"></label>
                 <button class="save" id="recSave">Save &amp; use NAS</button>
                 <button class="save" id="recTest" style="background:var(--surface2);border-color:var(--line);margin-left:8px;">Test connection</button>
+              </div>
+            </details>
+
+            <details class="rec" id="bakCard">
+              <summary>Backup &amp; restore settings</summary>
+              <div class="body">
+                <p class="hint">One file with your settings, guide feeds and channel merges. Your provider login, NAS password and TMDB key are never put in it.</p>
+                <button class="save" id="bakDownload">Download settings</button>
+                <label class="field" style="margin-top:18px"><span>Restore from a file</span>
+                  <input id="bakFile" type="file" accept=".json,application/json"></label>
+                <div id="bakChoice" hidden>
+                  <p class="hint" id="bakInfo"></p>
+                  <label class="check"><input type="checkbox" id="bakMerges" checked> <span id="bakMergesLabel">Channel merges</span></label>
+                  <label class="check"><input type="checkbox" id="bakSettings" checked> <span>Settings (playback, quality, look, categories, guide feeds…)</span></label>
+                  <button class="save" id="bakRestore">Import</button>
+                </div>
               </div>
             </details>
 
@@ -506,6 +524,50 @@ object ManagerPage {
                   el('provMac').value = ''; el('provName').value = '';
                   loadMeta();
                 } else setStatus((r && r.error) || 'Could not add the provider', 'err');
+              })
+              .catch(function(){ setStatus(UNREACH, 'err'); });
+          };
+
+          // ---- Backup & restore -------------------------------------------------------------
+          var bakText = null;
+          el('bakDownload').onclick = function(){ location.href = withToken('/backup'); };
+          el('bakFile').addEventListener('change', function(){
+            var f = el('bakFile').files[0];
+            el('bakChoice').hidden = true; bakText = null;
+            if (!f) return;
+            f.text().then(function(text){
+              var d = null;
+              try { d = JSON.parse(text); } catch (e) {}
+              if (!d || d.format !== 'opentv-settings') { setStatus("This isn't an OpenTV settings file.", 'err'); return; }
+              bakText = text;
+              var n = (d.merges || []).length, ig = (d.ignoredPairs || []).length;
+              var when = d.exportedAt ? new Date(d.exportedAt).toLocaleString() : '';
+              el('bakInfo').textContent = 'Saved ' + when + (d.app ? ' from OpenTV ' + d.app : '') + '.';
+              el('bakMergesLabel').textContent = 'Channel merges (' + n + ' merged, ' + ig + ' ignored) — added to the ones on the TV';
+              el('bakSettings').disabled = !d.settings;
+              el('bakSettings').checked = !!d.settings;
+              el('bakChoice').hidden = false;
+            });
+          });
+          el('bakRestore').onclick = function(){
+            if (!bakText) return;
+            var m = el('bakMerges').checked, st = el('bakSettings').checked;
+            if (!m && !st) { setStatus('Tick at least one.', 'err'); return; }
+            setStatus('Importing…');
+            fetch(withToken('/restore?merges=' + (m ? 1 : 0) + '&settings=' + (st ? 1 : 0)), {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bakText
+            })
+              .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+              .then(function(r){
+                if (!r || !r.ok) { setStatus((r && r.error) || 'Import failed', 'err'); return; }
+                var parts = [];
+                if (r.settings) parts.push('settings restored');
+                if (m) parts.push(r.merges + ' new merges');
+                if (r.guides) parts.push(r.guides + ' guide feeds');
+                var msg = 'Done — ' + parts.join(', ') + '. The TV is regrouping channels.';
+                if (r.languageChanged) msg += ' The language changes next time OpenTV starts.';
+                setStatus(msg, 'ok');
+                el('bakChoice').hidden = true; el('bakFile').value = ''; bakText = null;
               })
               .catch(function(){ setStatus(UNREACH, 'err'); });
           };
