@@ -24,10 +24,12 @@ import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StremioStream
 import app.opentv.data.model.StreamKind
+import app.opentv.data.model.TimeShift
 import app.opentv.data.parser.displayTitle
 import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.repo.CatalogRepository
+import app.opentv.data.repo.EpgRepository
 import app.opentv.data.repo.GenreGroup
 import app.opentv.data.repo.MovieVariantGroup
 import app.opentv.data.repo.PersonTitle
@@ -417,9 +419,14 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         // distinctUntilChanged() on it is a no-op (and a build error under our warnings-as-errors).
         windowStartMillis
             .flatMapLatest { windowStart ->
+                // Starts SHIFT_LOOKBACK early so a `+3` copy can show what its base channel aired
+                // three hours ago; buildRows trims every row back to the window.
                 graph.epgRepository
-                    .observeWindow(windowStart, windowStart + GUIDE_LOOKAHEAD_MILLIS)
-                    .map { programmes -> programmes.groupBy { it.epgChannelId } }
+                    .observeWindow(windowStart - SHIFT_LOOKBACK_MILLIS, windowStart + GUIDE_LOOKAHEAD_MILLIS)
+                    .map { programmes ->
+                        programmes.groupBy { it.epgChannelId }
+                            .mapValues { (_, list) -> EpgRepository.onePerChannel(list) }
+                    }
             }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
@@ -519,9 +526,15 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             // Walk every variant's guide-id candidates (override → provider → matched)
             // and use the first that actually has programmes. An id that never lights up
             // must not shadow a sibling variant whose id does.
+            val windowStart = windowStartMillis.value
             val list = variants
                 .flatMap { it.epgCandidates }
-                .firstNotNullOfOrNull { id -> byEpgChannel[id] }
+                .firstNotNullOfOrNull { id ->
+                    byEpgChannel[id] ?: TimeShift.decode(id)?.let { (base, offset) ->
+                        byEpgChannel[base]?.let { TimeShift.shift(it, offset, id) }
+                    }
+                }
+                ?.filter { it.endUtcMillis > windowStart }
                 ?.sortedBy { it.startUtcMillis }
                 .orEmpty()
 
@@ -739,6 +752,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val GUIDE_LOOKAHEAD_MILLIS = 24 * 60 * 60 * 1000L  // a full day fits the grid
+        const val SHIFT_LOOKBACK_MILLIS = 3 * 60 * 60 * 1000L  // covers +1/+2/+3 copies
         const val DAY_MILLIS = 24 * 60 * 60 * 1000L
         const val GUIDE_MAX_DAYS = 6  // browse up to a week out, matching typical XMLTV depth
         const val HALF_HOUR_MILLIS = 30 * 60 * 1000L

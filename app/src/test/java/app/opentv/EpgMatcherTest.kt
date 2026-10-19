@@ -5,6 +5,7 @@
  */
 package app.opentv
 
+import app.opentv.data.model.TimeShift
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.repo.EpgMatcher
 import com.google.common.truth.Truth.assertThat
@@ -100,5 +101,48 @@ class EpgMatcherTest {
         assertThat(idx.match(keyOf("UK| BBC TWO FHD"))).isEqualTo("bbc2.uk")
         assertThat(idx.match(keyOf("UK| CHANNEL 4 hevc"))).isEqualTo("channel4.uk")
         assertThat(idx.match(keyOf("UK| SKY ATLANTIC ᴴᴰ"))).isEqualTo("skyatlantic.uk")
+    }
+
+    private fun ch(id: String, name: String, feed: Long, weight: Int) =
+        EpgMatcher.GuideChannel(id, name, feed, weight)
+
+    @Test
+    fun `the same channel in two guides is not ambiguous - the fuller guide wins`() {
+        val idx = EpgMatcher.buildIndexOf(
+            listOf(
+                ch("Rai3.it", "IT - Rai 3", feed = 7, weight = 118),
+                ch("Rai.3.HD.it", "Rai 3 HD", feed = 8, weight = 141),
+            ),
+        )
+
+        assertThat(idx.match(keyOf("RAI 3 HD"))).isEqualTo("Rai.3.HD.it")
+    }
+
+    @Test
+    fun `two channels of one guide under one name stay ambiguous`() {
+        val idx = EpgMatcher.buildIndexOf(
+            listOf(ch("cnn.us", "CNN", feed = 1, weight = 50), ch("cnn.int", "CNN", feed = 1, weight = 60)),
+        )
+
+        assertThat(idx.match(keyOf("CNN"))).isNull()
+    }
+
+    @Test
+    fun `a timeshift never prefix-matches its base channel`() {
+        val idx = index("Rai1.it" to "Rai 1")
+
+        // `rai1+1` extends `rai1`; matching it would show Rai 1's schedule an hour early.
+        assertThat(idx.match(keyOf("Rai 1 +1 HD"))).isNull()
+        assertThat(index("Rai1Plus1.it" to "Rai 1 +1").match(keyOf("Rai 1 +1 HD"))).isEqualTo("Rai1Plus1.it")
+    }
+
+    @Test
+    fun `timeshift ids round-trip`() {
+        val id = TimeShift.encode("Rai1.it", 2)
+
+        assertThat(TimeShift.decode(id)).isEqualTo("Rai1.it" to 7_200_000L)
+        assertThat(TimeShift.decode("Rai1.it")).isNull()
+        assertThat(TimeShift.splitKey(keyOf("Sky Uno HD +3"))).isEqualTo("skyuno" to 3)
+        assertThat(TimeShift.splitKey(keyOf("Sky Uno HD"))).isNull()
     }
 }

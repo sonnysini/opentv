@@ -16,6 +16,7 @@ import app.opentv.data.model.Category
 import app.opentv.data.model.Channel
 import app.opentv.data.model.EpgChannelAlias
 import app.opentv.data.model.EpgFeed
+import app.opentv.data.model.EpgIdCount
 import app.opentv.data.model.Episode
 import app.opentv.data.model.Movie
 import app.opentv.data.model.PlaybackPosition
@@ -226,6 +227,9 @@ interface ChannelDao {
     @Query("UPDATE channels SET epgOverrideId = :epgId WHERE id = :id")
     suspend fun setEpgOverride(id: Long, epgId: String?)
 
+    @Query("UPDATE channels SET logoUrl = :logoUrl WHERE id = :id")
+    suspend fun setLogo(id: Long, logoUrl: String?)
+
     /** The matcher's working set: id, group key, and what is already known. */
     @Query("SELECT * FROM channels")
     suspend fun allForMatching(): List<Channel>
@@ -282,6 +286,9 @@ interface ChannelDao {
                     customName = previous.customName,
                     epgOverrideId = previous.epgOverrideId,
                     matchedEpgId = previous.matchedEpgId,
+                    // A logo borrowed from the base channel (timeshift copies) survives a
+                    // refresh that still ships none; a real provider logo always wins.
+                    logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: previous.logoUrl,
                     lastSeenMillis = syncStamp,
                 )
             }
@@ -414,6 +421,9 @@ interface ProgrammeDao {
     /** Distinct guide channels that actually have programmes — the match report's baseline. */
     @Query("SELECT DISTINCT epgChannelId FROM programmes")
     suspend fun channelIdsWithProgrammes(): List<String>
+
+    @Query("SELECT epgChannelId AS epgId, COUNT(*) AS n FROM programmes GROUP BY epgChannelId")
+    suspend fun programmeCounts(): List<EpgIdCount>
 
     @Upsert
     suspend fun upsertAll(programmes: List<Programme>)

@@ -11,15 +11,18 @@ import app.opentv.data.db.EpgChannelAliasDao
 import app.opentv.data.db.EpgFeedDao
 import app.opentv.data.db.ProgrammeDao
 import app.opentv.data.db.SourceDao
+import app.opentv.data.model.Channel
 import app.opentv.data.model.EpgChannelAlias
 import app.opentv.data.model.EpgFeed
 import app.opentv.data.model.Programme
 import app.opentv.data.model.Source
+import app.opentv.data.model.TimeShift
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.XmltvParser
 import app.opentv.data.remote.XtreamApi
 import java.io.BufferedInputStream
 import java.io.InputStream
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.CancellationException
@@ -83,8 +86,13 @@ class EpgRepository(
     fun observeNow(nowUtcMillis: Long): Flow<List<Programme>> =
         programmeDao.observeNow(nowUtcMillis)
 
-    suspend fun upcoming(epgChannelId: String, nowUtcMillis: Long, limit: Int = 12): List<Programme> =
-        programmeDao.upcoming(epgChannelId, nowUtcMillis, limit)
+    suspend fun upcoming(epgChannelId: String, nowUtcMillis: Long, limit: Int = 12): List<Programme> {
+        TimeShift.decode(epgChannelId)?.let { (base, offset) ->
+            return TimeShift.shift(upcoming(base, nowUtcMillis - offset, limit), offset, epgChannelId)
+        }
+        // Over-fetch: two guides can carry the same id, and only one of them is shown.
+        return onePerChannel(programmeDao.upcoming(epgChannelId, nowUtcMillis, limit * 3)).take(limit)
+    }
 
     // ---- Feed management -------------------------------------------------------------------
 
@@ -96,7 +104,16 @@ class EpgRepository(
         )
     }
 
-    suspend fun setFeedEnabled(id: Long, enabled: Boolean) = feedDao.setEnabled(id, enabled)
+    suspend fun setFeedEnabled(id: Long, enabled: Boolean) {
+        feedDao.setEnabled(id, enabled)
+        if (!enabled) {
+            // A switched-off guide must stop showing and stop matching: drop its data, and
+            // clear the stamp so switching it back on downloads it straight away.
+            programmeDao.deleteForFeed(id)
+            aliasDao.deleteForFeed(id)
+            feedDao.markSynced(id, 0, "")
+        }
+    }
 
     suspend fun removeFeed(feed: EpgFeed) {
         // A removed feed takes its guide data with it — orphaned programmes would otherwise
@@ -122,12 +139,15 @@ class EpgRepository(
                 )
             }
         }
+        val italian = Locale.getDefault().language == "it"
         for ((name, url) in BUILT_IN_FEEDS) {
             if (feedDao.byUrl(url) == null) {
                 // Off by default: shipping a switched-on 20 MB download for a country the
                 // user may not live in would be rude. The EPG settings screen makes
-                // enabling one a single click.
-                feedDao.insert(EpgFeed(name = name, url = url, builtIn = true, enabled = false))
+                // enabling one a single click. The Italian guides are the exception on an
+                // Italian device — once, when they first appear; the user's toggle rules after.
+                val on = italian && name in ITALIAN_FEEDS
+                feedDao.insert(EpgFeed(name = name, url = url, builtIn = true, enabled = on))
             }
         }
     }
@@ -277,29 +297,66 @@ class EpgRepository(
      * Returns (channels with a working guide id, total channels).
      */
     suspend fun runMatcher(): Pair<Int, Int> {
-        val aliases = aliasDao.all()
-        val index = EpgMatcher.buildIndex(aliases.map { it.epgId to it.displayName })
-        // Only ids that actually have programmes count as "working" — a match against a
-        // channel the guide lists but never fills is a guide that looks broken.
-        val populated = programmeDao.channelIdsWithProgrammes().toHashSet()
+        // Only ids that actually have programmes count — and only those are matched to. A
+        // guide that lists a channel but never fills it (epgshare's empty `TG.NORBA.24.it`)
+        // must not win over another guide that does.
+        val counts = programmeDao.programmeCounts().associate { it.epgId to it.n }
+        val enabledFeeds = feedDao.enabled().map { it.id }.toHashSet()
+        val index = EpgMatcher.buildIndexOf(
+            aliasDao.all()
+                .filter { it.feedId in enabledFeeds && (counts[it.epgId] ?: 0) > 0 }
+                .map { EpgMatcher.GuideChannel(it.epgId, it.displayName, it.feedId, counts[it.epgId] ?: 0) },
+        )
+        fun populated(id: String?) = id != null && (counts[id] ?: 0) > 0
 
         val channels = channelDao.allForMatching()
         var matched = 0
 
+        // Pass 1: ordinary channels. Remember each one's working guide and logo by key, for
+        // the timeshift copies in pass 2.
+        val baseGuide = HashMap<String, String>()
+        val baseLogo = HashMap<String, String>()
+        val shifted = ArrayList<Pair<Channel, Pair<String, Int>>>()
         for (channel in channels) {
-            val newMatch = index.match(channel.groupKey)
-            if (newMatch != channel.matchedEpgId) {
-                channelDao.setMatchedEpgId(channel.id, newMatch)
+            val split = TimeShift.splitKey(channel.groupKey)
+            if (split != null) {
+                shifted += channel to split
+                continue
             }
-            val works = channel.epgCandidates.any { it in populated } ||
-                (newMatch != null && newMatch in populated)
-            if (works) matched++
+            val newMatch = index.match(channel.groupKey)
+            if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
+            val working = (listOfNotNull(channel.epgOverrideId, channel.epgChannelId) + listOfNotNull(newMatch))
+                .firstOrNull(::populated)
+            if (working != null) {
+                matched++
+                baseGuide.putIfAbsent(channel.groupKey, working)
+            }
+            channel.logoUrl?.takeIf { it.isNotBlank() }?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
+        }
+
+        // Pass 2: `+1`/`+2`/`+3` copies. Their own guide if one exists; otherwise the base
+        // channel's, moved later. A provider id that is just the base's guide (it happens:
+        // `Italia 1 +1` → `Italia1.it`) would show the schedule an hour early — skipped.
+        for ((channel, split) in shifted) {
+            val (baseKey, hours) = split
+            val base = baseGuide[baseKey]
+            val own = index.match(channel.groupKey)
+            val providerOwn = channel.epgChannelId?.takeIf { populated(it) && it != base }
+            val newMatch = when {
+                own != null && own != base -> own
+                providerOwn != null -> null
+                base != null -> TimeShift.encode(base, hours)
+                else -> null
+            }
+            if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
+            if (populated(channel.epgOverrideId) || providerOwn != null || newMatch != null) matched++
+            if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
         }
 
         Log.i(
             TAG,
             "Matcher: $matched of ${channels.size} channels have a working guide " +
-                "(${aliases.size} guide aliases, ${populated.size} populated guide channels)",
+                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies)",
         )
         return matched to channels.size
     }
@@ -373,7 +430,28 @@ class EpgRepository(
             "CA" to "Canada — epgshare01",
             "AU" to "Australia — epgshare01",
             "AUS" to "Australia — epgshare01",
+            "IT" to FEED_IT_IPTV_EPG,
+            "ITA" to FEED_IT_IPTV_EPG,
         )
+
+        const val FEED_IT_IPTV_EPG = "Italia — iptv-epg.org"
+        const val FEED_IT_EPGSHARE = "Italia — epgshare01"
+
+        /** Switched on by themselves, once, on a device set to Italian. */
+        val ITALIAN_FEEDS = setOf(FEED_IT_IPTV_EPG, FEED_IT_EPGSHARE)
+
+        /**
+         * One guide per channel id. Two guides can publish the same id (`Rai3.it` from the
+         * provider and from a free guide); merged, their schedules overlap in the grid. Keeps
+         * the guide with the most entries for each id.
+         */
+        fun onePerChannel(programmes: List<Programme>): List<Programme> {
+            if (programmes.isEmpty()) return programmes
+            val feeds = programmes.groupingBy { it.feedId }.eachCount()
+            if (feeds.size == 1) return programmes
+            val best = feeds.maxBy { it.value }.key
+            return programmes.filter { it.feedId == best }
+        }
 
         val BUILT_IN_FEEDS: List<Pair<String, String>> = listOf(
             "UK — Freeview (free-to-air)" to
@@ -386,6 +464,10 @@ class EpgRepository(
                 "https://epgshare01.online/epgshare01/epg_ripper_CA1.xml.gz",
             "Australia — epgshare01" to
                 "https://epgshare01.online/epgshare01/epg_ripper_AU1.xml.gz",
+            // Italy: iptv-epg.org (~300 channels, 10 days, descriptions) and epgshare01
+            // (~200 channels, 4 days, programme images). Both free, no key, plain XMLTV.gz.
+            FEED_IT_IPTV_EPG to "https://iptv-epg.org/files/epg-it.xml.gz",
+            FEED_IT_EPGSHARE to "https://epgshare01.online/epgshare01/epg_ripper_IT1.xml.gz",
         )
     }
 }

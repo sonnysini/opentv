@@ -169,7 +169,54 @@ data class Channel(
      * id pointing at a guide the provider never ships must not shadow a working match.
      */
     val epgCandidates: List<String>
-        get() = listOfNotNull(epgOverrideId, epgChannelId, matchedEpgId)
+        get() = if (matchedEpgId != null && TimeShift.decode(matchedEpgId) != null) {
+            // A computed timeshift (`Rai1.it@+1h`) is only set when the provider's own id is
+            // missing, empty, or just the base channel's guide an hour early — so it goes first.
+            listOfNotNull(epgOverrideId, matchedEpgId, epgChannelId)
+        } else {
+            listOfNotNull(epgOverrideId, epgChannelId, matchedEpgId)
+        }
+}
+
+/** Programme count per guide id: how much guide an id really carries. */
+data class EpgIdCount(val epgId: String, val n: Int)
+
+/**
+ * Guide for a timeshift copy computed from its base channel: `Rai1.it@+1h` is Rai 1's guide
+ * an hour later. Stored as the channel's matched id so every reader can resolve it.
+ */
+object TimeShift {
+    private const val MARK = "@+"
+    private const val HOUR_MILLIS = 3_600_000L
+
+    fun encode(baseEpgId: String, hours: Int): String = "$baseEpgId$MARK${hours}h"
+
+    /** (base id, offset millis), or null for an ordinary id. */
+    fun decode(id: String): Pair<String, Long>? {
+        val at = id.lastIndexOf(MARK)
+        if (at <= 0 || !id.endsWith("h")) return null
+        val hours = id.substring(at + MARK.length, id.length - 1).toIntOrNull() ?: return null
+        return id.substring(0, at) to hours * HOUR_MILLIS
+    }
+
+    /** The base channel's programmes moved later by [offsetMillis], filed under [id]. */
+    fun shift(programmes: List<Programme>, offsetMillis: Long, id: String): List<Programme> =
+        programmes.map {
+            it.copy(
+                epgChannelId = id,
+                startUtcMillis = it.startUtcMillis + offsetMillis,
+                endUtcMillis = it.endUtcMillis + offsetMillis,
+            )
+        }
+
+    /** `rai1+1` → (`rai1`, 1); null for keys that are not timeshifts. */
+    fun splitKey(groupKey: String): Pair<String, Int>? {
+        val m = KEY.matchEntire(groupKey) ?: return null
+        val hours = m.groupValues[2].toIntOrNull()?.takeIf { it > 0 } ?: return null
+        return m.groupValues[1] to hours
+    }
+
+    private val KEY = Regex("""(.+)\+(\d{1,2})""")
 }
 
 /** What the UI should show for a channel: the user's rename if set, else the cleaned display name. */

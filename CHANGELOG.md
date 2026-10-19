@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.16.0 — 19 October 2026
+
+- **Italian TV guides built in.** Settings › TV guide lists *Italia — iptv-epg.org* (~300
+  channels, 10 days, descriptions) and *Italia — epgshare01* (~200 channels, 4 days). On a
+  device set to Italian they switch on by themselves the first time; after that your toggle rules.
+- **Guide matching picks the guide that has programmes.** A channel is matched only to guide
+  entries that are actually filled, and the same channel published by two guides is no longer
+  "ambiguous": the fuller one wins. Adding a second guide no longer takes channels away.
+- **No double schedules.** When two guides use the same channel id, one guide is shown per
+  channel instead of both overlapping.
+- **+1 / +2 / +3 channels get a guide and a logo.** With no guide of their own (or the provider's
+  pointing at the original channel), they show the original's schedule moved 1, 2 or 3 hours
+  later, and borrow its logo when they have none.
+- **Initials instead of an empty logo.** Channels with no logo, or one that fails to load, show
+  their initials on a tile.
+- **Switching a guide off removes it.** Its programmes leave the guide straight away; switching it
+  back on downloads it again.
+- **"Add your guide" works with a remote.** The form takes focus when it opens, up/down move
+  between the fields and buttons, and Cancel clears it.
+
 ## 0.15.9 — 18 October 2026
 
 - **Group names without the source.** A group that comes from a single restream source drops the

@@ -222,9 +222,9 @@ private fun SearchResultRow(row: ChannelsViewModel.Row, onClick: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(
-            model = row.primary.logoUrl,
-            contentDescription = null,
+        ChannelLogo(
+            logoUrl = row.primary.logoUrl,
+            name = row.primary.shownName,
             modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)),
         )
         Spacer(Modifier.width(12.dp))
