@@ -347,11 +347,19 @@ class EpgRepository(
         val guideIcons = HashMap<String, String>()
         val freeIconByKey = HashMap<String, String>()
         val keyOfGuide = HashMap<String, String>()
+        // Guides sometimes hand a channel a sibling's icon (iptv-epg gives Sky Sport Max the
+        // Sky Sport Football logo). When guides disagree, an icon whose address spells the
+        // channel's key (`…/248skysportmax_Light_Fit.png`) wins over one that doesn't.
+        fun namesKey(icon: String, key: String) =
+            key.length >= 4 && icon.lowercase().filter { it.isLetterOrDigit() }.contains(key)
         for (alias in guideChannels) {
             keyOfGuide.putIfAbsent(alias.epgId, alias.normalizedKey)
             val icon = alias.iconUrl ?: continue
             guideIcons.putIfAbsent(alias.epgId, icon)
-            if (alias.feedId !in providerFeeds) freeIconByKey.putIfAbsent(alias.normalizedKey, icon)
+            if (alias.feedId in providerFeeds) continue
+            val key = alias.normalizedKey
+            val current = freeIconByKey[key]
+            if (current == null || (!namesKey(current, key) && namesKey(icon, key))) freeIconByKey[key] = icon
         }
         fun guideLogoOf(groupKey: String, guideId: String?): String? =
             freeIconByKey[groupKey]

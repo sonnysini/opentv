@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.7 — 19 October 2026
+
+- **Right guide logo when guides disagree.** If two TV guides give a channel different logos,
+  the one whose image address names the channel wins — iptv-epg.org shows Sky Sport Max with
+  the Sky Sport Football logo; epgshare's correct one is now used.
+
 ## 0.16.6 — 19 October 2026
 
 - **Logos beside channel groups.** The category list (☰) shows a badge next to each group:
