@@ -6,6 +6,10 @@
   from their matched TV guide (the `<icon>` in XMLTV), instead of showing just their initials.
   The provider's logo wins unless you turn on **Settings › TV guide › Logos from the guide**,
   which shows the guide's logos instead. Logos appear after the next guide refresh.
+  `+1`/`+2`/`+3` copies show their base channel's logo.
+- **Bigger logos, no channel numbers.** The channel list and the player's channel list drop the
+  provider's channel numbers (they jump about and mean nothing) and give the room to the logos.
+  Typing a number on the remote still jumps to that channel.
 
 ## 0.16.4 — 19 October 2026
 
