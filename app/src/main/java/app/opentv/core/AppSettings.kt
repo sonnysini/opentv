@@ -297,7 +297,7 @@ class AppSettings private constructor(context: Context) {
         _qualityFallbackMillis.value = ms
     }
 
-    /** While watching, a stream that stops moving for [stallFallbackSeconds] moves to the next variant. */
+    /** While watching, a stream that stops moving for [stallFallbackMillis] moves to the next variant. */
     private val _stallFallback = MutableStateFlow(prefs.getBoolean(KEY_STALL_FALLBACK, true))
     val stallFallback: StateFlow<Boolean> = _stallFallback.asStateFlow()
 
@@ -306,15 +306,19 @@ class AppSettings private constructor(context: Context) {
         _stallFallback.value = enabled
     }
 
-    private val _stallFallbackSeconds = MutableStateFlow(
-        prefs.getInt(KEY_STALL_FALLBACK_SECONDS, DEFAULT_STALL_SECONDS).coerceIn(MIN_STALL_SECONDS, MAX_STALL_SECONDS),
+    /** Freeze wait in milliseconds, in [FALLBACK_STEP_MILLIS] steps; migrates the old whole-seconds pref. */
+    private val _stallFallbackMillis = MutableStateFlow(
+        prefs.getInt(
+            KEY_STALL_FALLBACK_MILLIS,
+            prefs.getInt(KEY_STALL_FALLBACK_SECONDS, DEFAULT_STALL_SECONDS) * 1_000,
+        ).coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS),
     )
-    val stallFallbackSeconds: StateFlow<Int> = _stallFallbackSeconds.asStateFlow()
+    val stallFallbackMillis: StateFlow<Int> = _stallFallbackMillis.asStateFlow()
 
-    fun setStallFallbackSeconds(seconds: Int) {
-        val s = seconds.coerceIn(MIN_STALL_SECONDS, MAX_STALL_SECONDS)
-        prefs.edit().putInt(KEY_STALL_FALLBACK_SECONDS, s).apply()
-        _stallFallbackSeconds.value = s
+    fun setStallFallbackMillis(millis: Int) {
+        val ms = millis.coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS)
+        prefs.edit().putInt(KEY_STALL_FALLBACK_MILLIS, ms).apply()
+        _stallFallbackMillis.value = ms
     }
 
     /**
@@ -696,6 +700,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
         private const val KEY_STALL_FALLBACK = "stall_fallback"
         private const val KEY_STALL_FALLBACK_SECONDS = "stall_fallback_seconds"
+        private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
         private const val KEY_UI_SCALE = "ui_scale"
 
@@ -705,12 +710,10 @@ class AppSettings private constructor(context: Context) {
         /** Density multiplier at 100%: the stock layout is roomier than a TV list needs. */
         const val UI_SCALE_BASE = 0.8f
 
-        const val MIN_FALLBACK_MILLIS = 500
+        const val MIN_FALLBACK_MILLIS = 1_000
         const val MAX_FALLBACK_MILLIS = 10_000
         const val FALLBACK_STEP_MILLIS = 500
         private const val DEFAULT_FALLBACK_SECONDS = 4
-        const val MIN_STALL_SECONDS = 1
-        const val MAX_STALL_SECONDS = 15
         private const val DEFAULT_STALL_SECONDS = 3
 
         @Volatile private var instance: AppSettings? = null

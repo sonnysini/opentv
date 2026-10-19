@@ -544,7 +544,7 @@
     <string name="player_quality_fallback">%1$s not available → %2$s</string>
     <string name="settings_stall_fallback_title">Switch stream if it freezes</string>
     <string name="settings_stall_fallback_subtitle">While watching, if the picture freezes or keeps loading, move to the channel\'s next stream on its own.</string>
-    <string name="settings_stall_timeout">Frozen for: %1$d s</string>
+    <string name="settings_stall_timeout">Frozen for: %1$s s</string>
     <string name="player_stall_fallback">%1$s froze → %2$s</string>
     <string name="player_channel_unavailable">Channel not available</string>
     <string name="player_channel_unavailable_hint">OK to try again · ↑/↓ to change channel</string>

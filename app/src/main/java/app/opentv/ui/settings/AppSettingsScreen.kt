@@ -98,7 +98,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val qualityFallback by settings.qualityFallback.collectAsState()
     val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
     val stallFallback by settings.stallFallback.collectAsState()
-    val stallSeconds by settings.stallFallbackSeconds.collectAsState()
+    val stallMillis by settings.stallFallbackMillis.collectAsState()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -317,12 +317,15 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             )
             if (stallFallback) {
                 StepSlider(
-                    label = stringResource(R.string.settings_stall_timeout, stallSeconds),
-                    value = stallSeconds,
-                    min = AppSettings.MIN_STALL_SECONDS,
-                    max = AppSettings.MAX_STALL_SECONDS,
-                    step = 1,
-                    onChange = settings::setStallFallbackSeconds,
+                    label = stringResource(
+                        R.string.settings_stall_timeout,
+                        DecimalFormat("0.#").format(stallMillis / 1_000.0),
+                    ),
+                    value = stallMillis,
+                    min = AppSettings.MIN_FALLBACK_MILLIS,
+                    max = AppSettings.MAX_FALLBACK_MILLIS,
+                    step = AppSettings.FALLBACK_STEP_MILLIS,
+                    onChange = settings::setStallFallbackMillis,
                 )
             }
         }
