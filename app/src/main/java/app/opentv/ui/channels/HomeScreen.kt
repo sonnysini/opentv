@@ -89,7 +89,6 @@ import app.opentv.player.PlayerController
 import app.opentv.ui.ChannelsViewModel
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
-import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1012,9 +1011,9 @@ private fun ChannelRow(
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(
-            model = row.primary.logoUrl,
-            contentDescription = null,
+        ChannelLogo(
+            logoUrl = row.primary.logoUrl,
+            name = row.primary.shownName,
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(6.dp)),

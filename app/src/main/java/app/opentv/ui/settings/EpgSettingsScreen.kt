@@ -30,6 +30,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -55,6 +70,7 @@ fun EpgSettingsScreen(
 ) {
     val ui by viewModel.ui.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
     var newName by remember { mutableStateOf("") }
     var newUrl by remember { mutableStateOf("") }
 
@@ -105,6 +121,9 @@ fun EpgSettingsScreen(
                 if (!showAdd) {
                     OutlinedButton(onClick = { showAdd = true }) { Text(stringResource(R.string.epg_add_own)) }
                 } else {
+                    // Opening the form puts focus in it — not back on the top bar.
+                    val nameFocus = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { runCatching { nameFocus.requestFocus() } }
                     Card {
                         Column(Modifier.padding(16.dp)) {
                             OutlinedTextField(
@@ -112,7 +131,9 @@ fun EpgSettingsScreen(
                                 onValueChange = { newName = it },
                                 label = { Text(stringResource(R.string.epg_name_optional)) },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
+                                modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).dpadLeavesField(focusManager),
                             )
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(
@@ -120,7 +141,9 @@ fun EpgSettingsScreen(
                                 onValueChange = { newUrl = it },
                                 label = { Text(stringResource(R.string.epg_xmltv_url)) },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.moveFocus(FocusDirection.Down) }),
+                                modifier = Modifier.fillMaxWidth().dpadLeavesField(focusManager),
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -131,7 +154,9 @@ fun EpgSettingsScreen(
                                     },
                                     enabled = newUrl.isNotBlank(),
                                 ) { Text(stringResource(R.string.epg_add_guide)) }
-                                TextButton(onClick = { showAdd = false }) { Text(stringResource(R.string.common_cancel)) }
+                                TextButton(onClick = { newName = ""; newUrl = ""; showAdd = false }) {
+                                    Text(stringResource(R.string.common_cancel))
+                                }
                             }
                         }
                     }
@@ -174,5 +199,18 @@ private fun FeedRow(
             }
             Switch(checked = feed.enabled, onCheckedChange = onToggle)
         }
+    }
+}
+
+/**
+ * On a TV remote a text field swallows up/down, so focus can never leave it. Up and down
+ * move to the previous/next control instead; left and right still move the cursor.
+ */
+private fun Modifier.dpadLeavesField(focusManager: FocusManager): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    when (event.key) {
+        Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
+        Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
+        else -> false
     }
 }

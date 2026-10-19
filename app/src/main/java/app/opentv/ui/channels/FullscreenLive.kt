@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import app.opentv.R
 import app.opentv.data.model.shownName
 import app.opentv.ui.ChannelsViewModel
-import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -444,9 +443,9 @@ private fun FullscreenChannelRow(
             maxLines = 1,
             modifier = Modifier.width(48.dp),
         )
-        AsyncImage(
-            model = row.primary.logoUrl,
-            contentDescription = null,
+        ChannelLogo(
+            logoUrl = row.primary.logoUrl,
+            name = row.primary.shownName,
             modifier = Modifier.size(width = 72.dp, height = 48.dp).clip(RoundedCornerShape(6.dp)),
         )
         Spacer(Modifier.width(16.dp))

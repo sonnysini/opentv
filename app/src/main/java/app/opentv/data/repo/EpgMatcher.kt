@@ -30,6 +30,18 @@ object EpgMatcher {
         val epgId: String,
         /** Normalised display-name or id: `bbcone`, `bbc1uk`. */
         val key: String,
+        /** Which guide it came from. Two ids for one name are only ambiguous inside one guide. */
+        val feedId: Long = 0,
+        /** How much guide the id carries (programme count): the tie-break between guides. */
+        val weight: Int = 0,
+    )
+
+    /** One `<channel>` of one guide, as the index is built from. */
+    data class GuideChannel(
+        val epgId: String,
+        val name: String,
+        val feedId: Long = 0,
+        val weight: Int = 0,
     )
 
     class Index internal constructor(
@@ -44,20 +56,32 @@ object EpgMatcher {
 
             // Prefix tier: the provider name extends the guide name or vice versa
             // ("skysportsmainevent" vs "skysportsmainevt"; "bbcone" vs "bbconelondon").
-            // Only accepted when every candidate agrees on a single epg id.
-            var found: String? = null
-            for (alias in sortedKeys) {
-                val hit = (alias.key.length >= MIN_KEY_LENGTH) &&
+            // Only accepted when no single guide offers two different channels for it.
+            // Never across a timeshift: `rai1+1` extends `rai1`, but its guide is an hour late.
+            val shifted = '+' in groupKey
+            val hits = sortedKeys.filter { alias ->
+                alias.key.length >= MIN_KEY_LENGTH &&
+                    ('+' in alias.key) == shifted &&
                     (alias.key.startsWith(groupKey) || groupKey.startsWith(alias.key))
-                if (!hit) continue
-                if (found == null) {
-                    found = alias.epgId
-                } else if (found != alias.epgId) {
-                    return null // ambiguous — refuse to guess
-                }
             }
-            return found
+            return pick(hits)
         }
+    }
+
+    /**
+     * Chooses among the guide channels that fit one name.
+     *
+     * Inside one guide, two different ids for a name are two different channels (regions,
+     * `CNN` US vs international) — refuse to guess. Across guides, they are the same channel
+     * published twice (`Rai3.it` here, `Rai.3.HD.it` there): take the one with more guide.
+     */
+    private fun pick(candidates: List<Alias>): String? {
+        if (candidates.isEmpty()) return null
+        val ambiguous = candidates.groupBy { it.feedId }.values.any { perFeed ->
+            perFeed.map { it.epgId }.distinct().size > 1
+        }
+        if (ambiguous) return null
+        return candidates.maxBy { it.weight }.epgId
     }
 
     /**
@@ -67,28 +91,29 @@ object EpgMatcher {
      * that *do* fill in `epg_channel_id` often use the id form, and it costs nothing to
      * accept either.
      */
-    fun buildIndex(aliases: Iterable<Pair<String, String>>): Index {
-        val exact = HashMap<String, String>()
-        val ambiguous = HashSet<String>()
+    fun buildIndex(aliases: Iterable<Pair<String, String>>): Index =
+        buildIndexOf(aliases.map { (id, name) -> GuideChannel(id, name) })
+
+    fun buildIndexOf(channels: Iterable<GuideChannel>): Index {
+        val byKey = HashMap<String, MutableList<Alias>>()
         val all = ArrayList<Alias>()
 
-        for ((epgId, name) in aliases) {
-            for (candidate in listOf(name, epgId)) {
+        for (channel in channels) {
+            for (candidate in listOf(channel.name, channel.epgId)) {
                 // Full normalise, not bare groupKeyOf: free guides append 'HD' to display
                 // names ('BBC One East HD'), which would otherwise never key-match a
                 // provider's 'BBC ONE EAST'. normalize() strips the quality token.
                 val key = ChannelNameNormalizer.normalize(candidate).groupKey
                 if (key.length < MIN_KEY_LENGTH) continue
-                all += Alias(epgId, key)
-                val existing = exact.putIfAbsent(key, epgId)
-                if (existing != null && existing != epgId) {
-                    // Two different guide channels normalise to the same key. Neither can
-                    // be trusted for exact matching; drop the key rather than pick a side.
-                    ambiguous += key
-                }
+                val alias = Alias(channel.epgId, key, channel.feedId, channel.weight)
+                all += alias
+                byKey.getOrPut(key) { mutableListOf() } += alias
             }
         }
-        ambiguous.forEach(exact::remove)
+        // Two different channels of one guide normalising to the same key can't be told
+        // apart; pick() drops the key rather than choose a side.
+        val exact = HashMap<String, String>()
+        for ((key, aliases) in byKey) pick(aliases)?.let { exact[key] = it }
 
         return Index(exact, all)
     }

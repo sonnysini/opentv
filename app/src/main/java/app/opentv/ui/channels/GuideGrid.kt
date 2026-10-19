@@ -57,7 +57,6 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
 import app.opentv.ui.ChannelsViewModel
-import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -207,9 +206,9 @@ private fun ChannelListRow(
                 modifier = Modifier.width(30.dp),
             )
         }
-        AsyncImage(
-            model = row.primary.logoUrl,
-            contentDescription = null,
+        ChannelLogo(
+            logoUrl = row.primary.logoUrl,
+            name = row.primary.shownName,
             modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)),
         )
         Spacer(Modifier.width(12.dp))
@@ -369,9 +368,9 @@ private fun GuideRow(
                     modifier = Modifier.width(28.dp),
                 )
             }
-            AsyncImage(
-                model = row.primary.logoUrl,
-                contentDescription = null,
+            ChannelLogo(
+                logoUrl = row.primary.logoUrl,
+                name = row.primary.shownName,
                 modifier = Modifier.size(34.dp).clip(RoundedCornerShape(4.dp)),
             )
             Spacer(Modifier.width(8.dp))
