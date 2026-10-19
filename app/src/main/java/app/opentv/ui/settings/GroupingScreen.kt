@@ -53,6 +53,7 @@ fun GroupingScreen(
 ) {
     val mergeSources by viewModel.mergeSources.collectAsState()
     val stripSources by viewModel.stripSources.collectAsState()
+    val groupBadges by viewModel.groupBadges.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     val merges by viewModel.merges.collectAsState()
     val busy by viewModel.busy.collectAsState()
@@ -112,6 +113,15 @@ fun GroupingScreen(
                     stringResource(R.string.categories_strip_sources_desc),
                     checked = stripSources,
                     onToggle = viewModel::setStripSources,
+                    emphasised = true,
+                )
+            }
+            item(key = "group_badges") {
+                SwitchRow(
+                    stringResource(R.string.categories_group_badges),
+                    stringResource(R.string.categories_group_badges_desc),
+                    checked = groupBadges,
+                    onToggle = viewModel::setGroupBadges,
                     emphasised = true,
                 )
             }

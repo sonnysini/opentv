@@ -531,6 +531,8 @@
     <string name="categories_merge_sources">Merge groups by source</string>
     <string name="categories_merge_sources_desc">Sky Sport (Hermes), (SAT), (DVS)… become one "Sky Sport"; pick the source from the Quality panel.</string>
     <string name="categories_strip_sources">Hide source in group names</string>
+    <string name="categories_group_badges">Logos beside groups</string>
+    <string name="categories_group_badges_desc">Broadcaster logo, flag or emoji next to each group in the category list (☰).</string>
     <string name="categories_strip_sources_desc">Bambini (Hermes) reads "Bambini", DAZN KALI reads "DAZN".</string>
     <string name="categories_foreign_sport">International sport</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — events with foreign commentary.</string>

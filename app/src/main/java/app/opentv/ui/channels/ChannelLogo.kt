@@ -27,6 +27,9 @@ import coil.compose.AsyncImage
 /** Settings › TV guide › "Logos from the guide": the guide's logos win over the provider's. */
 val LocalPreferGuideLogos = staticCompositionLocalOf { false }
 
+/** Settings › Channel grouping › "Logos beside groups": badges in the category list. */
+val LocalGroupBadges = staticCompositionLocalOf { true }
+
 /** This channel's logo under the user's choice of provider or guide logos. */
 @Composable
 fun Channel.shownLogo(): String? = logo(LocalPreferGuideLogos.current)
