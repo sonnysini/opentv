@@ -15,9 +15,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -1393,7 +1391,6 @@ private fun OptionRow(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BarChip(
     icon: ImageVector,
@@ -1407,6 +1404,8 @@ private fun BarChip(
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Holding OK: the remote repeats the key-down, and the first repeat is the long press.
+    var longPressed by remember { mutableStateOf(false) }
     val container = when {
         focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
@@ -1426,7 +1425,23 @@ private fun BarChip(
                     if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
                     else Modifier,
                 )
-                .combinedClickable(interactionSource = null, indication = null, onLongClick = onLongClick, onClick = onClick)
+                .then(
+                    if (onLongClick == null) Modifier
+                    else Modifier.onPreviewKeyEvent { e ->
+                        if (e.key != Key.DirectionCenter && e.key != Key.Enter && e.key != Key.NumPadEnter) {
+                            return@onPreviewKeyEvent false
+                        }
+                        when (e.type) {
+                            KeyEventType.KeyDown -> when {
+                                e.nativeKeyEvent.repeatCount == 0 -> longPressed = false
+                                !longPressed -> { longPressed = true; onLongClick() }
+                            }
+                            KeyEventType.KeyUp -> if (!longPressed) onClick()
+                        }
+                        true
+                    },
+                )
+                .clickable(interactionSource = null, indication = null, onClick = onClick)
                 .padding(12.dp),
         ) {
             if (badge.isNullOrBlank()) {
