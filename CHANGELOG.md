@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.3 — 19 October 2026
+
+- **Back up and restore your settings.** On the phone page (Settings › Manage from phone),
+  *Backup & restore settings* downloads one file with your settings, guide feeds and channel
+  merges, and imports it back on this or another TV. On import you choose what to bring in:
+  channel merges (added to the ones already on the TV) and/or settings (they replace the TV's).
+  Your provider login, NAS password, TMDB key and Stremio add-ons are never put in the file.
+- Fixed: large or non-English request bodies from the phone page could arrive cut short.
+
 ## 0.16.2 — 19 October 2026
 
 - **Wait-time sliders you can actually use with the remote.** "Wait before switching" and

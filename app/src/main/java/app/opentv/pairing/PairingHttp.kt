@@ -117,6 +117,7 @@ object PairingHttp {
         status: String,
         contentType: String,
         body: String,
+        extraHeaders: Map<String, String> = emptyMap(),
     ): ByteArray {
         val bytes = body.toByteArray(Charsets.UTF_8)
         val head = buildString {
@@ -129,6 +130,7 @@ object PairingHttp {
             append("Cache-Control: no-store\r\n")
             append("X-Content-Type-Options: nosniff\r\n")
             append("Referrer-Policy: no-referrer\r\n")
+            extraHeaders.forEach { (name, value) -> append(name).append(": ").append(value).append("\r\n") }
             append("\r\n")
         }
         return head.toByteArray(Charsets.US_ASCII) + bytes

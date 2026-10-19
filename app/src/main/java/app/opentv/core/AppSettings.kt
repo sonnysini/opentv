@@ -29,10 +29,17 @@ class AppSettings private constructor(context: Context) {
 
     private val addonJson = Json { ignoreUnknownKeys = true }
 
+    /** Re-reads of every persisted flow, run by [reload] after a settings import rewrote the prefs. */
+    private val reloaders = mutableListOf<() -> Unit>()
+
+    /** A flow seeded from prefs by [read], and re-seeded by the same [read] on [reload]. */
+    private fun <T> pref(read: () -> T): MutableStateFlow<T> =
+        MutableStateFlow(read()).also { flow -> reloaders += { flow.value = read() } }
+
     /** How the app chooses light vs dark. TV defaults to dark under [ThemeMode.SYSTEM]. */
     enum class ThemeMode { SYSTEM, DARK, LIGHT }
 
-    private val _themeMode = MutableStateFlow(readThemeMode())
+    private val _themeMode = pref { readThemeMode() }
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
     /**
@@ -41,9 +48,9 @@ class AppSettings private constructor(context: Context) {
      */
     enum class AppStyle { OWNTV, CLASSIC }
 
-    private val _appStyle = MutableStateFlow(
-        runCatching { AppStyle.valueOf(prefs.getString(KEY_APP_STYLE, null) ?: "") }.getOrDefault(AppStyle.OWNTV),
-    )
+    private val _appStyle = pref {
+        runCatching { AppStyle.valueOf(prefs.getString(KEY_APP_STYLE, null) ?: "") }.getOrDefault(AppStyle.OWNTV)
+    }
     val appStyle: StateFlow<AppStyle> = _appStyle.asStateFlow()
 
     fun setAppStyle(style: AppStyle) {
@@ -59,23 +66,23 @@ class AppSettings private constructor(context: Context) {
      */
     enum class ChannelLayout { GRID, LIST, FULLSCREEN }
 
-    private val _channelLayout = MutableStateFlow(readChannelLayout())
+    private val _channelLayout = pref { readChannelLayout() }
     val channelLayout: StateFlow<ChannelLayout> = _channelLayout.asStateFlow()
 
     /** Whether embedded subtitles/closed captions are shown when a stream carries them. */
-    private val _subtitlesEnabled = MutableStateFlow(prefs.getBoolean(KEY_SUBTITLES, true))
+    private val _subtitlesEnabled = pref { prefs.getBoolean(KEY_SUBTITLES, true) }
     val subtitlesEnabled: StateFlow<Boolean> = _subtitlesEnabled.asStateFlow()
 
     /** Whether the selected channel plays live inside the guide's preview pane. */
-    private val _guidePreviewVideo = MutableStateFlow(prefs.getBoolean(KEY_PREVIEW_VIDEO, true))
+    private val _guidePreviewVideo = pref { prefs.getBoolean(KEY_PREVIEW_VIDEO, true) }
     val guidePreviewVideo: StateFlow<Boolean> = _guidePreviewVideo.asStateFlow()
 
     /** Whether the guide preview plays sound (off by default — quieter while browsing). */
-    private val _guidePreviewSound = MutableStateFlow(prefs.getBoolean(KEY_PREVIEW_SOUND, false))
+    private val _guidePreviewSound = pref { prefs.getBoolean(KEY_PREVIEW_SOUND, false) }
     val guidePreviewSound: StateFlow<Boolean> = _guidePreviewSound.asStateFlow()
 
     /** The profile whose watch history is active. Defaults to the built-in profile (id 1). */
-    private val _activeProfileId = MutableStateFlow(prefs.getLong(KEY_ACTIVE_PROFILE, 1L))
+    private val _activeProfileId = pref { prefs.getLong(KEY_ACTIVE_PROFILE, 1L) }
     val activeProfileId: StateFlow<Long> = _activeProfileId.asStateFlow()
 
     fun setActiveProfile(id: Long) {
@@ -86,12 +93,12 @@ class AppSettings private constructor(context: Context) {
     // ---- Parental controls -------------------------------------------------------------------
 
     /** Whether a parental PIN is set. The PIN itself is only ever stored as a salted hash. */
-    private val _pinIsSet = MutableStateFlow(prefs.getString(KEY_PIN_HASH, null) != null)
+    private val _pinIsSet = pref { prefs.getString(KEY_PIN_HASH, null) != null }
     val pinIsSet: StateFlow<Boolean> = _pinIsSet.asStateFlow()
 
     /** Category group keys the user has marked adult/hidden. */
     private val _hiddenCategories =
-        MutableStateFlow(prefs.getStringSet(KEY_HIDDEN_CATS, emptySet())!!.toSet())
+        pref { prefs.getStringSet(KEY_HIDDEN_CATS, emptySet())!!.toSet() }
     val hiddenCategories: StateFlow<Set<String>> = _hiddenCategories.asStateFlow()
 
     /**
@@ -134,7 +141,7 @@ class AppSettings private constructor(context: Context) {
      * and titles are never stored, so they cost no memory, no guide build time and no sync time.
      */
     private val _disabledCategories =
-        MutableStateFlow(prefs.getStringSet(KEY_DISABLED_CATS, emptySet())!!.toSet())
+        pref { prefs.getStringSet(KEY_DISABLED_CATS, emptySet())!!.toSet() }
     val disabledCategories: StateFlow<Set<String>> = _disabledCategories.asStateFlow()
 
     @Synchronized
@@ -149,15 +156,15 @@ class AppSettings private constructor(context: Context) {
      * ([italianOnly]/[foreignSportOff]) would otherwise switch them off.
      */
     private val _forcedOnCategories =
-        MutableStateFlow(prefs.getStringSet(KEY_FORCED_ON_CATS, emptySet())!!.toSet())
+        pref { prefs.getStringSet(KEY_FORCED_ON_CATS, emptySet())!!.toSet() }
 
     /** "Italian only": every foreign-language live category is switched off, new ones included. */
-    private val _italianOnly = MutableStateFlow(prefs.getBoolean(KEY_ITALIAN_ONLY, false))
+    private val _italianOnly = pref { prefs.getBoolean(KEY_ITALIAN_ONLY, false) }
     val italianOnly: StateFlow<Boolean> = _italianOnly.asStateFlow()
 
     /** International sport groups with foreign commentary (ESPN+, NBA Pass, …) switched off. */
     /** Fold live categories split by restream source ('Sky Sport (Hermes)' + '(SAT)') into one. */
-    private val _mergeCategorySources = MutableStateFlow(prefs.getBoolean(KEY_MERGE_CATEGORY_SOURCES, true))
+    private val _mergeCategorySources = pref { prefs.getBoolean(KEY_MERGE_CATEGORY_SOURCES, true) }
     val mergeCategorySources: StateFlow<Boolean> = _mergeCategorySources.asStateFlow()
 
     fun setMergeCategorySources(on: Boolean) {
@@ -166,7 +173,7 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** Drop the restream source from a lone group's name: 'Bambini (Hermes)' reads "Bambini". */
-    private val _stripCategorySources = MutableStateFlow(prefs.getBoolean(KEY_STRIP_CATEGORY_SOURCES, true))
+    private val _stripCategorySources = pref { prefs.getBoolean(KEY_STRIP_CATEGORY_SOURCES, true) }
     val stripCategorySources: StateFlow<Boolean> = _stripCategorySources.asStateFlow()
 
     fun setStripCategorySources(on: Boolean) {
@@ -174,7 +181,7 @@ class AppSettings private constructor(context: Context) {
         _stripCategorySources.value = on
     }
 
-    private val _foreignSportOff = MutableStateFlow(prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false))
+    private val _foreignSportOff = pref { prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false) }
     val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
 
     private val _categoryRules = MutableStateFlow(currentCategoryRules())
@@ -251,7 +258,7 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** Whether launching the app jumps straight back to the last channel you watched. */
-    private val _resumeLastChannel = MutableStateFlow(prefs.getBoolean(KEY_RESUME_LAST, false))
+    private val _resumeLastChannel = pref { prefs.getBoolean(KEY_RESUME_LAST, false) }
     val resumeLastChannel: StateFlow<Boolean> = _resumeLastChannel.asStateFlow()
 
     fun setResumeLastChannel(enabled: Boolean) {
@@ -262,10 +269,10 @@ class AppSettings private constructor(context: Context) {
     // ---- Channel quality ---------------------------------------------------------------------
 
     /** Which quality variant of a channel plays first. See [QualityPreference.order]. */
-    private val _preferredQuality = MutableStateFlow(
+    private val _preferredQuality = pref {
         runCatching { PreferredQuality.valueOf(prefs.getString(KEY_PREFERRED_QUALITY, null) ?: "") }
-            .getOrDefault(PreferredQuality.FHD),
-    )
+            .getOrDefault(PreferredQuality.FHD)
+    }
     val preferredQuality: StateFlow<PreferredQuality> = _preferredQuality.asStateFlow()
 
     fun setPreferredQuality(quality: PreferredQuality) {
@@ -274,7 +281,7 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** When a variant errors or shows no picture within [qualityFallbackMillis], try the next one. */
-    private val _qualityFallback = MutableStateFlow(prefs.getBoolean(KEY_QUALITY_FALLBACK, true))
+    private val _qualityFallback = pref { prefs.getBoolean(KEY_QUALITY_FALLBACK, true) }
     val qualityFallback: StateFlow<Boolean> = _qualityFallback.asStateFlow()
 
     fun setQualityFallback(enabled: Boolean) {
@@ -283,12 +290,12 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** Wait in milliseconds, in [FALLBACK_STEP_MILLIS] steps; migrates the old whole-seconds pref. */
-    private val _qualityFallbackMillis = MutableStateFlow(
+    private val _qualityFallbackMillis = pref {
         prefs.getInt(
             KEY_QUALITY_FALLBACK_MILLIS,
             prefs.getInt(KEY_QUALITY_FALLBACK_SECONDS, DEFAULT_FALLBACK_SECONDS) * 1_000,
-        ).coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS),
-    )
+        ).coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS)
+    }
     val qualityFallbackMillis: StateFlow<Int> = _qualityFallbackMillis.asStateFlow()
 
     fun setQualityFallbackMillis(millis: Int) {
@@ -298,7 +305,7 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** While watching, a stream that stops moving for [stallFallbackMillis] moves to the next variant. */
-    private val _stallFallback = MutableStateFlow(prefs.getBoolean(KEY_STALL_FALLBACK, true))
+    private val _stallFallback = pref { prefs.getBoolean(KEY_STALL_FALLBACK, true) }
     val stallFallback: StateFlow<Boolean> = _stallFallback.asStateFlow()
 
     fun setStallFallback(enabled: Boolean) {
@@ -307,12 +314,12 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** Freeze wait in milliseconds, in [FALLBACK_STEP_MILLIS] steps; migrates the old whole-seconds pref. */
-    private val _stallFallbackMillis = MutableStateFlow(
+    private val _stallFallbackMillis = pref {
         prefs.getInt(
             KEY_STALL_FALLBACK_MILLIS,
             prefs.getInt(KEY_STALL_FALLBACK_SECONDS, DEFAULT_STALL_SECONDS) * 1_000,
-        ).coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS),
-    )
+        ).coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS)
+    }
     val stallFallbackMillis: StateFlow<Int> = _stallFallbackMillis.asStateFlow()
 
     fun setStallFallbackMillis(millis: Int) {
@@ -325,11 +332,11 @@ class AppSettings private constructor(context: Context) {
      * Whole-UI zoom in percent, so a TV viewed from afar can fit more rows. 100% is
      * [UI_SCALE_BASE] of the system density; the 0.14.5 pref (100% = system density) is migrated.
      */
-    private val _uiScalePercent = MutableStateFlow(
+    private val _uiScalePercent = pref {
         (if (prefs.contains(KEY_UI_SCALE)) prefs.getInt(KEY_UI_SCALE, 100)
         else prefs.getInt(KEY_UI_SCALE_V1, 80).let { Math.round(it / UI_SCALE_BASE / UI_SCALE_STEP) * UI_SCALE_STEP })
-            .coerceIn(MIN_UI_SCALE, MAX_UI_SCALE),
-    )
+            .coerceIn(MIN_UI_SCALE, MAX_UI_SCALE)
+    }
     val uiScalePercent: StateFlow<Int> = _uiScalePercent.asStateFlow()
 
     fun setUiScalePercent(percent: Int) {
@@ -341,11 +348,11 @@ class AppSettings private constructor(context: Context) {
     // ---- Recording behaviour -----------------------------------------------------------------
 
     /** Minutes to start a scheduled recording early, so a late start isn't clipped. */
-    private val _recordPadStartMinutes = MutableStateFlow(prefs.getInt(KEY_PAD_START, 1))
+    private val _recordPadStartMinutes = pref { prefs.getInt(KEY_PAD_START, 1) }
     val recordPadStartMinutes: StateFlow<Int> = _recordPadStartMinutes.asStateFlow()
 
     /** Minutes to keep recording past the listed end, so an overrun (sport/news) isn't cut off. */
-    private val _recordPadEndMinutes = MutableStateFlow(prefs.getInt(KEY_PAD_END, 5))
+    private val _recordPadEndMinutes = pref { prefs.getInt(KEY_PAD_END, 5) }
     val recordPadEndMinutes: StateFlow<Int> = _recordPadEndMinutes.asStateFlow()
 
     fun setRecordPadding(startMinutes: Int, endMinutes: Int) {
@@ -361,7 +368,7 @@ class AppSettings private constructor(context: Context) {
      * extra provider connection). Essential on a single-connection provider, where recording one
      * channel while another plays gets one of them cut. Default on.
      */
-    private val _recordAutoSwitch = MutableStateFlow(prefs.getBoolean(KEY_REC_AUTOSWITCH, true))
+    private val _recordAutoSwitch = pref { prefs.getBoolean(KEY_REC_AUTOSWITCH, true) }
     val recordAutoSwitch: StateFlow<Boolean> = _recordAutoSwitch.asStateFlow()
 
     fun setRecordAutoSwitch(enabled: Boolean) {
@@ -373,7 +380,7 @@ class AppSettings private constructor(context: Context) {
      * Pause & rewind live TV via a rolling on-disk buffer of the current channel. Experimental and
      * heavier on weak boxes, so it's opt-in (off by default); when off, playback is unchanged.
      */
-    private val _livePauseEnabled = MutableStateFlow(prefs.getBoolean(KEY_LIVE_PAUSE, false))
+    private val _livePauseEnabled = pref { prefs.getBoolean(KEY_LIVE_PAUSE, false) }
     val livePauseEnabled: StateFlow<Boolean> = _livePauseEnabled.asStateFlow()
 
     fun setLivePauseEnabled(enabled: Boolean) {
@@ -388,13 +395,13 @@ class AppSettings private constructor(context: Context) {
      * type's catalogue on the next sync (the speed-up) and hides its tab; already-synced rows are
      * left in place, so turning it back on and refreshing brings everything straight back.
      */
-    private val _liveEnabled = MutableStateFlow(prefs.getBoolean(KEY_CONTENT_LIVE, true))
+    private val _liveEnabled = pref { prefs.getBoolean(KEY_CONTENT_LIVE, true) }
     val liveEnabled: StateFlow<Boolean> = _liveEnabled.asStateFlow()
 
-    private val _moviesEnabled = MutableStateFlow(prefs.getBoolean(KEY_CONTENT_MOVIES, true))
+    private val _moviesEnabled = pref { prefs.getBoolean(KEY_CONTENT_MOVIES, true) }
     val moviesEnabled: StateFlow<Boolean> = _moviesEnabled.asStateFlow()
 
-    private val _seriesEnabled = MutableStateFlow(prefs.getBoolean(KEY_CONTENT_SERIES, true))
+    private val _seriesEnabled = pref { prefs.getBoolean(KEY_CONTENT_SERIES, true) }
     val seriesEnabled: StateFlow<Boolean> = _seriesEnabled.asStateFlow()
 
     fun setLiveEnabled(enabled: Boolean) {
@@ -425,7 +432,7 @@ class AppSettings private constructor(context: Context) {
      * Applied at [android.content.ContextWrapper.attachBaseContext] time so the whole app —
      * including notifications built off the app context — picks it up.
      */
-    private val _languageTag = MutableStateFlow(prefs.getString(KEY_LANGUAGE, "").orEmpty())
+    private val _languageTag = pref { prefs.getString(KEY_LANGUAGE, "").orEmpty() }
     val languageTag: StateFlow<String> = _languageTag.asStateFlow()
 
     fun setLanguageTag(tag: String) {
@@ -443,7 +450,7 @@ class AppSettings private constructor(context: Context) {
      * constant (0 = Fit). Persisted so the choice survives leaving the player, which testers asked
      * for — picking Fill every single time you open a channel gets old fast.
      */
-    private val _playerResizeMode = MutableStateFlow(prefs.getInt(KEY_RESIZE_MODE, 0))
+    private val _playerResizeMode = pref { prefs.getInt(KEY_RESIZE_MODE, 0) }
     val playerResizeMode: StateFlow<Int> = _playerResizeMode.asStateFlow()
 
     fun setPlayerResizeMode(mode: Int) {
@@ -468,7 +475,7 @@ class AppSettings private constructor(context: Context) {
      */
     enum class RecordingTarget { INTERNAL, SMB, USB }
 
-    private val _recordingTarget = MutableStateFlow(readRecordingTarget())
+    private val _recordingTarget = pref { readRecordingTarget() }
     val recordingTarget: StateFlow<RecordingTarget> = _recordingTarget.asStateFlow()
 
     /**
@@ -476,11 +483,11 @@ class AppSettings private constructor(context: Context) {
      * null if none has been picked. Persisted as a string; a matching persistable permission is
      * taken when it is chosen, so the grant survives restarts.
      */
-    private val _usbTreeUri = MutableStateFlow(prefs.getString(KEY_USB_TREE, null))
+    private val _usbTreeUri = pref { prefs.getString(KEY_USB_TREE, null) }
     val usbTreeUri: StateFlow<String?> = _usbTreeUri.asStateFlow()
 
     /** A friendly name for the chosen USB folder (e.g. the DocumentFile's name), for display. */
-    private val _usbFolderLabel = MutableStateFlow(prefs.getString(KEY_USB_LABEL, null))
+    private val _usbFolderLabel = pref { prefs.getString(KEY_USB_LABEL, null) }
     val usbFolderLabel: StateFlow<String?> = _usbFolderLabel.asStateFlow()
 
     /** Save (or clear, with null) the granted USB tree URI and its display label together. */
@@ -494,20 +501,20 @@ class AppSettings private constructor(context: Context) {
     }
 
     /** SMB / NAS connection. Stored on-device only, exactly like provider credentials. */
-    private val _smbHost = MutableStateFlow(prefs.getString(KEY_SMB_HOST, "").orEmpty())
+    private val _smbHost = pref { prefs.getString(KEY_SMB_HOST, "").orEmpty() }
     val smbHost: StateFlow<String> = _smbHost.asStateFlow()
 
-    private val _smbShare = MutableStateFlow(prefs.getString(KEY_SMB_SHARE, "").orEmpty())
+    private val _smbShare = pref { prefs.getString(KEY_SMB_SHARE, "").orEmpty() }
     val smbShare: StateFlow<String> = _smbShare.asStateFlow()
 
     /** Sub-folder within the share, e.g. `Recordings`. Blank = share root. */
-    private val _smbFolder = MutableStateFlow(prefs.getString(KEY_SMB_FOLDER, "OpenTV").orEmpty())
+    private val _smbFolder = pref { prefs.getString(KEY_SMB_FOLDER, "OpenTV").orEmpty() }
     val smbFolder: StateFlow<String> = _smbFolder.asStateFlow()
 
-    private val _smbUser = MutableStateFlow(prefs.getString(KEY_SMB_USER, "").orEmpty())
+    private val _smbUser = pref { prefs.getString(KEY_SMB_USER, "").orEmpty() }
     val smbUser: StateFlow<String> = _smbUser.asStateFlow()
 
-    private val _smbPassword = MutableStateFlow(prefs.getString(KEY_SMB_PASS, "").orEmpty())
+    private val _smbPassword = pref { prefs.getString(KEY_SMB_PASS, "").orEmpty() }
     val smbPassword: StateFlow<String> = _smbPassword.asStateFlow()
 
     fun setRecordingTarget(target: RecordingTarget) {
@@ -546,7 +553,7 @@ class AppSettings private constructor(context: Context) {
             .also { prefs.edit().putString(KEY_SYNC_DEVICE_ID, it).apply() }
 
     /** Whether to run a NAS sync automatically each time the app is opened. Off by default. */
-    private val _nasAutoSync = MutableStateFlow(prefs.getBoolean(KEY_NAS_AUTO_SYNC, false))
+    private val _nasAutoSync = pref { prefs.getBoolean(KEY_NAS_AUTO_SYNC, false) }
     val nasAutoSync: StateFlow<Boolean> = _nasAutoSync.asStateFlow()
 
     fun setNasAutoSync(enabled: Boolean) {
@@ -572,7 +579,7 @@ class AppSettings private constructor(context: Context) {
      * credentials, used to fill in artwork/metadata a provider left blank. Blank = the TMDB
      * fallback is off. Each user brings their own key, so no single key carries everyone's traffic.
      */
-    private val _tmdbApiKey = MutableStateFlow(prefs.getString(KEY_TMDB_KEY, "").orEmpty())
+    private val _tmdbApiKey = pref { prefs.getString(KEY_TMDB_KEY, "").orEmpty() }
     val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
 
     fun setTmdbApiKey(key: String) {
@@ -588,7 +595,7 @@ class AppSettings private constructor(context: Context) {
      * manifest URL the user pasted (a debrid key, if any, is baked into that URL on the add-on's own
      * site — never entered here). Empty = the whole feature stays inert.
      */
-    private val _stremioAddons = MutableStateFlow(readStremioAddons())
+    private val _stremioAddons = pref { readStremioAddons() }
     val stremioAddons: StateFlow<List<StremioAddon>> = _stremioAddons.asStateFlow()
 
     fun addStremioAddon(addon: StremioAddon) {
@@ -611,11 +618,11 @@ class AppSettings private constructor(context: Context) {
         }.getOrNull() ?: emptyList()
 
     /** Channel merges the user confirmed (Settings › Channel grouping), applied at every normalisation. */
-    private val _groupMerges = MutableStateFlow(readGroupMerges())
+    private val _groupMerges = pref { readGroupMerges() }
     val groupMerges: StateFlow<List<GroupMerge>> = _groupMerges.asStateFlow()
 
     /** Suggested pairs the user answered "Ignore" to, as [app.opentv.data.parser.MergeSuggester.pairId]. */
-    private val _ignoredMergePairs = MutableStateFlow(prefs.getStringSet(KEY_IGNORED_MERGE_PAIRS, emptySet())!!.toSet())
+    private val _ignoredMergePairs = pref { prefs.getStringSet(KEY_IGNORED_MERGE_PAIRS, emptySet())!!.toSet() }
     val ignoredMergePairs: StateFlow<Set<String>> = _ignoredMergePairs.asStateFlow()
 
     fun addGroupMerge(merge: GroupMerge) {
@@ -642,6 +649,58 @@ class AppSettings private constructor(context: Context) {
         runCatching {
             prefs.getString(KEY_GROUP_MERGES, null)?.let { addonJson.decodeFromString<List<GroupMerge>>(it) }
         }.getOrNull() ?: emptyList()
+
+    // ---- Backup ------------------------------------------------------------------------------
+
+    /**
+     * Everything in Settings worth carrying to another box or a reinstall, as raw pref values. Left
+     * out on purpose: per-device state (last channel/group, profile, sync id, VOD stamp), secrets
+     * (NAS login, TMDB key, Stremio URLs that may carry a debrid key) and the recording target that
+     * goes with them. Waits are written as the values in use, so a never-migrated pref travels right.
+     */
+    fun backupSettings(): Map<String, Any> {
+        val all = prefs.all
+        val out = LinkedHashMap<String, Any>()
+        for (key in BACKUP_KEYS.keys) all[key]?.let { out[key] = it }
+        out[KEY_QUALITY_FALLBACK_MILLIS] = _qualityFallbackMillis.value
+        out[KEY_STALL_FALLBACK_MILLIS] = _stallFallbackMillis.value
+        out[KEY_UI_SCALE] = _uiScalePercent.value
+        return out
+    }
+
+    /**
+     * Replaces the backed-up settings with [values] (a key missing from it goes back to its default)
+     * and re-reads every flow, so the app follows at once. Values of the wrong type are skipped.
+     */
+    @Synchronized
+    fun restoreSettings(values: Map<String, Any>) {
+        val edit = prefs.edit()
+        for ((key, kind) in BACKUP_KEYS) {
+            val value = values[key]
+            if (value == null) edit.remove(key) else SettingsBackup.put(edit, key, kind, value)
+        }
+        BACKUP_LEGACY_KEYS.forEach(edit::remove)
+        edit.commit()
+        reload()
+    }
+
+    /** Adds [merges] and [ignoredPairs] to the ones already here; a row this box already merged keeps its choice. */
+    @Synchronized
+    fun addMergeChoices(merges: List<GroupMerge>, ignoredPairs: Set<String>) {
+        val known = _groupMerges.value.map { it.fromKey }.toSet()
+        persistGroupMerges(_groupMerges.value + merges.filter { it.fromKey !in known && it.fromKey != it.intoKey })
+        val ignored = _ignoredMergePairs.value + ignoredPairs
+        prefs.edit().putStringSet(KEY_IGNORED_MERGE_PAIRS, ignored).apply()
+        _ignoredMergePairs.value = ignored
+    }
+
+    /** The type of each backed-up pref, for [SettingsBackup.fromJson]. */
+    val backupKinds: Map<String, SettingsBackup.Kind> get() = BACKUP_KEYS
+
+    private fun reload() {
+        reloaders.forEach { it() }
+        publishCategoryRules()
+    }
 
     companion object {
         private const val KEY_GROUP_MERGES = "group_merges"
@@ -703,6 +762,28 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
         private const val KEY_UI_SCALE = "ui_scale"
+
+        /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
+        private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
+            listOf(
+                KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
+                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
+                KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
+                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK,
+            ).forEach { put(it, SettingsBackup.Kind.BOOL) }
+            listOf(
+                KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
+                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE,
+            ).forEach { put(it, SettingsBackup.Kind.INT) }
+            listOf(
+                KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
+            ).forEach { put(it, SettingsBackup.Kind.STRING) }
+            listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
+        }
+
+        /** Pre-migration keys a restore clears, so they can't shadow a default the backup relies on. */
+        private val BACKUP_LEGACY_KEYS =
+            listOf(KEY_QUALITY_FALLBACK_SECONDS, KEY_STALL_FALLBACK_SECONDS, KEY_UI_SCALE_V1)
 
         const val MIN_UI_SCALE = 60
         const val MAX_UI_SCALE = 130
