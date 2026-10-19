@@ -60,7 +60,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.opentv.R
+import app.opentv.data.parser.GroupBadge
+import coil.compose.AsyncImage
 import app.opentv.data.model.shownName
 import app.opentv.ui.ChannelsViewModel
 import java.text.SimpleDateFormat
@@ -214,12 +217,19 @@ fun FullscreenLive(
         Spacer(Modifier.height(12.dp))
 
         if (showCategories) {
-            data class Entry(val key: String, val label: String, val selected: Boolean, val pick: () -> Unit)
+            data class Entry(
+                val key: String,
+                val label: String,
+                val selected: Boolean,
+                val badge: GroupBadge.Badge? = null,
+                val pick: () -> Unit,
+            )
             val entries = buildList {
                 add(Entry("fav", favouritesLabel, favouritesOnly) { onSelectFavourites() })
                 add(Entry("all", allLabel, !favouritesOnly && selectedCategory == null) { onSelectCategory(null) })
                 categories.forEach { g ->
-                    add(Entry("cat-${g.key}", g.rawName, !favouritesOnly && selectedCategory in g.memberKeys) { onSelectCategory(g.key) })
+                    val shown = GroupBadge.of(g.rawName)
+                    add(Entry("cat-${g.key}", shown.label, !favouritesOnly && selectedCategory in g.memberKeys, shown.badge) { onSelectCategory(g.key) })
                 }
             }
             val startIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
@@ -227,6 +237,7 @@ fun FullscreenLive(
                 val entry = entries[index]
                 CategoryEntry(
                     label = entry.label,
+                    badge = entry.badge,
                     selected = entry.selected,
                     modifier = requester,
                     onLeft = onExitLeft,
@@ -371,7 +382,14 @@ private fun FocusedList(
 }
 
 @Composable
-private fun CategoryEntry(label: String, selected: Boolean, modifier: Modifier, onLeft: () -> Unit, onClick: () -> Unit) {
+private fun CategoryEntry(
+    label: String,
+    badge: GroupBadge.Badge?,
+    selected: Boolean,
+    modifier: Modifier,
+    onLeft: () -> Unit,
+    onClick: () -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier
@@ -388,9 +406,22 @@ private fun CategoryEntry(label: String, selected: Boolean, modifier: Modifier, 
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Every row keeps the badge's room, so the names line up whether a group has one or not.
+        Box(Modifier.size(width = 96.dp, height = 48.dp), contentAlignment = Alignment.Center) {
+            when (badge) {
+                is GroupBadge.Image -> AsyncImage(
+                    model = badge.url,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
+                )
+                is GroupBadge.Emoji -> Text(badge.text, fontSize = 30.sp, maxLines = 1)
+                null -> Unit
+            }
+        }
+        Spacer(Modifier.width(16.dp))
         Text(
             label,
             style = MaterialTheme.typography.titleLarge,
