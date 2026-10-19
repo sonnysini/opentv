@@ -76,6 +76,16 @@ class StreamInfoTest {
     }
 
     @Test
+    fun `download is averaged so segment-at-a-time streams still show a speed`() {
+        val meter = StreamInfo.Meter()
+        meter.sample(0, stats(null, null, frames = 0, bytes = 0))
+        meter.sample(1_000, stats(null, null, frames = 0, bytes = 2_000_000))
+        // Nothing new this second (between HLS segments), but the window still has the segment.
+        val quiet = meter.sample(2_000, stats(null, null, frames = 0, bytes = 2_000_000))
+        assertThat(quiet.download).isEqualTo("8.0 Mb/s")
+    }
+
+    @Test
     fun `hdr comes from the colour transfer`() {
         val hdr = Format.Builder()
             .setSampleMimeType(MimeTypes.VIDEO_H265)
@@ -104,5 +114,6 @@ class StreamInfoTest {
         bufferedMillis = 0,
         liveOffsetMillis = C.TIME_UNSET,
         bytesLoaded = bytes,
+        streamMime = null,
     )
 }

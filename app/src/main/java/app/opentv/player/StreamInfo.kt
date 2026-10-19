@@ -169,25 +169,30 @@ object StreamInfo {
      */
     @OptIn(UnstableApi::class)
     class Meter {
-        private var lastAt = -1L
-        private var lastFrames = 0L
-        private var lastBytes = 0L
+        private class Point(val at: Long, val frames: Long, val bytes: Long)
+
+        // The last few seconds of samples: HLS arrives a segment at a time, so a one-second
+        // window would often see nothing downloaded at all.
+        private val window = ArrayDeque<Point>()
         private var fps = 0f
         private var bitsPerSecond = 0L
 
         fun sample(nowMillis: Long, stats: PlayerController.Stats): Snapshot {
-            val dt = nowMillis - lastAt
-            if (lastAt < 0 || dt >= MIN_WINDOW_MILLIS) {
-                if (lastAt >= 0) {
-                    val frames = stats.renderedFrames - lastFrames
-                    val bytes = stats.bytesLoaded - lastBytes
-                    // The frame counter restarts with a new stream: a step backwards means "start over".
-                    fps = if (frames > 0) snapFrameRate(frames * 1000f / dt) else 0f
-                    bitsPerSecond = if (bytes > 0) bytes * 8_000 / dt else 0
-                }
-                lastAt = nowMillis
-                lastFrames = stats.renderedFrames
-                lastBytes = stats.bytesLoaded
+            val last = window.lastOrNull()
+            // The counters restart with a new stream: a step backwards means "start over".
+            if (last != null && (stats.renderedFrames < last.frames || stats.bytesLoaded < last.bytes)) window.clear()
+            window.addLast(Point(nowMillis, stats.renderedFrames, stats.bytesLoaded))
+            while (window.size > 2 && nowMillis - window[1].at >= WINDOW_MILLIS) window.removeFirst()
+            val first = window.first()
+            val dt = nowMillis - first.at
+            if (dt >= MIN_SPAN_MILLIS) {
+                val frames = stats.renderedFrames - first.frames
+                val bytes = stats.bytesLoaded - first.bytes
+                fps = if (frames > 0) snapFrameRate(frames * 1000f / dt) else 0f
+                bitsPerSecond = if (bytes > 0) bytes * 8_000 / dt else 0
+            } else {
+                fps = 0f
+                bitsPerSecond = 0
             }
             return snapshot(stats)
         }
@@ -208,7 +213,7 @@ object StreamInfo {
                 sampleRate = a?.let { sampleRateLabel(it.sampleRate) },
                 audioBitrate = a?.let { bitrateLabel(it.bitrate.toLong()) },
                 audioLanguage = a?.language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED },
-                container = containerLabel(v?.containerMimeType ?: a?.containerMimeType),
+                container = containerLabel(stats.streamMime ?: v?.containerMimeType ?: a?.containerMimeType),
                 videoDecoder = stats.videoDecoder,
                 videoDecoderSoftware = stats.videoDecoder?.let { isSoftwareDecoder(it) } ?: false,
                 audioDecoder = stats.audioDecoder,
@@ -221,7 +226,8 @@ object StreamInfo {
         }
 
         private companion object {
-            const val MIN_WINDOW_MILLIS = 500L
+            const val MIN_SPAN_MILLIS = 500L
+            const val WINDOW_MILLIS = 5_000L
         }
     }
 

@@ -10,11 +10,13 @@ import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
@@ -363,6 +365,8 @@ class PlayerController(
         val bufferedMillis: Long,
         val liveOffsetMillis: Long,
         val bytesLoaded: Long,
+        /** HLS, DASH or MPEG-TS, told from the stream's address; null when it doesn't say. */
+        val streamMime: String?,
     )
 
     fun stats(): Stats {
@@ -380,7 +384,14 @@ class PlayerController(
             bufferedMillis = player.totalBufferedDuration,
             liveOffsetMillis = player.currentLiveOffset,
             bytesLoaded = bytesLoaded.get(),
+            streamMime = player.currentMediaItem?.localConfiguration?.let { streamMimeOf(it.uri, it.mimeType) },
         )
+    }
+
+    private fun streamMimeOf(uri: android.net.Uri, declared: String?): String? = when (Util.inferContentTypeForUriAndMimeType(uri, declared)) {
+        C.CONTENT_TYPE_HLS -> MimeTypes.APPLICATION_M3U8
+        C.CONTENT_TYPE_DASH -> MimeTypes.APPLICATION_MPD
+        else -> if (uri.path.orEmpty().endsWith(".ts", ignoreCase = true)) MimeTypes.VIDEO_MP2T else null
     }
 
     fun retry() {
