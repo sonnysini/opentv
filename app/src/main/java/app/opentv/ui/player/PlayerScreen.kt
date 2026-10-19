@@ -15,7 +15,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -94,6 +96,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
@@ -114,6 +117,7 @@ import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
 import app.opentv.player.StallWatch
 import app.opentv.player.StreamInfo
+import app.opentv.player.QualityNames
 import app.opentv.player.WorkingVariants
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
@@ -281,6 +285,21 @@ fun PlayerScreen(
         }
     }
 
+    /** A variant's name for the switch notice and the picker: `FHD 2 · SAT`, numbered among its kind. */
+    fun variantName(channel: Channel): String =
+        QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
+            ?: channel.qualityLabel.ifBlank { channel.shownName }
+
+    /** The Quality button: on to the channel's next feed, wrapping round, and say which one. */
+    fun cycleQuality() {
+        val next = StallWatch.nextAfter(variants, currentId) { it.id } ?: return
+        tried = emptySet()
+        stallReturnId = null
+        fallbackNotice = variantName(next)
+        tuneTo(next)
+        interaction++
+    }
+
     /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
     suspend fun startChannel(channel: Channel) {
         listedId = channel.id
@@ -311,11 +330,7 @@ fun PlayerScreen(
             return
         }
         val failed = tryOrder.firstOrNull { it.id == currentId } ?: variants.firstOrNull { it.id == currentId } ?: next
-        fallbackNotice = context.getString(
-            R.string.player_quality_fallback,
-            failed.qualityLabel.ifBlank { failed.shownName },
-            next.qualityLabel.ifBlank { next.shownName },
-        )
+        fallbackNotice = context.getString(R.string.player_quality_fallback, variantName(failed), variantName(next))
         tuneTo(next)
     }
 
@@ -330,8 +345,8 @@ fun PlayerScreen(
         val stalled = variants.firstOrNull { it.id == currentId }
         fallbackNotice = context.getString(
             R.string.player_stall_fallback,
-            stalled?.let { it.qualityLabel.ifBlank { it.shownName } }.orEmpty(),
-            next.qualityLabel.ifBlank { next.shownName },
+            stalled?.let { variantName(it) }.orEmpty(),
+            variantName(next),
         )
         // The frozen feed sits out the start-up fallback this time round; it comes back in rotation later.
         tried = setOfNotNull(currentId)
@@ -616,11 +631,9 @@ fun PlayerScreen(
                         interaction++
                         false
                     }
-                    // Immersive: left opens the channel list, right the quality picker.
+                    // Immersive: left opens the channel list, right brings up the playback bar.
                     event.key == Key.DirectionLeft -> { if (queue.isNotEmpty()) channelListVisible = true; true }
-                    event.key == Key.DirectionRight -> {
-                        if (variants.size > 1) { reveal(); panel = Panel.QUALITY }; true
-                    }
+                    event.key == Key.DirectionRight -> { reveal(); true }
                     else -> { reveal(); true }
                 }
             }
@@ -794,6 +807,7 @@ fun PlayerScreen(
                         resizeMode = resizeMode,
                         onResize = { resizeMode = it; settings.setPlayerResizeMode(it) },
                         onTune = { tried = emptySet(); tuneTo(it) },
+                        variantName = { variantName(it) },
                         firstFocus = panelFocus,
                         onDone = { panel = Panel.NONE; interaction++ },
                     )
@@ -883,9 +897,17 @@ fun PlayerScreen(
                             // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
                             Spacer(Modifier.width(28.dp))
                             if (variants.size > 1) {
-                                BarChip(Icons.Filled.HighQuality, stringResource(R.string.player_quality), panel == Panel.QUALITY) {
-                                    panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
-                                }
+                                // OK steps to the next feed; a long press opens the full list.
+                                BarChip(
+                                    icon = Icons.Filled.HighQuality,
+                                    label = stringResource(R.string.player_quality),
+                                    selected = panel == Panel.QUALITY,
+                                    badge = QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge,
+                                    onLongClick = {
+                                        panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
+                                    },
+                                    onClick = { cycleQuality() },
+                                )
                                 Spacer(Modifier.width(10.dp))
                             }
                             BarChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), panel == Panel.AUDIO) {
@@ -1213,6 +1235,7 @@ private fun OptionPanel(
     resizeMode: Int,
     onResize: (Int) -> Unit,
     onTune: (Channel) -> Unit,
+    variantName: (Channel) -> String,
     firstFocus: FocusRequester,
     onDone: () -> Unit,
 ) {
@@ -1225,7 +1248,7 @@ private fun OptionPanel(
         Panel.SUBTITLES -> buildSubtitleOptions(controller, settings, tracks, offLabel, onDone)
         Panel.AUDIO -> buildAudioOptions(controller, tracks, onDone)
         Panel.QUALITY -> variants.map { v ->
-            Option(v.qualityLabel.ifEmpty { standardLabel }, v.id == currentId) { onTune(v); onDone() }
+            Option(if (v.qualityLabel.isEmpty()) standardLabel else variantName(v), v.id == currentId) { onTune(v); onDone() }
         }
         Panel.ASPECT -> listOf(
             Option(fitLabel, resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
@@ -1370,6 +1393,7 @@ private fun OptionRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BarChip(
     icon: ImageVector,
@@ -1377,6 +1401,9 @@ private fun BarChip(
     selected: Boolean,
     focusRequester: FocusRequester? = null,
     iconTint: Color? = null,
+    /** Short text drawn instead of the icon (the Quality button's `FHD 2`). */
+    badge: String? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -1399,10 +1426,23 @@ private fun BarChip(
                     if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
                     else Modifier,
                 )
-                .clickable(interactionSource = null, indication = null, onClick = onClick)
+                .combinedClickable(interactionSource = null, indication = null, onLongClick = onLongClick, onClick = onClick)
                 .padding(12.dp),
         ) {
-            Icon(icon, contentDescription = label, tint = if (focused) content else (iconTint ?: content))
+            if (badge.isNullOrBlank()) {
+                Icon(icon, contentDescription = label, tint = if (focused) content else (iconTint ?: content))
+            } else {
+                Box(Modifier.height(24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        badge,
+                        color = content,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
         }
         // The name floats above the focused button without taking space, so the row never shifts.
         if (focused) {
