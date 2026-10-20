@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.9 — 20 October 2026
+
+- **Choose what OK on Quality does.** New switch in Settings › Display & playback, "OK on
+  Quality switches stream" (on by default): on, OK steps to the next feed and holding OK opens
+  the list; off, OK opens the list straight away and you pick the server.
+
 ## 0.16.8 — 20 October 2026
 
 - **One-press feed switching.** In the player, OK on the Quality button now steps to the
