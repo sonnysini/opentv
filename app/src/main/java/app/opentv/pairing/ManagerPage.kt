@@ -109,6 +109,30 @@ object ManagerPage {
           .field[hidden] { display:none; }
           .check { display:flex; align-items:center; gap:10px; margin:10px 0; cursor:pointer; }
           .check input { width:20px; height:20px; accent-color:var(--accent); }
+          .row.picked, .cat.picked { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+          .row.target, .cat.target { cursor:copy; }
+          .pickbar { position:sticky; top:62px; z-index:6; display:flex; align-items:center; gap:10px; justify-content:space-between;
+                     padding:11px 14px; margin-bottom:10px; border-radius:11px; background:var(--accent2); border:1px solid var(--accent); font-weight:600; }
+          .pickcancel { color:var(--text); text-decoration:underline; cursor:pointer; white-space:nowrap; }
+          .cat .ctrls { margin-left:4px; }
+          .cat.off .label { color:var(--muted); }
+          .q { display:inline-block; font-size:.68rem; font-weight:700; padding:1px 6px; margin-right:4px; border-radius:5px;
+               background:var(--surface2); border:1px solid var(--line); color:var(--muted); }
+          .gtools { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 10px; }
+          .gtools .save { margin-top:0; }
+          .gtools select { padding:10px; font-size:15px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:10px; max-width:100%; }
+          .incl { display:flex; align-items:center; gap:8px; width:100%; color:var(--muted); font-size:.85rem; }
+          .mini { padding:6px 11px; font-size:.82rem; font-weight:600; border-radius:8px; cursor:pointer;
+                  background:var(--surface2); border:1px solid var(--line); color:var(--text); }
+          .mini.go { background:var(--accent2); border-color:var(--accent); }
+          .dup { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg); border:1px solid var(--line); border-radius:10px; }
+          .dup .what { flex:1; min-width:0; font-size:.9rem; }
+          .sub2 { font-size:.95rem; margin:18px 0 8px; }
+          .sheet { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,.6); display:flex; align-items:flex-end; justify-content:center; }
+          .sheet[hidden] { display:none; }
+          .sheetbox { width:100%; max-width:760px; max-height:85vh; overflow:auto; background:var(--surface); border-radius:16px 16px 0 0;
+                      padding:16px; border:1px solid var(--line); }
+          .sheethead { display:flex; justify-content:space-between; align-items:center; gap:10px; font-weight:700; margin-bottom:10px; }
         </style>
         </head>
         <body>
@@ -178,21 +202,53 @@ object ManagerPage {
               </div>
             </details>
 
+            <details class="rec" id="dupCard">
+              <summary>Duplicate channels</summary>
+              <div class="body">
+                <p class="hint">Channels that look like the same one under two names. Merge makes them one row on the TV; it survives refreshes and goes in the backup.</p>
+                <div id="dupList" class="list"></div>
+                <h3 class="sub2" id="mergedHead" hidden>Merged channels</h3>
+                <div id="mergedList" class="list"></div>
+              </div>
+            </details>
+
             <section id="catView">
-              <div id="srcBar" class="chips" hidden></div>
-              <input id="catSearch" class="search" type="text" placeholder="Filter categories…"
-                     autocapitalize="off" autocorrect="off" spellcheck="false">
+              <div class="toolbar">
+                <input id="catSearch" class="search" type="text" placeholder="Filter groups…"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+              </div>
+              <p class="hint" id="catHint">Groups in the order the TV shows them. Tap ⇅ on a group, then tap where it should go — or use the arrows.</p>
+              <div id="pickBar" class="pickbar" hidden><span id="pickText"></span><span class="pickcancel" id="pickCancel">Cancel</span></div>
               <div id="catList" class="list"></div>
               <div id="catEmpty" class="empty" hidden></div>
+              <details class="rec" id="offCard" style="margin-top:16px" hidden>
+                <summary id="offHead">Switched-off groups</summary>
+                <div class="body">
+                  <input id="offSearch" class="search" type="text" placeholder="Filter…"
+                         autocapitalize="off" autocorrect="off" spellcheck="false">
+                  <div id="offList" class="list"></div>
+                </div>
+              </details>
             </section>
 
             <section id="chanView" hidden>
-              <div id="back" class="back">&#8249;&nbsp;Categories</div>
+              <div id="back" class="back">&#8249;&nbsp;Groups</div>
               <h2 id="chanHead" class="chanhead"></h2>
-              <p class="hint" id="chanHint">Tap a name to rename. Star to favourite, eye to hide, arrows to reorder.</p>
+              <div id="groupTools" class="gtools"></div>
+              <p class="hint" id="chanHint">Tap a name to rename. Star to favourite, eye to hide, ⇅ then tap a spot to move, ⋯ to merge.</p>
+              <div id="chanPickBar" class="pickbar" hidden><span id="chanPickText"></span><span class="pickcancel" id="chanPickCancel">Cancel</span></div>
               <div id="chanList" class="list"></div>
               <div id="chanEmpty" class="empty" hidden></div>
             </section>
+
+            <div id="sheet" class="sheet" hidden>
+              <div class="sheetbox">
+                <div class="sheethead"><span id="sheetTitle"></span><span class="pickcancel" id="sheetClose">Close</span></div>
+                <input id="sheetSearch" class="search" type="text" placeholder="Search every channel…"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <div id="sheetList" class="list"></div>
+              </div>
+            </div>
 
             <p class="privacy">
               This page is served by your television, over your own network — there is no OpenTV
@@ -206,19 +262,16 @@ object ManagerPage {
           var EMBEDDED_TOKEN = "$token";
           var token = new URLSearchParams(location.search).get('t') || EMBEDDED_TOKEN;
 
-          var meta = { sources: [], categories: [] };
-          var currentSource = null;   // selected source filter, null = all
-          var currentCat = null;      // the category object being viewed
-          var channels = [];          // rows currently shown, in display order
 
           var el = function(id){ return document.getElementById(id); };
           var statusTimer = null;
+          // A message without a kind ("Merging…") is work in progress: it stays up until the answer replaces it.
           function setStatus(msg, kind){
             var s = el('status');
             s.textContent = msg;
             s.className = 'show ' + (kind || '');
             if (statusTimer) clearTimeout(statusTimer);
-            statusTimer = setTimeout(function(){ s.className = kind || ''; }, 2600);
+            statusTimer = kind ? setTimeout(function(){ s.className = kind; }, 2600) : null;
           }
 
           function withToken(path){ return path + (path.indexOf('?') >= 0 ? '&' : '?') + 't=' + encodeURIComponent(token); }
@@ -237,75 +290,146 @@ object ManagerPage {
           }
           var UNREACH = "Couldn't reach the TV — still on the same wifi?";
 
-          // ---- Categories --------------------------------------------------------------------
-          async function loadMeta(){
+          // ---- Groups ------------------------------------------------------------------------
+          var data = { groups: [], off: [], merges: [], favourites: 0 };
+          var FAV = 'fav';
+          var currentGroup = null;    // the group being viewed: {key,label,…} or the favourites pseudo-group
+          var rows = [];              // its channels, in display order
+          var pickedGroup = -1;       // index in data.groups picked for a move, -1 = none
+          var pickedRow = -1;         // same for rows
+
+          function btn(cls, html, title, onclick){
+            var b = document.createElement('div');
+            b.className = 'btn ' + cls; b.innerHTML = html; b.title = title;
+            b.onclick = function(e){ e.stopPropagation(); onclick(); };
+            return b;
+          }
+          function mini(text, go, onclick){
+            var b = document.createElement('span');
+            b.className = 'mini' + (go ? ' go' : ''); b.textContent = text;
+            b.onclick = function(e){ e.stopPropagation(); onclick(); };
+            return b;
+          }
+
+          async function loadGroups(){
             try {
-              meta = await getJson('/meta');
-              renderSources();
-              renderCategories();
+              data = await getJson('/groups');
+              renderGroups();
+              renderOff();
             } catch (e) {
               el('catList').innerHTML = '';
               var d = el('catEmpty'); d.hidden = false; d.textContent = UNREACH;
             }
           }
 
-          function renderSources(){
-            var bar = el('srcBar');
-            if (!meta.sources || meta.sources.length < 2) { bar.hidden = true; return; }
-            bar.hidden = false;
-            bar.innerHTML = '';
-            var mk = function(label, id){
-              var c = document.createElement('div');
-              c.className = 'chip' + (currentSource === id ? ' on' : '');
-              c.textContent = label;
-              c.onclick = function(){ currentSource = id; renderSources(); renderCategories(); };
-              bar.appendChild(c);
-            };
-            mk('All sources', null);
-            meta.sources.forEach(function(s){ mk(s.name, s.id); });
-          }
-
-          function renderCategories(){
+          function renderGroups(){
             var q = el('catSearch').value.trim().toLowerCase();
             var list = el('catList');
             list.innerHTML = '';
-            var cats = (meta.categories || []).filter(function(c){
-              if (currentSource !== null && c.sourceId !== currentSource) return false;
-              if (q && c.label.toLowerCase().indexOf(q) < 0) return false;
-              return true;
-            });
             var empty = el('catEmpty');
-            if (cats.length === 0) {
-              empty.hidden = false;
-              empty.textContent = (meta.categories && meta.categories.length) ? 'No categories match that.' : 'No channels yet — add a provider above to get started.';
+            if (!data.groups.length && !data.favourites) {
+              empty.hidden = false; empty.textContent = 'No channels yet — add a provider above to get started.';
               return;
             }
             empty.hidden = true;
-            cats.forEach(function(c){
-              var row = document.createElement('div');
-              row.className = 'cat';
-              var label = document.createElement('span'); label.className = 'label'; label.textContent = c.label;
-              var count = document.createElement('span'); count.className = 'count'; count.textContent = c.count;
+            if (data.favourites && !q && pickedGroup < 0) {
+              list.appendChild(groupRow({ key: FAV, label: '★ Favourites', count: data.favourites }, -1));
+            }
+            var shown = 0;
+            data.groups.forEach(function(g, i){
+              if (q && g.label.toLowerCase().indexOf(q) < 0 && g.raw.toLowerCase().indexOf(q) < 0) return;
+              list.appendChild(groupRow(g, i));
+              shown++;
+            });
+            if (!shown && q) { empty.hidden = false; empty.textContent = 'No groups match that.'; }
+            var bar = el('pickBar');
+            bar.hidden = pickedGroup < 0;
+            if (pickedGroup >= 0) el('pickText').textContent = 'Tap where “' + data.groups[pickedGroup].label + '” should go';
+          }
+
+          function groupRow(g, i){
+            var row = document.createElement('div');
+            row.className = 'cat' + (i === pickedGroup ? ' picked' : (pickedGroup >= 0 && i >= 0 ? ' target' : ''));
+            var label = document.createElement('span'); label.className = 'label'; label.textContent = g.label;
+            var count = document.createElement('span'); count.className = 'count'; count.textContent = g.count;
+            row.appendChild(label); row.appendChild(count);
+            if (i >= 0) {
+              var ctrls = document.createElement('div'); ctrls.className = 'ctrls';
+              var up = btn('mv', '&#9650;', 'Move up', function(){ moveGroup(i, i - 1); });
+              if (i === 0) up.setAttribute('disabled', '');
+              var down = btn('mv', '&#9660;', 'Move down', function(){ moveGroup(i, i + 1); });
+              if (i === data.groups.length - 1) down.setAttribute('disabled', '');
+              var pick = btn('mv', '&#8645;', 'Move to…', function(){ pickedGroup = (pickedGroup === i) ? -1 : i; renderGroups(); });
+              ctrls.appendChild(up); ctrls.appendChild(down); ctrls.appendChild(pick);
+              row.appendChild(ctrls);
+            } else {
               var chev = document.createElement('span'); chev.className = 'chev'; chev.innerHTML = '&#8250;';
-              row.appendChild(label); row.appendChild(count); row.appendChild(chev);
-              row.onclick = function(){ openCategory(c); };
+              row.appendChild(chev);
+            }
+            row.onclick = function(){
+              if (pickedGroup >= 0) {
+                if (i >= 0 && i !== pickedGroup) moveGroup(pickedGroup, i);
+                pickedGroup = -1; renderGroups();
+                return;
+              }
+              openGroup(g);
+            };
+            return row;
+          }
+          el('pickCancel').onclick = function(){ pickedGroup = -1; renderGroups(); };
+          el('catSearch').addEventListener('input', renderGroups);
+
+          function moveGroup(from, to){
+            if (to < 0 || to >= data.groups.length || from === to) return;
+            var item = data.groups.splice(from, 1)[0];
+            data.groups.splice(to, 0, item);
+            pickedGroup = -1;
+            renderGroups();
+            post('/groups/order', { keys: data.groups.map(function(g){ return g.key; }) })
+              .then(function(){ setStatus('Group order saved', 'ok'); })
+              .catch(function(){ setStatus(UNREACH, 'err'); });
+          }
+
+          function renderOff(){
+            var card = el('offCard');
+            card.hidden = !data.off.length;
+            el('offHead').textContent = 'Switched-off groups (' + data.off.length + ')';
+            var q = el('offSearch').value.trim().toLowerCase();
+            var list = el('offList'); list.innerHTML = '';
+            data.off.forEach(function(g){
+              if (q && g.label.toLowerCase().indexOf(q) < 0 && g.raw.toLowerCase().indexOf(q) < 0) return;
+              var row = document.createElement('div'); row.className = 'cat off';
+              var label = document.createElement('span'); label.className = 'label'; label.textContent = g.raw;
+              row.appendChild(label);
+              row.appendChild(mini('Turn on', true, function(){
+                post('/group/switch', { key: g.key, on: true, memberKeys: g.memberKeys })
+                  .then(function(){ setStatus('Turned on — the TV is reloading its channels, back in a minute.', 'ok'); setTimeout(loadGroups, 1500); })
+                  .catch(function(){ setStatus(UNREACH, 'err'); });
+              }));
               list.appendChild(row);
             });
           }
-          el('catSearch').addEventListener('input', renderCategories);
+          el('offSearch').addEventListener('input', renderOff);
 
-          // ---- Channels ----------------------------------------------------------------------
-          async function openCategory(cat){
-            currentCat = cat;
+          // ---- One group's channels -----------------------------------------------------------
+          async function openGroup(g){
+            currentGroup = g;
+            pickedRow = -1;
             el('catView').hidden = true;
             el('chanView').hidden = false;
-            el('chanHead').textContent = cat.label;
+            el('chanHead').textContent = g.label;
             window.scrollTo(0, 0);
+            renderGroupTools();
+            await reloadRows();
+          }
+
+          async function reloadRows(){
             var listEl = el('chanList'); listEl.innerHTML = '';
             var empty = el('chanEmpty'); empty.hidden = true;
             try {
-              channels = await getJson('/channels?cat=' + encodeURIComponent(cat.id) + '&source=' + cat.sourceId);
-              renderChannels();
+              var r = await getJson('/group?key=' + encodeURIComponent(currentGroup.key));
+              rows = r.rows || [];
+              renderRows();
             } catch (e) {
               empty.hidden = false; empty.textContent = UNREACH;
             }
@@ -314,21 +438,81 @@ object ManagerPage {
           el('back').onclick = function(){
             el('chanView').hidden = true;
             el('catView').hidden = false;
-            channels = [];
+            rows = []; currentGroup = null;
+            loadGroups();
           };
 
-          function renderChannels(){
+          function renderGroupTools(){
+            var box = el('groupTools'); box.innerHTML = '';
+            var g = currentGroup;
+            if (g.key === FAV) return;
+            var hide = document.createElement('button'); hide.className = 'save'; hide.textContent = 'Switch group off';
+            hide.style.background = 'var(--surface2)'; hide.style.borderColor = 'var(--line)';
+            hide.onclick = function(){
+              if (!confirm('Switch off “' + g.label + '”? Its channels leave the TV until you turn it back on (at the bottom of the groups).')) return;
+              post('/group/switch', { key: g.key, on: false, memberKeys: g.memberKeys })
+                .then(function(){ setStatus('Group switched off', 'ok'); el('back').onclick(); })
+                .catch(function(){ setStatus(UNREACH, 'err'); });
+            };
+            box.appendChild(hide);
+            var sel = document.createElement('select');
+            var first = document.createElement('option'); first.value = ''; first.textContent = 'Merge this group into…';
+            sel.appendChild(first);
+            data.groups.forEach(function(o){
+              if (o.key === g.key) return;
+              var opt = document.createElement('option'); opt.value = o.key; opt.textContent = o.label; sel.appendChild(opt);
+            });
+            sel.onchange = function(){
+              var into = data.groups.filter(function(o){ return o.key === sel.value; })[0];
+              if (!into) return;
+              if (!confirm('Merge “' + g.label + '” into “' + into.label + '”? Its channels show under “' + into.label + '”.')) { sel.value = ''; return; }
+              post('/group/merge', { from: g.key, into: into.key })
+                .then(function(){ setStatus('Merged into ' + into.label, 'ok'); el('back').onclick(); })
+                .catch(function(){ setStatus(UNREACH, 'err'); });
+            };
+            box.appendChild(sel);
+            // Groups merged into this one, each separable again.
+            (data.merges || []).forEach(function(m){
+              if (g.memberKeys.indexOf(m.into) < 0) return;
+              var line = document.createElement('div'); line.className = 'incl';
+              var t = document.createElement('span'); t.textContent = 'Includes “' + m.fromLabel + '”'; t.style.flex = '1';
+              line.appendChild(t);
+              line.appendChild(mini('Separate', false, function(){
+                post('/group/merge', { from: m.from })
+                  .then(function(){ setStatus('Separated', 'ok'); el('back').onclick(); })
+                  .catch(function(){ setStatus(UNREACH, 'err'); });
+              }));
+              box.appendChild(line);
+            });
+          }
+
+          function renderRows(){
             var listEl = el('chanList');
             listEl.innerHTML = '';
             var empty = el('chanEmpty');
-            if (!channels.length) { empty.hidden = false; empty.textContent = 'No channels in this category.'; return; }
+            el('chanPickBar').hidden = pickedRow < 0;
+            if (pickedRow >= 0) el('chanPickText').textContent = 'Tap where “' + rows[pickedRow].name + '” should go';
+            if (!rows.length) { empty.hidden = false; empty.textContent = 'No channels in this group.'; return; }
             empty.hidden = true;
-            channels.forEach(function(c, i){ listEl.appendChild(buildRow(c, i)); });
+            rows.forEach(function(c, i){ listEl.appendChild(buildRow(c, i)); });
+          }
+          el('chanPickCancel').onclick = function(){ pickedRow = -1; renderRows(); };
+
+          function patchRow(c, body, okMsg, after){
+            body.ids = c.ids;
+            post('/row', body)
+              .then(function(){ if (after) after(); setStatus(okMsg, 'ok'); })
+              .catch(function(){ setStatus(UNREACH, 'err'); });
           }
 
           function buildRow(c, index){
             var row = document.createElement('div');
-            row.className = 'row' + (c.hidden ? ' hidden' : '');
+            row.className = 'row' + (c.hidden ? ' hidden' : '') + (index === pickedRow ? ' picked' : (pickedRow >= 0 ? ' target' : ''));
+            row.onclick = function(){
+              if (pickedRow < 0) return;
+              if (index !== pickedRow) moveRow(pickedRow, index);
+              pickedRow = -1; renderRows();
+            };
 
             var logo = document.createElement('img');
             logo.className = 'logo'; logo.alt = '';
@@ -337,66 +521,31 @@ object ManagerPage {
 
             var mid = document.createElement('div'); mid.className = 'rowmeta';
             var name = document.createElement('span'); name.className = 'name'; name.textContent = c.name;
-            name.onclick = function(){ startRename(name, c); };
+            name.onclick = function(e){ if (pickedRow >= 0) return; e.stopPropagation(); startRename(name, c); };
             var sub = document.createElement('div'); sub.className = 'sub';
+            (c.qualities || []).forEach(function(q){
+              var b = document.createElement('span'); b.className = 'q'; b.textContent = q; sub.appendChild(b);
+            });
+            if (c.hidden) { var h = document.createElement('span'); h.className = 'badge'; h.textContent = 'Hidden'; sub.appendChild(h); }
+            if (!sub.childNodes.length) sub.textContent = c.renamed ? c.original : ' ';
             mid.appendChild(name); mid.appendChild(sub);
-            function refreshSub(){
-              sub.innerHTML = '';
-              if (c.number !== null && c.number !== undefined) {
-                sub.appendChild(document.createTextNode('No. ' + c.number));
-              }
-              if (c.hidden) {
-                if (sub.childNodes.length) sub.appendChild(document.createTextNode('  ·  '));
-                var b = document.createElement('span'); b.className = 'badge'; b.textContent = 'Hidden';
-                sub.appendChild(b);
-              }
-              if (!sub.childNodes.length) sub.textContent = c.original !== c.name ? c.original : ' ';
-            }
-            refreshSub();
 
             var ctrls = document.createElement('div'); ctrls.className = 'ctrls';
-
-            var star = document.createElement('div');
-            star.className = 'btn star' + (c.favourite ? ' on' : '');
-            star.innerHTML = c.favourite ? '&#9733;' : '&#9734;';
-            star.title = 'Favourite';
-            star.onclick = function(){
+            var star = btn('star' + (c.favourite ? ' on' : ''), c.favourite ? '&#9733;' : '&#9734;', 'Favourite', function(){
               var target = !c.favourite;
-              post('/channel', { id: c.id, favourite: target })
-                .then(function(){ c.favourite = target; star.className = 'btn star' + (target ? ' on' : ''); star.innerHTML = target ? '&#9733;' : '&#9734;'; setStatus(target ? 'Favourited' : 'Unfavourited', 'ok'); })
-                .catch(function(){ setStatus(UNREACH, 'err'); });
-            };
-
-            var eye = document.createElement('div');
-            eye.className = 'btn eye' + (c.hidden ? '' : ' on');
-            eye.innerHTML = c.hidden ? '&#128584;' : '&#128065;';
-            eye.title = c.hidden ? 'Hidden — tap to show' : 'Showing — tap to hide';
-            eye.onclick = function(){
+              patchRow(c, { favourite: target }, target ? 'Favourited' : 'Unfavourited', function(){
+                c.favourite = target;
+                if (currentGroup.key === FAV && !target) { rows.splice(rows.indexOf(c), 1); }
+                renderRows();
+              });
+            });
+            var eye = btn('eye' + (c.hidden ? '' : ' on'), c.hidden ? '&#128584;' : '&#128065;', c.hidden ? 'Hidden — tap to show' : 'Showing — tap to hide', function(){
               var target = !c.hidden;
-              post('/channel', { id: c.id, hidden: target })
-                .then(function(){
-                  c.hidden = target;
-                  row.className = 'row' + (target ? ' hidden' : '');
-                  eye.className = 'btn eye' + (target ? '' : ' on');
-                  eye.innerHTML = target ? '&#128584;' : '&#128065;';
-                  eye.title = target ? 'Hidden — tap to show' : 'Showing — tap to hide';
-                  refreshSub();
-                  setStatus(target ? 'Hidden from the guide' : 'Showing in the guide', 'ok');
-                })
-                .catch(function(){ setStatus(UNREACH, 'err'); });
-            };
-
-            var up = document.createElement('div');
-            up.className = 'btn mv'; up.innerHTML = '&#9650;'; up.title = 'Move up';
-            if (index === 0) up.setAttribute('disabled', '');
-            up.onclick = function(){ move(index, index - 1); };
-
-            var down = document.createElement('div');
-            down.className = 'btn mv'; down.innerHTML = '&#9660;'; down.title = 'Move down';
-            if (index === channels.length - 1) down.setAttribute('disabled', '');
-            down.onclick = function(){ move(index, index + 1); };
-
-            ctrls.appendChild(star); ctrls.appendChild(eye); ctrls.appendChild(up); ctrls.appendChild(down);
+              patchRow(c, { hidden: target }, target ? 'Hidden from the TV' : 'Showing on the TV', function(){ c.hidden = target; renderRows(); });
+            });
+            var pick = btn('mv', '&#8645;', 'Move to…', function(){ pickedRow = (pickedRow === index) ? -1 : index; renderRows(); });
+            ctrls.appendChild(star); ctrls.appendChild(eye); ctrls.appendChild(pick);
+            if (currentGroup.key !== FAV) ctrls.appendChild(btn('mv', '&#8943;', 'Merge with…', function(){ openMerge(c); }));
             row.appendChild(logo); row.appendChild(mid); row.appendChild(ctrls);
             return row;
           }
@@ -404,21 +553,15 @@ object ManagerPage {
           function startRename(span, c){
             var input = document.createElement('input');
             input.type = 'text'; input.className = 'rename'; input.value = c.name;
+            input.onclick = function(e){ e.stopPropagation(); };
             span.replaceWith(input); input.focus(); input.select();
             var closed = false;
             function finish(save){
               if (closed) return; closed = true;
               var val = input.value.trim();
-              if (save) {
-                c.name = val || c.original;
-                post('/channel', { id: c.id, name: val })
-                  .then(function(){ setStatus('Renamed', 'ok'); })
-                  .catch(function(){ setStatus("Couldn't save the name.", 'err'); });
-              }
-              var fresh = document.createElement('span');
-              fresh.className = 'name'; fresh.textContent = c.name;
-              fresh.onclick = function(){ startRename(fresh, c); };
-              input.replaceWith(fresh);
+              if (save && val !== c.name) {
+                patchRow(c, { name: val }, 'Renamed', function(){ c.name = val || c.original; c.renamed = !!val; renderRows(); });
+              } else renderRows();
             }
             input.addEventListener('keydown', function(e){
               if (e.key === 'Enter') { e.preventDefault(); finish(true); }
@@ -427,14 +570,120 @@ object ManagerPage {
             input.addEventListener('blur', function(){ finish(true); });
           }
 
-          function move(from, to){
-            if (to < 0 || to >= channels.length) return;
-            var item = channels.splice(from, 1)[0];
-            channels.splice(to, 0, item);
-            renderChannels();
-            post('/reorder', { ids: channels.map(function(c){ return c.id; }) })
+          function moveRow(from, to){
+            if (to < 0 || to >= rows.length || from === to) return;
+            var item = rows.splice(from, 1)[0];
+            rows.splice(to, 0, item);
+            renderRows();
+            post('/group/order', { group: currentGroup.key, keys: rows.map(function(c){ return c.key; }) })
               .then(function(){ setStatus('Order saved', 'ok'); })
               .catch(function(){ setStatus(UNREACH, 'err'); });
+          }
+
+          // ---- Merge two channels -------------------------------------------------------------
+          var mergeFrom = null;
+          var searchTimer = null;
+          function openMerge(c){
+            mergeFrom = c;
+            el('sheetTitle').textContent = 'Merge “' + c.name + '” with…';
+            el('sheetSearch').value = '';
+            el('sheet').hidden = false;
+            renderMergeTargets(rows);
+          }
+          el('sheetClose').onclick = function(){ el('sheet').hidden = true; mergeFrom = null; };
+          el('sheet').onclick = function(e){ if (e.target === el('sheet')) el('sheetClose').onclick(); };
+          el('sheetSearch').addEventListener('input', function(){
+            var q = el('sheetSearch').value.trim();
+            if (searchTimer) clearTimeout(searchTimer);
+            if (q.length < 2) { renderMergeTargets(rows); return; }
+            searchTimer = setTimeout(function(){
+              getJson('/search?q=' + encodeURIComponent(q))
+                .then(function(r){ renderMergeTargets(r.rows || []); })
+                .catch(function(){ setStatus(UNREACH, 'err'); });
+            }, 250);
+          });
+          function renderMergeTargets(list){
+            var box = el('sheetList'); box.innerHTML = '';
+            list.forEach(function(t){
+              if (!mergeFrom || t.key === mergeFrom.key || t.key.charAt(0) === '#') return;
+              var row = document.createElement('div'); row.className = 'row'; row.style.cursor = 'pointer';
+              var logo = document.createElement('img'); logo.className = 'logo'; logo.alt = '';
+              if (t.logo) logo.src = t.logo; else logo.style.visibility = 'hidden';
+              logo.onerror = function(){ logo.style.visibility = 'hidden'; };
+              var mid = document.createElement('div'); mid.className = 'rowmeta';
+              var n = document.createElement('span'); n.className = 'name'; n.textContent = t.name;
+              var sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = (t.qualities || []).join(' · ') || ' ';
+              mid.appendChild(n); mid.appendChild(sub);
+              row.appendChild(logo); row.appendChild(mid);
+              row.onclick = function(){ mergeChannels(mergeFrom, t); };
+              box.appendChild(row);
+            });
+            if (!box.childNodes.length) {
+              var d = document.createElement('div'); d.className = 'empty'; d.textContent = 'Type at least 2 letters to search every channel.';
+              box.appendChild(d);
+            }
+          }
+          function mergeChannels(from, into){
+            if (from.key.charAt(0) === '#') { setStatus("This channel can't be merged.", 'err'); return; }
+            if (!confirm('Merge “' + from.name + '” into “' + into.name + '”? They become one channel called “' + into.name + '”.')) return;
+            el('sheet').hidden = true;
+            setStatus('Merging… (takes a few seconds)');
+            post('/merge', { from: from.key, into: into.key, fromName: from.name, intoName: into.name })
+              .then(function(){ setStatus('Merged', 'ok'); if (currentGroup) reloadRows(); })
+              .catch(function(){ setStatus(UNREACH, 'err'); });
+          }
+
+          // ---- Duplicate suggestions and merges made -----------------------------------------
+          var dupsLoaded = false;
+          el('dupCard').addEventListener('toggle', function(){ if (el('dupCard').open && !dupsLoaded) loadDuplicates(); });
+          async function loadDuplicates(){
+            var list = el('dupList');
+            list.innerHTML = '<div class="empty">Looking for duplicates…</div>';
+            try {
+              var d = await getJson('/duplicates');
+              dupsLoaded = true;
+              renderDuplicates(d);
+            } catch (e) { list.innerHTML = ''; setStatus(UNREACH, 'err'); }
+          }
+          function renderDuplicates(d){
+            var list = el('dupList'); list.innerHTML = '';
+            if (!d.suggestions.length) {
+              var none = document.createElement('div'); none.className = 'hint'; none.textContent = 'No likely duplicates right now.';
+              list.appendChild(none);
+            }
+            d.suggestions.forEach(function(s){
+              var line = document.createElement('div'); line.className = 'dup';
+              var what = document.createElement('div'); what.className = 'what';
+              what.textContent = s.fromName + '  →  ' + s.intoName;
+              line.appendChild(what);
+              line.appendChild(mini('Merge', true, function(){
+                setStatus('Merging… (takes a few seconds)');
+                post('/merge', { from: s.from, into: s.into, fromName: s.fromName, intoName: s.intoName })
+                  .then(function(){ setStatus('Merged', 'ok'); loadDuplicates(); })
+                  .catch(function(){ setStatus(UNREACH, 'err'); });
+              }));
+              line.appendChild(mini('Ignore', false, function(){
+                post('/merge', { ignore: s.pairId })
+                  .then(function(){ line.remove(); setStatus('Ignored', 'ok'); })
+                  .catch(function(){ setStatus(UNREACH, 'err'); });
+              }));
+              list.appendChild(line);
+            });
+            var merged = el('mergedList'); merged.innerHTML = '';
+            el('mergedHead').hidden = !d.merges.length;
+            d.merges.forEach(function(m){
+              var line = document.createElement('div'); line.className = 'dup';
+              var what = document.createElement('div'); what.className = 'what';
+              what.textContent = m.fromName + '  →  ' + m.intoName;
+              line.appendChild(what);
+              line.appendChild(mini('Separate', false, function(){
+                setStatus('Separating…');
+                post('/merge', { from: m.from })
+                  .then(function(){ setStatus('Separated', 'ok'); loadDuplicates(); })
+                  .catch(function(){ setStatus(UNREACH, 'err'); });
+              }));
+              merged.appendChild(line);
+            });
           }
 
           // ---- Recording / NAS settings ------------------------------------------------------
@@ -522,7 +771,7 @@ object ManagerPage {
                   setStatus('Added — ' + (r.channels || 0) + ' channels loaded.', 'ok');
                   el('provUrl').value = ''; el('provUser').value = ''; el('provPass').value = '';
                   el('provMac').value = ''; el('provName').value = '';
-                  loadMeta();
+                  loadGroups();
                 } else setStatus((r && r.error) || 'Could not add the provider', 'err');
               })
               .catch(function(){ setStatus(UNREACH, 'err'); });
@@ -572,7 +821,7 @@ object ManagerPage {
               .catch(function(){ setStatus(UNREACH, 'err'); });
           };
 
-          loadMeta();
+          loadGroups();
           loadRecording();
         </script>
         </body>

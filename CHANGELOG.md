@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.18.0 — 20 October 2026
+
+- **The phone page shows your live list as the TV does.** Groups come folded and in the TV's
+  order, and each channel is one row with its qualities; hide, favourite and rename act on every
+  copy.
+- **Reorder groups and channels from the phone.** Arrows, or ⇅ then tap the spot. The order
+  survives refreshes and goes in the settings backup. Favourites can be reordered too.
+- **Merge groups from the phone**, and separate them again. Switch a whole group off, and turn
+  switched-off groups back on.
+- **Merge channels from the phone**: search any channel to merge with, plus a "Duplicate
+  channels" list with Merge/Ignore and the merges already made.
+
 ## 0.17.3 — 20 October 2026
 
 - **Live opens on the groups.** The full-screen live list starts with focus on the groups, so the

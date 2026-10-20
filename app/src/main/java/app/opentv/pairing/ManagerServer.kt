@@ -10,7 +10,10 @@ import android.util.Log
 import app.opentv.BuildConfig
 import app.opentv.core.AppSettings
 import app.opentv.core.SettingsBackup
+import app.opentv.core.LiveLayout
 import app.opentv.data.model.Channel
+import app.opentv.data.model.GroupMerge
+import app.opentv.data.model.StreamKind
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.shownName
@@ -20,6 +23,7 @@ import app.opentv.data.work.SyncWorker
 import app.opentv.data.repo.SourceRepository
 import app.opentv.recording.SmbClient
 import app.opentv.recording.SmbConfig
+import app.opentv.ui.ChannelsViewModel
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStream
@@ -37,10 +41,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 /**
@@ -223,15 +229,25 @@ class ManagerServer(
             method == "GET" && path == "/" ->
                 output.write(PairingHttp.httpResponse("200 OK", "text/html", ManagerPage.page(token)))
 
-            method == "GET" && path == "/meta" ->
-                output.write(PairingHttp.httpResponse("200 OK", "application/json", metaJson()))
+            method == "GET" && path == "/groups" -> writeJson(output, GroupsDto.serializer(), groupsDto())
 
-            method == "GET" && path == "/channels" ->
-                output.write(PairingHttp.httpResponse("200 OK", "application/json", channelsJson(query)))
+            method == "GET" && path == "/group" -> writeJson(output, RowsDto.serializer(), groupRowsDto(query["key"].orEmpty()))
 
-            method == "POST" && path == "/channel" -> handleChannelPatch(output, body)
+            method == "GET" && path == "/search" -> writeJson(output, RowsDto.serializer(), searchRowsDto(query["q"].orEmpty()))
 
-            method == "POST" && path == "/reorder" -> handleReorder(output, body)
+            method == "POST" && path == "/groups/order" -> handleGroupOrder(output, body)
+
+            method == "POST" && path == "/group/order" -> handleChannelOrder(output, body)
+
+            method == "POST" && path == "/group/switch" -> handleGroupSwitch(output, body)
+
+            method == "POST" && path == "/group/merge" -> handleGroupMerge(output, body)
+
+            method == "POST" && path == "/row" -> handleRowPatch(output, body)
+
+            method == "GET" && path == "/duplicates" -> writeJson(output, DuplicatesDto.serializer(), duplicatesDto())
+
+            method == "POST" && path == "/merge" -> handleChannelMerge(output, body)
 
             method == "GET" && path == "/recording" ->
                 output.write(PairingHttp.httpResponse("200 OK", "application/json", recordingJson()))
@@ -272,67 +288,190 @@ class ManagerServer(
 
     // ---- Routes --------------------------------------------------------------------------------
 
-    /** `{ sources:[{id,name}], categories:[{id,label,sourceId,count}] }` */
-    private fun metaJson(): String = runBlocking {
-        val sources = catalog.enabledSources()
-        val sourceIds = sources.map { it.id }.toSet()
-        val counts = catalog.categoryChannelCounts()
-            .associateBy({ it.sourceId to it.categoryId }, { it.count })
-        // Only categories that belong to an enabled source AND actually hold channels — an empty
-        // category is noise on a phone, and a category count includes hidden rows so it stays > 0
-        // for a category whose channels are all hidden (which is exactly what you'd browse to fix).
-        val categories = catalog.liveCategories()
-            .filter { it.sourceId in sourceIds }
-            .mapNotNull { cat ->
-                val count = counts[cat.sourceId to cat.id] ?: 0
-                if (count <= 0) null
-                else CategoryDto(id = cat.id, label = cat.name, sourceId = cat.sourceId, count = count)
-            }
-        json.encodeToString(
-            MetaDto.serializer(),
-            MetaDto(sources = sources.map { SourceDto(it.id, it.name) }, categories = categories),
+    // ---- Live layout: groups and logical channels, as the TV lists them ------------------------
+
+    /** The live groups as the TV's list shows them (merges and order applied), plus the switched-off ones. */
+    private fun liveGroups(): Pair<List<ChannelsViewModel.CategoryGroup>, List<ChannelsViewModel.CategoryGroup>> = runBlocking {
+        val all = catalog.observeAllCategories(StreamKind.LIVE).first()
+        val rules = settings.categoryRules.value
+        val (off, on) = all.partition { rules.isOff(it) }
+        val merge = settings.mergeCategorySources.value
+        val strip = settings.stripCategorySources.value
+        ChannelsViewModel.foldCategories(on, merge, strip, settings.categoryMerges.value, settings.liveGroupOrder.value) to
+            ChannelsViewModel.foldCategories(off, merge, strip)
+    }
+
+    /** `GET /groups` → `{groups:[…], off:[…], merges:[…], favourites}` */
+    private fun groupsDto(): GroupsDto = runBlocking {
+        val (on, off) = liveGroups()
+        val byCategory = HashMap<String, MutableSet<String>>()
+        for (k in catalog.observeCategoryChannelKeys().first()) {
+            byCategory.getOrPut(k.categoryId) { HashSet() } += k.groupKey.ifEmpty { "#" + k.categoryId }
+        }
+        fun count(g: ChannelsViewModel.CategoryGroup) = g.ids.flatMapTo(HashSet()) { byCategory[it].orEmpty() }.size
+        // Labels of the groups before the user's merges, so a merge reads "Sky Calcio → Sky Sport".
+        val merges = settings.categoryMerges.value
+        val unmerged = if (merges.isEmpty()) emptyList() else runBlocking {
+            ChannelsViewModel.foldCategories(
+                catalog.observeCategories(StreamKind.LIVE).first(),
+                settings.mergeCategorySources.value, settings.stripCategorySources.value,
+            )
+        }
+        fun labelOf(key: String) = unmerged.firstOrNull { key in it.memberKeys }?.label ?: key
+        val favourites = catalog.observeFavouriteChannels().first()
+            .distinctBy { ChannelsViewModel.rowOrderKey(it) }.size
+        GroupsDto(
+            groups = on.map { GroupDto(it.key, it.label, it.rawName, count(it), it.memberKeys.toList()) },
+            off = off.map { GroupDto(it.key, it.label, it.rawName, 0, it.memberKeys.toList()) },
+            merges = merges.map { (from, into) -> GroupMergeDto(from, labelOf(from), into, labelOf(into)) },
+            favourites = favourites,
         )
     }
 
-    /** `GET /channels?cat=<id>[&source=<id>]` → the category's channels, hidden included. */
-    private fun channelsJson(query: Map<String, String>): String = runBlocking {
-        val serializer = ListSerializer(ChannelDto.serializer())
-        val cat = query["cat"]
-        if (cat.isNullOrBlank()) return@runBlocking json.encodeToString(serializer, emptyList())
-        val source = query["source"]?.toLongOrNull()
-        val rows = catalog.channelsInCategoryForManager(source, cat).map { it.toDto() }
-        json.encodeToString(serializer, rows)
+    /** Channels folded into rows the way the TV list does: one per grouping key, best quality first. */
+    private fun toRows(channels: List<Channel>): List<RowDto> {
+        val byKey = LinkedHashMap<String, MutableList<Channel>>()
+        for (c in channels) byKey.getOrPut(ChannelsViewModel.rowOrderKey(c)) { ArrayList() } += c
+        return byKey.map { (key, list) ->
+            val sorted = list.sortedByDescending { it.qualityRank }
+            val first = sorted.first()
+            RowDto(
+                key = key,
+                name = first.shownName,
+                original = first.displayName,
+                logo = sorted.firstNotNullOfOrNull { it.logoUrl?.takeIf(String::isNotBlank) },
+                hidden = list.all { it.hidden },
+                favourite = list.any { it.favourite },
+                renamed = !first.customName.isNullOrBlank(),
+                qualities = sorted.map { it.qualityLabel }.filter { it.isNotBlank() }.distinct(),
+                ids = list.map { it.id },
+            )
+        }
     }
 
-    /** `POST /channel {id, hidden?|favourite?|name?}` → apply the given field(s). */
-    private fun handleChannelPatch(output: OutputStream, body: String) {
-        val patch = runCatching { json.decodeFromString(ChannelPatch.serializer(), body) }.getOrNull()
-        if (patch == null || patch.id <= 0L) {
-            output.write(PairingHttp.httpResponse("400 Bad Request", "text/plain", "Bad request."))
-            return
+    /** `GET /group?key=K` → that group's channels (hidden ones too) in the TV's order; `fav` = favourites. */
+    private fun groupRowsDto(key: String): RowsDto = runBlocking {
+        if (key == FAVOURITES) {
+            return@runBlocking RowsDto(toRows(catalog.observeFavouriteChannels().first()))
         }
-        // Unknown ids simply update zero rows — harmless, so no existence check.
-        runBlocking {
-            patch.hidden?.let { catalog.setChannelHidden(patch.id, it) }
-            patch.favourite?.let { catalog.setChannelFavourite(patch.id, it) }
-            // A blank name clears the rename back to the provider's own (see setChannelCustomName).
-            patch.name?.let { catalog.setChannelCustomName(patch.id, it) }
+        val group = liveGroups().first.firstOrNull { key in it.memberKeys } ?: return@runBlocking RowsDto(emptyList())
+        val rows = toRows(catalog.observeChannelsInIncludingHidden(null, group.ids).first())
+        val order = settings.liveChannelOrder.value[group.key]
+        RowsDto(if (order == null) rows else LiveLayout.ordered(rows, order) { listOf(it.key) }, group.key)
+    }
+
+    /** `GET /search?q=…` → matching channels across every group, for "merge with…". */
+    private fun searchRowsDto(q: String): RowsDto = runBlocking {
+        if (q.trim().length < 2) RowsDto(emptyList())
+        else RowsDto(toRows(catalog.searchChannelsIncludingHidden(q.trim()).first()).take(SEARCH_LIMIT))
+    }
+
+    /** `POST /groups/order {keys}` → the live groups' order. */
+    private fun handleGroupOrder(output: OutputStream, body: String) {
+        val req = decode(KeysReq.serializer(), body) ?: return badRequest(output)
+        settings.setLiveGroupOrder(req.keys)
+        writeOk(output)
+    }
+
+    /** `POST /group/order {group, keys}` → channel order inside a group; favourites order by sortIndex. */
+    private fun handleChannelOrder(output: OutputStream, body: String) {
+        val req = decode(KeysReq.serializer(), body) ?: return badRequest(output)
+        val group = req.group ?: return badRequest(output)
+        if (group == FAVOURITES) {
+            runBlocking {
+                val rows = toRows(catalog.observeFavouriteChannels().first()).associateBy { it.key }
+                req.keys.forEachIndexed { index, k -> rows[k]?.ids?.forEach { catalog.setChannelSortIndex(it, index) } }
+            }
+        } else {
+            settings.setLiveChannelOrder(group, req.keys)
         }
         writeOk(output)
     }
 
-    /** `POST /reorder {ids:[orderedChannelIds]}` → assign sortIndex by position. */
-    private fun handleReorder(output: OutputStream, body: String) {
-        val req = runCatching { json.decodeFromString(ReorderReq.serializer(), body) }.getOrNull()
-        if (req == null) {
-            output.write(PairingHttp.httpResponse("400 Bad Request", "text/plain", "Bad request."))
-            return
-        }
-        runBlocking {
-            req.ids.forEachIndexed { index, id -> if (id > 0L) catalog.setChannelSortIndex(id, index) }
+    /**
+     * `POST /group/switch {key, on}` → switch a whole group off or back on, exactly like the switch in
+     * Settings › Categories: off drops its channels now, on brings them back with a catalogue refresh.
+     */
+    private fun handleGroupSwitch(output: OutputStream, body: String) {
+        val req = decode(SwitchReq.serializer(), body) ?: return badRequest(output)
+        val keys = req.memberKeys.ifEmpty { listOf(req.key) }.map { "${StreamKind.LIVE}:$it" }.toSet()
+        catalog.setCategoriesEnabled(StreamKind.LIVE, keys, req.on)
+        if (req.on) {
+            SyncWorker.refreshNow(appContext)
+        } else {
+            runBlocking { catalog.purgeCategories(StreamKind.LIVE, keys) }
         }
         writeOk(output)
     }
+
+    /** `POST /group/merge {from, into}` folds a group into another; `{from}` alone separates it again. */
+    private fun handleGroupMerge(output: OutputStream, body: String) {
+        val req = decode(MergeReq.serializer(), body) ?: return badRequest(output)
+        val into = req.into
+        if (into.isNullOrBlank()) settings.removeCategoryMerge(req.from) else settings.addCategoryMerge(req.from, into)
+        writeOk(output)
+    }
+
+    /** `POST /row {ids, hidden?, favourite?, name?}` → one logical channel: every quality follows. */
+    private fun handleRowPatch(output: OutputStream, body: String) {
+        val req = decode(RowPatch.serializer(), body) ?: return badRequest(output)
+        runBlocking {
+            req.ids.filter { it > 0L }.forEach { id ->
+                req.hidden?.let { catalog.setChannelHidden(id, it) }
+                req.favourite?.let { catalog.setChannelFavourite(id, it) }
+                req.name?.let { catalog.setChannelCustomName(id, it) }
+            }
+        }
+        writeOk(output)
+    }
+
+    /** `GET /duplicates` → likely duplicate channels to merge or ignore, and the merges already made. */
+    private fun duplicatesDto(): DuplicatesDto = runBlocking {
+        val suggestions = runCatching { catalog.mergeSuggestions() }.getOrDefault(emptyList())
+        DuplicatesDto(
+            suggestions = suggestions.map {
+                SuggestionDto(it.from.key, it.from.name, it.from.channels, it.into.key, it.into.name, it.into.channels, it.reason.name, it.pairId)
+            },
+            merges = settings.groupMerges.value.map { MergeDto(it.fromKey, it.fromName, it.intoKey, it.intoName) },
+        )
+    }
+
+    /**
+     * `POST /merge` — `{from, into, fromName, intoName}` merges two channels, `{from}` alone separates
+     * one again, `{ignore: pairId}` drops a suggestion. Same choices as Settings › Channel grouping,
+     * so they travel with the backup; the regroup runs before the answer, so a reload shows it done.
+     */
+    private fun handleChannelMerge(output: OutputStream, body: String) {
+        val req = decode(MergeReq.serializer(), body) ?: return badRequest(output)
+        req.ignore?.let {
+            settings.ignoreMergePair(it)
+            return writeOk(output)
+        }
+        val into = req.into
+        if (into.isNullOrBlank()) {
+            settings.removeGroupMerge(req.from)
+        } else {
+            if (req.from.isBlank() || req.from == into || req.from.startsWith("#") || into.startsWith("#")) return badRequest(output)
+            settings.addGroupMerge(GroupMerge(req.from, into, req.fromName.orEmpty(), req.intoName.orEmpty()))
+        }
+        runBlocking {
+            regroupLock.withLock {
+                runCatching {
+                    catalog.renormalizeAll()
+                    epg.runMatcher()
+                }.onFailure { Log.w(TAG, "Regroup after merge failed", it) }
+            }
+        }
+        writeOk(output)
+    }
+
+    private fun <T> decode(serializer: kotlinx.serialization.KSerializer<T>, body: String): T? =
+        runCatching { json.decodeFromString(serializer, body) }.getOrNull()
+
+    private fun badRequest(output: OutputStream) =
+        output.write(PairingHttp.httpResponse("400 Bad Request", "text/plain", "Bad request."))
+
+    private val regroupLock = Mutex()
 
     /** `GET /backup` → the settings file, as a download. */
     private fun handleBackup(output: OutputStream) {
@@ -529,17 +668,6 @@ class ManagerServer(
         output.write(PairingHttp.httpResponse("200 OK", "application/json", json.encodeToString(serializer, value)))
     }
 
-    private fun Channel.toDto() = ChannelDto(
-        id = id,
-        name = shownName,
-        original = displayName,
-        hidden = hidden,
-        favourite = favourite,
-        sortIndex = sortIndex,
-        logo = logoUrl,
-        number = number,
-    )
-
     // ---- Finding our own address ---------------------------------------------------------------
 
     /**
@@ -576,6 +704,12 @@ class ManagerServer(
         const val SOCKET_TIMEOUT_MILLIS = 15_000
         const val IDLE_TIMEOUT_MINUTES = 30L
 
+        /** The pseudo-group key for Favourites on the page. */
+        const val FAVOURITES = "fav"
+
+        /** Most channels a "merge with…" search returns. */
+        const val SEARCH_LIMIT = 60
+
         // Generous next to pairing's 16 KB: a /reorder body carries every channel id in a
         // category, which can be a few thousand on a big provider, and a /restore file every
         // switched-off category name.
@@ -587,23 +721,6 @@ class ManagerServer(
 // kotlinx.serialization handles the escaping that matters here: channel names carry quotes, `|`
 // and unicode, and hand-rolled string concatenation is exactly where that goes wrong.
 
-@Serializable private data class MetaDto(val sources: List<SourceDto>, val categories: List<CategoryDto>)
-
-@Serializable private data class SourceDto(val id: Long, val name: String)
-
-@Serializable private data class CategoryDto(val id: String, val label: String, val sourceId: Long, val count: Int)
-
-@Serializable private data class ChannelDto(
-    val id: Long,
-    val name: String,
-    val original: String,
-    val hidden: Boolean,
-    val favourite: Boolean,
-    val sortIndex: Int,
-    val logo: String?,
-    val number: Int?,
-)
-
 @Serializable private data class OkDto(val ok: Boolean = true)
 
 @Serializable private data class RestoreDto(
@@ -614,15 +731,6 @@ class ManagerServer(
     val languageChanged: Boolean = false,
     val error: String? = null,
 )
-
-@Serializable private data class ChannelPatch(
-    val id: Long,
-    val hidden: Boolean? = null,
-    val favourite: Boolean? = null,
-    val name: String? = null,
-)
-
-@Serializable private data class ReorderReq(val ids: List<Long>)
 
 @Serializable private data class RecordingDto(
     val target: String,
@@ -655,3 +763,68 @@ class ManagerServer(
 @Serializable private data class AddResultDto(val ok: Boolean, val channels: Int = 0, val error: String? = null)
 
 @Serializable private data class TestResultDto(val ok: Boolean, val message: String? = null, val error: String? = null)
+
+@Serializable private data class GroupDto(
+    val key: String,
+    val label: String,
+    val raw: String,
+    val count: Int,
+    val memberKeys: List<String>,
+)
+
+@Serializable private data class GroupMergeDto(val from: String, val fromLabel: String, val into: String, val intoLabel: String)
+
+@Serializable private data class GroupsDto(
+    val groups: List<GroupDto>,
+    val off: List<GroupDto>,
+    val merges: List<GroupMergeDto>,
+    val favourites: Int,
+)
+
+@Serializable private data class RowDto(
+    val key: String,
+    val name: String,
+    val original: String,
+    val logo: String?,
+    val hidden: Boolean,
+    val favourite: Boolean,
+    val renamed: Boolean,
+    val qualities: List<String>,
+    val ids: List<Long>,
+)
+
+@Serializable private data class RowsDto(val rows: List<RowDto>, val group: String? = null)
+
+@Serializable private data class KeysReq(val keys: List<String>, val group: String? = null)
+
+@Serializable private data class SwitchReq(val key: String, val on: Boolean, val memberKeys: List<String> = emptyList())
+
+@Serializable private data class MergeReq(
+    val from: String = "",
+    val into: String? = null,
+    val fromName: String? = null,
+    val intoName: String? = null,
+    val ignore: String? = null,
+)
+
+@Serializable private data class RowPatch(
+    val ids: List<Long>,
+    val hidden: Boolean? = null,
+    val favourite: Boolean? = null,
+    val name: String? = null,
+)
+
+@Serializable private data class SuggestionDto(
+    val from: String,
+    val fromName: String,
+    val fromCount: Int,
+    val into: String,
+    val intoName: String,
+    val intoCount: Int,
+    val reason: String,
+    val pairId: String,
+)
+
+@Serializable private data class MergeDto(val from: String, val fromName: String, val into: String, val intoName: String)
+
+@Serializable private data class DuplicatesDto(val suggestions: List<SuggestionDto>, val merges: List<MergeDto>)

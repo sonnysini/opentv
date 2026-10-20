@@ -8,6 +8,7 @@ package app.opentv.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.opentv.core.LiveLayout
 import app.opentv.core.QualityPreference
 import app.opentv.core.ServiceLocator
 import app.opentv.data.model.Category
@@ -250,69 +251,22 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         val memberKeys: Set<String> = setOf(key),
     )
 
+    /** The user's group merges and group order (set from the phone page). */
+    private val userLayout = combine(settings.categoryMerges, settings.liveGroupOrder) { merges, order -> merges to order }
+
     val categoryGroups: StateFlow<List<CategoryGroup>> =
         combine(
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             selectedSource,
             settings.mergeCategorySources,
             settings.stripCategorySources,
-        ) { raw, sourceId, merge, strip ->
+            userLayout,
+        ) { raw, sourceId, merge, strip, layout ->
             // Scope the category rail to the chosen provider, so a second playlist's categories show
             // on their own (cardiodoc's "keep sources separate"); null folds across every provider.
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped, merge, strip)
+            foldCategories(scoped, merge, strip, layout.first, layout.second)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /**
-     * Folds codec-split provider categories into one logical [CategoryGroup] each — 'UK| GENERAL
-     * HD/RAW' and 'UK| GENERAL hevc' become a single "General" entry that filters across every
-     * underlying id at once. Shared by the guide's [categoryGroups] and the manager's
-     * [managerCategoryGroups] so both group the rail identically.
-     */
-    private fun foldCategories(raw: List<Category>, mergeSources: Boolean, stripSources: Boolean): List<CategoryGroup> {
-        // Pass 1: codec folding, as before — one entry per normalised name.
-        data class Folded(val key: String, val label: String, val rawName: String, val ids: MutableList<String>)
-        val folded = LinkedHashMap<String, Folded>()
-        for (category in raw) {
-            val n = ChannelNameNormalizer.normalize(category.name)
-            val key = n.groupKey.ifEmpty { category.id }
-            folded.getOrPut(key) { Folded(key, n.baseName, category.name.trim(), mutableListOf()) }.ids += category.id
-        }
-        // Pass 2: source folding — 'Sky Sport (A)' + 'Sky Sport (B)' become one "Sky Sport".
-        // Only families with 2+ members fold; a lone category keeps its own key and name, so saved
-        // picks (last group, hidden groups) still find it. A folded family keys on its first
-        // member, and [CategoryGroup.memberKeys] remembers the rest.
-        val families = LinkedHashMap<String, MutableList<Folded>>()
-        for (f in folded.values) {
-            val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
-            families.getOrPut(family) { mutableListOf() } += f
-        }
-        // With source merging off, 'Sky Sport (A)' and '(B)' stay apart and keep their tag.
-        val lonePerFamily = families.values.filter { it.size == 1 }
-            .groupingBy { CategoryFamily.of(it.first().rawName).key }.eachCount()
-        return families.values.map { members ->
-            val first = members.first()
-            if (members.size == 1) {
-                // A lone 'Bambini (A)' still reads "Bambini"; the key stays, so saved picks hold.
-                val unique = lonePerFamily[CategoryFamily.of(first.rawName).key] == 1
-                val name = if (stripSources && unique) CategoryFamily.displayName(first.rawName) else null
-                if (name == null) {
-                    CategoryGroup(first.key, first.label, first.ids, first.rawName)
-                } else {
-                    CategoryGroup(first.key, ChannelNameNormalizer.normalize(name).baseName.ifEmpty { first.label }, first.ids, name)
-                }
-            } else {
-                val name = CategoryFamily.of(first.rawName).name
-                CategoryGroup(
-                    key = first.key,
-                    label = ChannelNameNormalizer.normalize(name).baseName,
-                    ids = members.flatMap { it.ids },
-                    rawName = name,
-                    memberKeys = members.mapTo(HashSet()) { it.key },
-                )
-            }
-        }
-    }
 
     /**
      * The category ids to hide from the guide *right now*: the ids behind every group the user
@@ -399,6 +353,9 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         val programmes: List<Programme>,
     ) {
         val key: Any get() = if (primary.groupKey.isEmpty()) primary.id else primary.groupKey
+
+        /** [key] as text, as a saved channel order stores it. */
+        val orderKey: String get() = rowOrderKey(primary)
     }
 
     /**
@@ -438,6 +395,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private data class RowsKey(
+        /** The selected group's key, for its saved channel order; null outside a group. */
+        val groupKey: String?,
         val categoryIds: List<String>?,
         val favs: Boolean,
         val query: String,
@@ -488,8 +447,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     val rows: StateFlow<List<Row>> =
         combine(selectedCategory, favouritesOnly, query, categoryGroups, hiddenCategoryIds) {
                 category, favs, q, groups, hidden ->
-            val ids = category?.let { key -> groups.firstOrNull { key in it.memberKeys }?.ids }
-            RowsKey(ids, favs, q, hidden)
+            val group = category?.let { key -> groups.firstOrNull { key in it.memberKeys } }
+            RowsKey(group?.key, group?.ids, favs, q, hidden)
         }
             .combine(selectedSource) { key, source -> key to source }
             .flatMapLatest { (key, source) ->
@@ -506,7 +465,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                 // rows) can take longer than 60s, and a tick landing mid-build would cancel and
                 // restart it via flatMapLatest so it would never finish. "Now" is captured per
                 // build instead; the guide's live progress bars advance off the screen's clock.
-                combine(channelFlow, programmeIndex) { channels, byEpgChannel ->
+                combine(channelFlow, programmeIndex, settings.liveChannelOrder) { channels, byEpgChannel, channelOrder ->
                     val now = System.currentTimeMillis()
                     // Scope to the chosen provider. The "All" branch already fetched only this source
                     // in SQL, so this is a no-op there; for favourites/search/category (which don't
@@ -523,7 +482,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                     // the one-time heavy load, and leaking it per-category read as a stuck "100%".
                     val firstBuild = !guideBuilt
                     if (firstBuild) StatusBus.set(sizeMessage(visible.size), 0f)
-                    buildRows(visible, byEpgChannel, now, reportProgress = firstBuild)
+                    val built = buildRows(visible, byEpgChannel, now, reportProgress = firstBuild)
+                    // The order the user set for this group from the phone page, if any.
+                    val order = if (key.favs || key.query.isNotBlank()) null else key.groupKey?.let(channelOrder::get)
+                    if (order == null) built else LiveLayout.ordered(built, order) { listOf(it.orderKey) }
                 }
             }
             // Grouping thousands of channels against a 12-hour, all-feeds programme window is heavy
@@ -718,9 +680,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             managerSelectedSource,
             graph.settings.mergeCategorySources,
             graph.settings.stripCategorySources,
-        ) { raw, sourceId, merge, strip ->
+            userLayout,
+        ) { raw, sourceId, merge, strip, layout ->
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
-            foldCategories(scoped, merge, strip)
+            foldCategories(scoped, merge, strip, layout.first, layout.second)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -793,11 +756,79 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /**
+         * Folds codec-split provider categories into one logical [CategoryGroup] each — 'UK| GENERAL
+         * HD/RAW' and 'UK| GENERAL hevc' become a single "General" entry that filters across every
+         * underlying id at once. Shared by the guide's [categoryGroups] and the manager's
+         * [managerCategoryGroups] so both group the rail identically.
+         */
+        fun foldCategories(
+            raw: List<Category>,
+            mergeSources: Boolean,
+            stripSources: Boolean,
+            merges: Map<String, String> = emptyMap(),
+            order: List<String> = emptyList(),
+        ): List<CategoryGroup> {
+            // Pass 1: codec folding, as before — one entry per normalised name.
+            data class Folded(val key: String, val label: String, val rawName: String, val ids: MutableList<String>)
+            val folded = LinkedHashMap<String, Folded>()
+            for (category in raw) {
+                val n = ChannelNameNormalizer.normalize(category.name)
+                val key = n.groupKey.ifEmpty { category.id }
+                folded.getOrPut(key) { Folded(key, n.baseName, category.name.trim(), mutableListOf()) }.ids += category.id
+            }
+            // Pass 2: source folding — 'Sky Sport (A)' + 'Sky Sport (B)' become one "Sky Sport".
+            // Only families with 2+ members fold; a lone category keeps its own key and name, so saved
+            // picks (last group, hidden groups) still find it. A folded family keys on its first
+            // member, and [CategoryGroup.memberKeys] remembers the rest.
+            val families = LinkedHashMap<String, MutableList<Folded>>()
+            for (f in folded.values) {
+                val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
+                families.getOrPut(family) { mutableListOf() } += f
+            }
+            // With source merging off, 'Sky Sport (A)' and '(B)' stay apart and keep their tag.
+            val lonePerFamily = families.values.filter { it.size == 1 }
+                .groupingBy { CategoryFamily.of(it.first().rawName).key }.eachCount()
+            val groups = families.values.map { members ->
+                val first = members.first()
+                if (members.size == 1) {
+                    // A lone 'Bambini (A)' still reads "Bambini"; the key stays, so saved picks hold.
+                    val unique = lonePerFamily[CategoryFamily.of(first.rawName).key] == 1
+                    val name = if (stripSources && unique) CategoryFamily.displayName(first.rawName) else null
+                    if (name == null) {
+                        CategoryGroup(first.key, first.label, first.ids, first.rawName)
+                    } else {
+                        CategoryGroup(first.key, ChannelNameNormalizer.normalize(name).baseName.ifEmpty { first.label }, first.ids, name)
+                    }
+                } else {
+                    val name = CategoryFamily.of(first.rawName).name
+                    CategoryGroup(
+                        key = first.key,
+                        label = ChannelNameNormalizer.normalize(name).baseName,
+                        ids = members.flatMap { it.ids },
+                        rawName = name,
+                        memberKeys = members.mapTo(HashSet()) { it.key },
+                    )
+                }
+            }
+            // Pass 3: the user's own merges and order (phone page), on top of the provider's.
+            val merged = LiveLayout.mergeGroups(groups, merges, { it.memberKeys }) { target, joining ->
+                target.copy(
+                    ids = target.ids + joining.flatMap { it.ids },
+                    memberKeys = target.memberKeys + joining.flatMap { it.memberKeys },
+                )
+            }
+            return LiveLayout.ordered(merged, order) { it.memberKeys }
+        }
+
         private const val GUIDE_LOOKAHEAD_MILLIS = 24 * 60 * 60 * 1000L  // a full day fits the grid
         private const val SHIFT_LOOKBACK_MILLIS = 3 * 60 * 60 * 1000L  // covers +1/+2/+3 copies
         private const val DAY_MILLIS = 24 * 60 * 60 * 1000L
         private const val GUIDE_MAX_DAYS = 6  // browse up to a week out, matching typical XMLTV depth
         private const val HALF_HOUR_MILLIS = 30 * 60 * 1000L
+        /** How a saved channel order names a row: its grouping key, or `#id` for an ungrouped channel. */
+        fun rowOrderKey(channel: Channel): String = channel.groupKey.ifEmpty { "#" + channel.id }
+
         const val LAST_GROUP_ALL = "all"
         const val LAST_GROUP_FAVOURITES = "fav"
     }
