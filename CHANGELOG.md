@@ -5,6 +5,8 @@
 - **Choose what OK on Quality does.** New switch in Settings › Display & playback, "OK on
   Quality switches stream" (on by default): on, OK steps to the next feed and holding OK opens
   the list; off, OK opens the list straight away and you pick the server.
+- **Right opens the quality list again.** In full screen, → goes straight to the list of
+  servers, as before 0.16.8 (with only one feed it just brings up the bar).
 
 ## 0.16.8 — 20 October 2026
 
