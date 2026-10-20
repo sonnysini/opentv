@@ -603,13 +603,8 @@ private fun CategoryEntry(
     ) {
         Box(Modifier.size(width = 80.dp, height = 40.dp), contentAlignment = Alignment.Center) {
             when {
-                // Without badges a closed strip still needs something to tell the groups apart.
-                !showBadges -> if (!open) Text(
-                    label.take(3),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
+                // Without a badge a closed strip still needs something to tell the groups apart.
+                !showBadges || badge == null -> if (!open) Initials(label)
                 badge is GroupBadge.Image -> AsyncImage(
                     model = badge.url,
                     contentDescription = null,
@@ -618,7 +613,10 @@ private fun CategoryEntry(
                 // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
                 badge is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
                     Text(badge.text, fontSize = 26.sp, maxLines = 1)
+                } else if (!open) {
+                    Initials(label)
                 }
+                else -> Unit
             }
             if (selected && !open) {
                 Box(
@@ -656,6 +654,17 @@ private fun CategoryEntry(
             }
         }
     }
+}
+
+/** A badge-less group in the closed strip: the start of its name. */
+@Composable
+private fun Initials(label: String) {
+    Text(
+        label.take(3),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+    )
 }
 
 /**
