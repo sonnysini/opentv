@@ -85,6 +85,8 @@ object ChannelNameNormalizer {
     private val BANDWIDTH_NOTE = Regex("""\b(?:richiede|requires?)\s*\d+\s*mbps\b""", RegexOption.IGNORE_CASE)
     /** Timeshift: `+1`, `+ 1`, `+24`, also glued to the name (`Food Network+1`). */
     private val TIMESHIFT = Regex("""\+\s*(\d{1,2})(?!\d)""")
+    /** A `+` with no number after it is the word: `Sky Uno +` = `Sky Uno Plus`, `Disney+` = `Disney Plus`. */
+    private val BARE_PLUS = Regex("""\+(?!\s*\d)""")
     private val STRONG_MARKERS = setOf("HDR", "DOLBY", "VISION")
 
     /**
@@ -195,6 +197,9 @@ object ChannelNameNormalizer {
         }
         // Timeshift is part of the identity (`Rai 1 +1` is not `Rai 11`): pulled out here and
         // put back as a `+N` suffix the key keeps, so aliases can work on the bare channel.
+        // A bare `+` is the word "plus", not punctuation: dropped, `Sky Uno +` would key like
+        // `Sky Uno` and the two would cancel each other out in the guide matcher.
+        working = BARE_PLUS.replace(working, " plus ")
         var timeshift: String? = null
         TIMESHIFT.find(working)?.let { m ->
             timeshift = m.groupValues[1].trimStart('0').ifEmpty { "0" }

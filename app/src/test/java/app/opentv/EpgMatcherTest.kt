@@ -145,4 +145,22 @@ class EpgMatcherTest {
         assertThat(TimeShift.splitKey(keyOf("Sky Uno HD +3"))).isEqualTo("skyuno" to 3)
         assertThat(TimeShift.splitKey(keyOf("Sky Uno HD"))).isNull()
     }
+
+    @Test
+    fun `a bare plus is the word plus, not punctuation`() {
+        // Guide says `Sky Uno +`, provider says `Sky Uno Plus`. Dropping the `+` keyed the
+        // guide entry as `skyuno` and made it collide with `Sky Uno` itself: neither matched.
+        val idx = index(
+            "SkyUno.it" to "Sky Uno",
+            "SkyUnoPlus.it" to "Sky Uno +",
+            "SkyUno1.it" to "Sky Uno +1",
+            "Disney.it" to "Disney+",
+        )
+
+        assertThat(idx.match(keyOf("Sky Uno Plus FHD"))).isEqualTo("SkyUnoPlus.it")
+        assertThat(idx.match(keyOf("Sky Uno FHD"))).isEqualTo("SkyUno.it")
+        assertThat(idx.match(keyOf("Sky Uno +1 HD"))).isEqualTo("SkyUno1.it")
+        assertThat(idx.match(keyOf("Disney Plus"))).isEqualTo("Disney.it")
+        assertThat(keyOf("Sky Uno+")).isEqualTo(keyOf("Sky Uno Plus"))
+    }
 }
