@@ -898,8 +898,9 @@ fun PlayerScreen(
                             if (variants.size > 1) {
                                 // OK steps to the next feed and a long press opens the full list — or,
                                 // with the setting off, OK opens the list straight away.
-                                val togglePicker = {
-                                    panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
+                                val togglePicker: () -> Unit = {
+                                    panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY
+                                    interaction++
                                 }
                                 BarChip(
                                     icon = Icons.Filled.HighQuality,
@@ -907,7 +908,7 @@ fun PlayerScreen(
                                     selected = panel == Panel.QUALITY,
                                     badge = QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge,
                                     onLongClick = if (qualityButtonCycles) togglePicker else null,
-                                    onClick = if (qualityButtonCycles) ({ cycleQuality() }) else togglePicker,
+                                    onClick = if (qualityButtonCycles) ::cycleQuality else togglePicker,
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }
