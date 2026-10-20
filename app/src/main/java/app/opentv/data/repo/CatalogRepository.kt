@@ -193,6 +193,8 @@ class CatalogRepository(
     fun observeNonEmptyCategoryIds(): Flow<Set<String>> =
         channelDao.observeNonEmptyCategoryIds().map { it.toSet() }
 
+    fun observeCategoryChannelKeys() = channelDao.observeCategoryChannelKeys()
+
     /** Categories of [kind] the user has not switched off — what every rail and chip row shows. */
     fun observeCategories(kind: StreamKind): Flow<List<Category>> =
         categoryDao.observe(kind).combine(settings.categoryRules) { categories, rules ->

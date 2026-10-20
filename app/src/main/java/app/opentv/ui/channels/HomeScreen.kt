@@ -136,6 +136,8 @@ fun HomeScreen(
 
     val categories by viewModel.visibleCategoryGroups.collectAsState()
     val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsState()
+    val groupCounts by viewModel.groupCounts.collectAsState()
+    val recentGroups by viewModel.recentLiveGroups.collectAsState()
     val rows by viewModel.rows.collectAsState()
     val rowsLoaded by viewModel.rowsLoaded.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
@@ -328,13 +330,18 @@ fun HomeScreen(
             highlightedKey = highlightedRow?.key,
             rowsLoaded = rowsLoaded && !isSyncing,
             fallbackKey = { lastWatched(it)?.key },
+            groupCounts = groupCounts,
+            recentGroups = recentGroups,
             nowMillis = nowMillis,
             onSelectCategory = viewModel::selectCategory,
             onSelectFavourites = viewModel::selectFavourites,
             onFocusRow = { highlightedRow = it },
             onPlay = { row ->
                 val from = mergeFrom
-                if (from == null) requestLive(row.primary)
+                if (from == null) {
+                    viewModel.markGroupWatched()
+                    requestLive(row.primary)
+                }
                 else if (row.key != from.key) {
                     mergeFrom = null
                     mergeRefocus = Triple(row.key, from.key, rows)
