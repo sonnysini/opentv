@@ -9,7 +9,7 @@
 - **Channel counts and Recent groups.** Each group shows how many channels it holds, and the
   groups you last watched from sit at the top under Favourites.
 - **Up next on the same line.** Each channel reads "11:00 – 12:30 · now on   Up next: 12:30 –
-  14:30 · next", with the progress bar across the whole row. The channel last watched is marked.
+  14:30 · next", with the progress bar across the whole row.
 - **Back no longer quits from the groups.** Back goes channels → groups → navigation menu; only
   Back from the menu asks whether to leave.
 

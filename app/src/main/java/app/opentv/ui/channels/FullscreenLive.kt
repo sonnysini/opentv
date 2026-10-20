@@ -438,7 +438,6 @@ private fun ChannelsPane(
             val startIndex = rows.indexOfFirst { it.key == highlightedKey }.takeIf { it >= 0 }
                 ?: fallbackKey(rows)?.let { key -> rows.indexOfFirst { it.key == key } }?.coerceAtLeast(0)
                 ?: 0
-            val lastKey = fallbackKey(rows)
             // Keyed on the group so switching category re-focuses the new list's first row.
             val jumpTo = refocus?.takeIf { rows !== it.third }
                 ?.let { (key, _, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
@@ -463,7 +462,6 @@ private fun ChannelsPane(
                     FullscreenChannelRow(
                         row = row,
                         nowMillis = nowMillis,
-                        last = row.key == lastKey,
                         modifier = requester,
                         onFocus = { onFocusRow(row) },
                         onPlay = { onPlay(row) },
@@ -675,8 +673,6 @@ private fun Initials(label: String) {
 private fun FullscreenChannelRow(
     row: ChannelsViewModel.Row,
     nowMillis: Long,
-    // The channel last watched: marked so it's easy to find again.
-    last: Boolean,
     modifier: Modifier,
     onFocus: () -> Unit,
     onPlay: () -> Unit,
@@ -712,30 +708,13 @@ private fun FullscreenChannelRow(
         )
         Spacer(Modifier.width(20.dp))
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    row.primary.shownName,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (last) {
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        stringResource(R.string.player_last).uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        maxLines = 1,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.primary)
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
-                    )
-                }
-            }
+            Text(
+                row.primary.shownName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             val nowProg = row.now
             val nextProg = row.next
             Spacer(Modifier.height(2.dp))
