@@ -109,10 +109,9 @@ object ManagerPage {
           .field[hidden] { display:none; }
           .check { display:flex; align-items:center; gap:10px; margin:10px 0; cursor:pointer; }
           .check input { width:20px; height:20px; accent-color:var(--accent); }
-          .row.picked, .cat.picked { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
-          .row.target, .cat.target { cursor:copy; }
-          .pickbar { position:sticky; top:62px; z-index:6; display:flex; align-items:center; gap:10px; justify-content:space-between;
-                     padding:11px 14px; margin-bottom:10px; border-radius:11px; background:var(--accent2); border:1px solid var(--accent); font-weight:600; }
+          .handle { flex:none; width:34px; height:40px; display:flex; align-items:center; justify-content:center;
+                    font-size:20px; color:var(--muted); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+          .dragging { border-color:var(--gold); box-shadow:0 6px 18px rgba(0,0,0,.5), 0 0 0 1px var(--gold) inset; position:relative; z-index:4; }
           .pickcancel { color:var(--text); text-decoration:underline; cursor:pointer; white-space:nowrap; }
           .cat .ctrls { margin-left:4px; }
           .cat.off .label { color:var(--muted); }
@@ -189,7 +188,7 @@ object ManagerPage {
             <details class="rec" id="bakCard">
               <summary>Backup &amp; restore settings</summary>
               <div class="body">
-                <p class="hint">One file with your settings, guide feeds and channel merges. Your provider login, NAS password and TMDB key are never put in it.</p>
+                <p class="hint">One file with your settings, guide feeds, channel merges and order. Your provider login, NAS password and TMDB key are never put in it.</p>
                 <button class="save" id="bakDownload">Download settings</button>
                 <label class="field" style="margin-top:18px"><span>Restore from a file</span>
                   <input id="bakFile" type="file" accept=".json,application/json"></label>
@@ -217,8 +216,7 @@ object ManagerPage {
                 <input id="catSearch" class="search" type="text" placeholder="Filter groups…"
                        autocapitalize="off" autocorrect="off" spellcheck="false">
               </div>
-              <p class="hint" id="catHint">Groups in the order the TV shows them. Tap ⇅ on a group, then tap where it should go — or use the arrows.</p>
-              <div id="pickBar" class="pickbar" hidden><span id="pickText"></span><span class="pickcancel" id="pickCancel">Cancel</span></div>
+              <p class="hint" id="catHint">Groups in the order the TV shows them. Drag ≡ to move a group.</p>
               <div id="catList" class="list"></div>
               <div id="catEmpty" class="empty" hidden></div>
               <details class="rec" id="offCard" style="margin-top:16px" hidden>
@@ -235,8 +233,7 @@ object ManagerPage {
               <div id="back" class="back">&#8249;&nbsp;Groups</div>
               <h2 id="chanHead" class="chanhead"></h2>
               <div id="groupTools" class="gtools"></div>
-              <p class="hint" id="chanHint">Tap a name to rename. Star to favourite, eye to hide, ⇅ then tap a spot to move, ⋯ to merge.</p>
-              <div id="chanPickBar" class="pickbar" hidden><span id="chanPickText"></span><span class="pickcancel" id="chanPickCancel">Cancel</span></div>
+              <p class="hint" id="chanHint">Tap a name to rename. Star to favourite, eye to hide, drag ≡ to move, ⋯ to merge.</p>
               <div id="chanList" class="list"></div>
               <div id="chanEmpty" class="empty" hidden></div>
             </section>
@@ -268,7 +265,7 @@ object ManagerPage {
           // A message without a kind ("Merging…") is work in progress: it stays up until the answer replaces it.
           function setStatus(msg, kind){
             var s = el('status');
-            s.textContent = msg;
+            s.textContent = t(msg);
             s.className = 'show ' + (kind || '');
             if (statusTimer) clearTimeout(statusTimer);
             statusTimer = kind ? setTimeout(function(){ s.className = kind; }, 2600) : null;
@@ -290,13 +287,155 @@ object ManagerPage {
           }
           var UNREACH = "Couldn't reach the TV — still on the same wifi?";
 
+          // ---- Language ----------------------------------------------------------------------
+          // English is written in place; a phone set to Italian gets these. Static text in the page is
+          // swapped once at load ([translatePage]); text built later goes through t().
+          var IT = {
+            "OpenTV — manage channels": "OpenTV — gestisci i canali",
+            "Changes apply to your TV the moment you make them.": "Le modifiche arrivano subito sulla TV.",
+            "Add a provider": "Aggiungi un fornitore",
+            "Add an Xtream, M3U or Stalker portal from here — a real keyboard beats the TV remote. Your login stays on the TV.": "Aggiungi qui un fornitore Xtream, M3U o Stalker: una tastiera vera batte il telecomando. I dati di accesso restano sulla TV.",
+            "Type": "Tipo",
+            "Xtream Codes login": "Accesso Xtream Codes",
+            "M3U playlist URL": "Indirizzo playlist M3U",
+            "Stalker portal": "Portale Stalker",
+            "Name (optional)": "Nome (facoltativo)",
+            "My provider": "Il mio fornitore",
+            "Server address": "Indirizzo del server",
+            "Playlist URL": "Indirizzo della playlist",
+            "Portal URL": "Indirizzo del portale",
+            "Username": "Nome utente",
+            "MAC address": "Indirizzo MAC",
+            "Add & load channels": "Aggiungi e carica i canali",
+            "Test": "Prova",
+            "Recording to NAS (SMB)": "Registrazioni su NAS (SMB)",
+            "Point recordings at a network drive. Saved straight to your TV — the password stays on the TV.": "Salva le registrazioni su un disco di rete. Si imposta direttamente sulla TV e la password resta lì.",
+            "Server (IP address)": "Server (indirizzo IP)",
+            "Share": "Cartella condivisa",
+            "Folder (optional)": "Sottocartella (facoltativa)",
+            "(leave blank)": "(lascia vuoto)",
+            "Save & use NAS": "Salva e usa il NAS",
+            "Test connection": "Prova la connessione",
+            "Backup & restore settings": "Backup e ripristino impostazioni",
+            "One file with your settings, guide feeds, channel merges and order. Your provider login, NAS password and TMDB key are never put in it.": "Un unico file con impostazioni, guide TV, unioni e ordine dei canali. Accesso del fornitore, password del NAS e chiave TMDB non ci finiscono mai.",
+            "Download settings": "Scarica le impostazioni",
+            "Restore from a file": "Ripristina da un file",
+            "Channel merges": "Unioni dei canali",
+            "Settings (playback, quality, look, categories, guide feeds…)": "Impostazioni (riproduzione, qualità, aspetto, categorie, ordine, guide TV…)",
+            "Import": "Importa",
+            "Duplicate channels": "Canali doppi",
+            "Channels that look like the same one under two names. Merge makes them one row on the TV; it survives refreshes and goes in the backup.": "Canali che sembrano lo stesso con due nomi. Unisci li fa diventare una riga sola sulla TV; resta dopo gli aggiornamenti e va nel backup.",
+            "Merged channels": "Canali uniti",
+            "Filter groups…": "Cerca un gruppo…",
+            "Groups in the order the TV shows them. Drag ≡ to move a group.": "I gruppi nell'ordine della TV. Trascina ≡ per spostarli.",
+            "Switched-off groups": "Gruppi spenti",
+            "Filter…": "Cerca…",
+            "‹ Groups": "‹ Gruppi",
+            "Tap a name to rename. Star to favourite, eye to hide, drag ≡ to move, ⋯ to merge.": "Tocca il nome per rinominare. Stella = preferito, occhio = nascondi, trascina ≡ per spostare, ⋯ per unire.",
+            "Close": "Chiudi",
+            "Search every channel…": "Cerca tra tutti i canali…",
+            "This page is served by your television, over your own network — there is no OpenTV account and no OpenTV server. Nothing you change here leaves your home.": "Questa pagina arriva dalla tua TV, sulla tua rete: niente account né server OpenTV. Quello che cambi qui non esce di casa.",
+            "Couldn't reach the TV — still on the same wifi?": "Non raggiungo la TV: sei ancora sulla stessa rete wifi?",
+            "Drag to move": "Trascina per spostare",
+            "No channels yet — add a provider above to get started.": "Ancora nessun canale: aggiungi un fornitore qui sopra.",
+            "Favourites": "Preferiti",
+            "No groups match that.": "Nessun gruppo trovato.",
+            "Group order saved": "Ordine dei gruppi salvato",
+            "Switched-off groups ({0})": "Gruppi spenti ({0})",
+            "Turn on": "Accendi",
+            "Turned on — the TV is reloading its channels, back in a minute.": "Acceso: la TV ricarica i canali, torna tra un minuto.",
+            "Switch group off": "Spegni il gruppo",
+            "Switch off “{0}”? Its channels leave the TV until you turn it back on (at the bottom of the groups).": "Spegnere “{0}”? I suoi canali spariscono dalla TV finché non lo riaccendi (in fondo ai gruppi).",
+            "Group switched off": "Gruppo spento",
+            "Merge this group into…": "Unisci questo gruppo a…",
+            "Merge “{0}” into “{1}”? Its channels show under “{1}”.": "Unire “{0}” a “{1}”? I suoi canali compariranno in “{1}”.",
+            "Merged into {0}": "Unito a {0}",
+            "Includes “{0}”": "Contiene “{0}”",
+            "Separate": "Separa",
+            "Separated": "Separato",
+            "No channels in this group.": "Nessun canale in questo gruppo.",
+            "Hidden": "Nascosto",
+            "Favourite": "Preferito",
+            "Favourited": "Aggiunto ai preferiti",
+            "Unfavourited": "Tolto dai preferiti",
+            "Hidden — tap to show": "Nascosto: tocca per mostrarlo",
+            "Showing — tap to hide": "Visibile: tocca per nasconderlo",
+            "Hidden from the TV": "Nascosto dalla TV",
+            "Showing on the TV": "Di nuovo visibile sulla TV",
+            "Merge with…": "Unisci a…",
+            "Renamed": "Rinominato",
+            "Order saved": "Ordine salvato",
+            "Merge “{0}” with…": "Unisci “{0}” a…",
+            "Type at least 2 letters to search every channel.": "Scrivi almeno 2 lettere per cercare tra tutti i canali.",
+            "This channel can't be merged.": "Questo canale non si può unire.",
+            "Merge “{0}” into “{1}”? They become one channel called “{1}”.": "Unire “{0}” a “{1}”? Diventano un solo canale chiamato “{1}”.",
+            "Merging… (takes a few seconds)": "Unisco… (qualche secondo)",
+            "Merged": "Uniti",
+            "Looking for duplicates…": "Cerco i doppioni…",
+            "No likely duplicates right now.": "Nessun doppione probabile per ora.",
+            "Merge": "Unisci",
+            "Ignore": "Ignora",
+            "Ignored": "Ignorato",
+            "Separating…": "Separo…",
+            "Connected to the NAS — recordings will save there. ✓": "Collegato al NAS: le registrazioni andranno lì. ✓",
+            "Couldn't reach the NAS: {0}": "Non raggiungo il NAS: {0}",
+            "check the details": "controlla i dati",
+            "Server and share are required.": "Server e cartella condivisa sono obbligatori.",
+            "Saving & testing…": "Salvo e provo…",
+            "Testing…": "Provo…",
+            "Enter the URL.": "Inserisci l'indirizzo.",
+            "Username and password are required.": "Nome utente e password sono obbligatori.",
+            "A MAC address is required.": "Serve l'indirizzo MAC.",
+            "Looks good.": "Tutto ok.",
+            "Test failed": "Prova non riuscita",
+            "Adding & loading channels…": "Aggiungo e carico i canali…",
+            "Added — {0} channels loaded.": "Aggiunto: {0} canali caricati.",
+            "Could not add the provider": "Non sono riuscito ad aggiungere il fornitore",
+            "This isn't an OpenTV settings file.": "Questo non è un file di impostazioni OpenTV.",
+            "Saved {0}.": "Salvato il {0}.",
+            "Saved {0} from OpenTV {1}.": "Salvato il {0} da OpenTV {1}.",
+            "Channel merges ({0} merged, {1} ignored) — added to the ones on the TV": "Unioni dei canali ({0} unite, {1} ignorate): si aggiungono a quelle della TV",
+            "Tick at least one.": "Spunta almeno una voce.",
+            "Importing…": "Importo…",
+            "Import failed": "Importazione non riuscita",
+            "settings restored": "impostazioni ripristinate",
+            "{0} new merges": "{0} unioni nuove",
+            "{0} guide feeds": "{0} guide TV",
+            "Done — {0}. The TV is regrouping channels.": "Fatto: {0}. La TV sta raggruppando i canali.",
+            "The language changes next time OpenTV starts.": "La lingua cambia al prossimo avvio di OpenTV."
+          };
+          var ITALIAN = (navigator.language || '').toLowerCase().indexOf('it') === 0;
+          function t(s){
+            var out = (ITALIAN && IT[s]) || s;
+            for (var i = 1; i < arguments.length; i++) out = out.split('{' + (i - 1) + '}').join(String(arguments[i]));
+            return out;
+          }
+          // Text written in the page itself: leaf elements, placeholders and options, matched with
+          // runs of spaces collapsed (the HTML wraps long lines).
+          function translatePage(){
+            if (!ITALIAN) return;
+            document.documentElement.lang = 'it';
+            var nodes = document.querySelectorAll('body *');
+            for (var i = 0; i < nodes.length; i++) {
+              var n = nodes[i];
+              if (n.tagName === 'SCRIPT' || n.tagName === 'STYLE') continue;
+              if (n.placeholder) n.placeholder = t(n.placeholder);
+              for (var c = n.firstChild; c; c = c.nextSibling) {
+                if (c.nodeType !== 3) continue;
+                var key = c.nodeValue.replace(/\s+/g, ' ').trim();
+                if (key && IT[key]) c.nodeValue = c.nodeValue.replace(/\S[\s\S]*\S|\S/, IT[key]);
+              }
+            }
+            document.title = t('OpenTV — manage channels');
+          }
+          translatePage();
+
+
           // ---- Groups ------------------------------------------------------------------------
           var data = { groups: [], off: [], merges: [], favourites: 0 };
           var FAV = 'fav';
           var currentGroup = null;    // the group being viewed: {key,label,…} or the favourites pseudo-group
           var rows = [];              // its channels, in display order
-          var pickedGroup = -1;       // index in data.groups picked for a move, -1 = none
-          var pickedRow = -1;         // same for rows
 
           function btn(cls, html, title, onclick){
             var b = document.createElement('div');
@@ -311,6 +450,64 @@ object ManagerPage {
             return b;
           }
 
+          // ---- Drag to reorder ----------------------------------------------------------------
+          // The ≡ handle: press and drag the row up or down; the list scrolls by itself near the
+          // screen edges. Only rows marked .dragrow move; the list's other rows stay where they are.
+          var drag = null;
+          function handle(listEl, onDrop){
+            var h = document.createElement('div');
+            h.className = 'handle'; h.innerHTML = '&#9776;'; h.title = t('Drag to move');
+            h.onclick = function(e){ e.stopPropagation(); };
+            h.addEventListener('pointerdown', function(e){
+              e.preventDefault(); e.stopPropagation();
+              var row = h.closest('.dragrow');
+              var all = Array.prototype.slice.call(listEl.querySelectorAll('.dragrow'));
+              drag = { list: listEl, row: row, from: all.indexOf(row), y: e.clientY, onDrop: onDrop, raf: 0 };
+              row.classList.add('dragging');
+              drag.raf = requestAnimationFrame(autoScroll);
+            });
+            return h;
+          }
+          // Moving the row in the page drops pointer capture, so the drag is followed on the document.
+          document.addEventListener('pointermove', function(e){ if (drag) { drag.y = e.clientY; follow(); } });
+          function endDrag(){
+            if (!drag) return;
+            var d = drag; drag = null;
+            cancelAnimationFrame(d.raf);
+            d.row.classList.remove('dragging');
+            var to = Array.prototype.slice.call(d.list.querySelectorAll('.dragrow')).indexOf(d.row);
+            if (to !== d.from && to >= 0) d.onDrop(d.from, to);
+          }
+          document.addEventListener('pointerup', endDrag);
+          document.addEventListener('pointercancel', endDrag);
+          // No page scroll under the finger while a row is held (the edges scroll on their own).
+          document.addEventListener('touchmove', function(e){ if (drag) e.preventDefault(); }, { passive: false });
+
+          // Put the dragged row where the finger is: before the first row whose middle is below it.
+          function follow(){
+            var rowsNow = Array.prototype.slice.call(drag.list.querySelectorAll('.dragrow'));
+            var before = null;
+            for (var i = 0; i < rowsNow.length; i++) {
+              var r = rowsNow[i];
+              if (r === drag.row) continue;
+              var box = r.getBoundingClientRect();
+              if (drag.y < box.top + box.height / 2) { before = r; break; }
+            }
+            if (before) { if (drag.row.nextSibling !== before) drag.list.insertBefore(drag.row, before); }
+            else {
+              var last = rowsNow[rowsNow.length - 1];
+              if (last !== drag.row) last.after(drag.row);
+            }
+          }
+          function autoScroll(){
+            if (!drag) return;
+            var edge = 90, step = 0;
+            if (drag.y < edge) step = -Math.ceil((edge - drag.y) / 6);
+            else if (drag.y > window.innerHeight - edge) step = Math.ceil((drag.y - (window.innerHeight - edge)) / 6);
+            if (step) { window.scrollBy(0, step); follow(); }
+            drag.raf = requestAnimationFrame(autoScroll);
+          }
+
           async function loadGroups(){
             try {
               data = await getJson('/groups');
@@ -318,7 +515,7 @@ object ManagerPage {
               renderOff();
             } catch (e) {
               el('catList').innerHTML = '';
-              var d = el('catEmpty'); d.hidden = false; d.textContent = UNREACH;
+              var d = el('catEmpty'); d.hidden = false; d.textContent = t(UNREACH);
             }
           }
 
@@ -328,72 +525,50 @@ object ManagerPage {
             list.innerHTML = '';
             var empty = el('catEmpty');
             if (!data.groups.length && !data.favourites) {
-              empty.hidden = false; empty.textContent = 'No channels yet — add a provider above to get started.';
+              empty.hidden = false; empty.textContent = t('No channels yet — add a provider above to get started.');
               return;
             }
             empty.hidden = true;
-            if (data.favourites && !q && pickedGroup < 0) {
-              list.appendChild(groupRow({ key: FAV, label: '★ Favourites', count: data.favourites }, -1));
+            if (data.favourites && !q) {
+              list.appendChild(groupRow({ key: FAV, label: '★ ' + t('Favourites'), count: data.favourites }, -1, false));
             }
             var shown = 0;
             data.groups.forEach(function(g, i){
               if (q && g.label.toLowerCase().indexOf(q) < 0 && g.raw.toLowerCase().indexOf(q) < 0) return;
-              list.appendChild(groupRow(g, i));
+              // Dragging only on the full list: a filtered one has gaps the new order couldn't place.
+              list.appendChild(groupRow(g, i, !q));
               shown++;
             });
-            if (!shown && q) { empty.hidden = false; empty.textContent = 'No groups match that.'; }
-            var bar = el('pickBar');
-            bar.hidden = pickedGroup < 0;
-            if (pickedGroup >= 0) el('pickText').textContent = 'Tap where “' + data.groups[pickedGroup].label + '” should go';
+            if (!shown && q) { empty.hidden = false; empty.textContent = t('No groups match that.'); }
           }
 
-          function groupRow(g, i){
+          function groupRow(g, i, draggable){
             var row = document.createElement('div');
-            row.className = 'cat' + (i === pickedGroup ? ' picked' : (pickedGroup >= 0 && i >= 0 ? ' target' : ''));
+            row.className = 'cat' + (draggable ? ' dragrow' : '');
+            if (draggable) row.appendChild(handle(el('catList'), moveGroup));
             var label = document.createElement('span'); label.className = 'label'; label.textContent = g.label;
             var count = document.createElement('span'); count.className = 'count'; count.textContent = g.count;
-            row.appendChild(label); row.appendChild(count);
-            if (i >= 0) {
-              var ctrls = document.createElement('div'); ctrls.className = 'ctrls';
-              var up = btn('mv', '&#9650;', 'Move up', function(){ moveGroup(i, i - 1); });
-              if (i === 0) up.setAttribute('disabled', '');
-              var down = btn('mv', '&#9660;', 'Move down', function(){ moveGroup(i, i + 1); });
-              if (i === data.groups.length - 1) down.setAttribute('disabled', '');
-              var pick = btn('mv', '&#8645;', 'Move to…', function(){ pickedGroup = (pickedGroup === i) ? -1 : i; renderGroups(); });
-              ctrls.appendChild(up); ctrls.appendChild(down); ctrls.appendChild(pick);
-              row.appendChild(ctrls);
-            } else {
-              var chev = document.createElement('span'); chev.className = 'chev'; chev.innerHTML = '&#8250;';
-              row.appendChild(chev);
-            }
-            row.onclick = function(){
-              if (pickedGroup >= 0) {
-                if (i >= 0 && i !== pickedGroup) moveGroup(pickedGroup, i);
-                pickedGroup = -1; renderGroups();
-                return;
-              }
-              openGroup(g);
-            };
+            var chev = document.createElement('span'); chev.className = 'chev'; chev.innerHTML = '&#8250;';
+            row.appendChild(label); row.appendChild(count); row.appendChild(chev);
+            row.onclick = function(){ openGroup(g); };
             return row;
           }
-          el('pickCancel').onclick = function(){ pickedGroup = -1; renderGroups(); };
           el('catSearch').addEventListener('input', renderGroups);
 
           function moveGroup(from, to){
             if (to < 0 || to >= data.groups.length || from === to) return;
             var item = data.groups.splice(from, 1)[0];
             data.groups.splice(to, 0, item);
-            pickedGroup = -1;
             renderGroups();
             post('/groups/order', { keys: data.groups.map(function(g){ return g.key; }) })
-              .then(function(){ setStatus('Group order saved', 'ok'); })
-              .catch(function(){ setStatus(UNREACH, 'err'); });
+              .then(function(){ setStatus(t('Group order saved'), 'ok'); })
+              .catch(function(){ setStatus(t(UNREACH), 'err'); });
           }
 
           function renderOff(){
             var card = el('offCard');
             card.hidden = !data.off.length;
-            el('offHead').textContent = 'Switched-off groups (' + data.off.length + ')';
+            el('offHead').textContent = t('Switched-off groups ({0})', data.off.length);
             var q = el('offSearch').value.trim().toLowerCase();
             var list = el('offList'); list.innerHTML = '';
             data.off.forEach(function(g){
@@ -401,10 +576,10 @@ object ManagerPage {
               var row = document.createElement('div'); row.className = 'cat off';
               var label = document.createElement('span'); label.className = 'label'; label.textContent = g.raw;
               row.appendChild(label);
-              row.appendChild(mini('Turn on', true, function(){
+              row.appendChild(mini(t('Turn on'), true, function(){
                 post('/group/switch', { key: g.key, on: true, memberKeys: g.memberKeys })
-                  .then(function(){ setStatus('Turned on — the TV is reloading its channels, back in a minute.', 'ok'); setTimeout(loadGroups, 1500); })
-                  .catch(function(){ setStatus(UNREACH, 'err'); });
+                  .then(function(){ setStatus(t('Turned on — the TV is reloading its channels, back in a minute.'), 'ok'); setTimeout(loadGroups, 1500); })
+                  .catch(function(){ setStatus(t(UNREACH), 'err'); });
               }));
               list.appendChild(row);
             });
@@ -414,7 +589,6 @@ object ManagerPage {
           // ---- One group's channels -----------------------------------------------------------
           async function openGroup(g){
             currentGroup = g;
-            pickedRow = -1;
             el('catView').hidden = true;
             el('chanView').hidden = false;
             el('chanHead').textContent = g.label;
@@ -431,7 +605,7 @@ object ManagerPage {
               rows = r.rows || [];
               renderRows();
             } catch (e) {
-              empty.hidden = false; empty.textContent = UNREACH;
+              empty.hidden = false; empty.textContent = t(UNREACH);
             }
           }
 
@@ -446,17 +620,17 @@ object ManagerPage {
             var box = el('groupTools'); box.innerHTML = '';
             var g = currentGroup;
             if (g.key === FAV) return;
-            var hide = document.createElement('button'); hide.className = 'save'; hide.textContent = 'Switch group off';
+            var hide = document.createElement('button'); hide.className = 'save'; hide.textContent = t('Switch group off');
             hide.style.background = 'var(--surface2)'; hide.style.borderColor = 'var(--line)';
             hide.onclick = function(){
-              if (!confirm('Switch off “' + g.label + '”? Its channels leave the TV until you turn it back on (at the bottom of the groups).')) return;
+              if (!confirm(t('Switch off “{0}”? Its channels leave the TV until you turn it back on (at the bottom of the groups).', g.label))) return;
               post('/group/switch', { key: g.key, on: false, memberKeys: g.memberKeys })
-                .then(function(){ setStatus('Group switched off', 'ok'); el('back').onclick(); })
-                .catch(function(){ setStatus(UNREACH, 'err'); });
+                .then(function(){ setStatus(t('Group switched off'), 'ok'); el('back').onclick(); })
+                .catch(function(){ setStatus(t(UNREACH), 'err'); });
             };
             box.appendChild(hide);
             var sel = document.createElement('select');
-            var first = document.createElement('option'); first.value = ''; first.textContent = 'Merge this group into…';
+            var first = document.createElement('option'); first.value = ''; first.textContent = t('Merge this group into…');
             sel.appendChild(first);
             data.groups.forEach(function(o){
               if (o.key === g.key) return;
@@ -465,22 +639,22 @@ object ManagerPage {
             sel.onchange = function(){
               var into = data.groups.filter(function(o){ return o.key === sel.value; })[0];
               if (!into) return;
-              if (!confirm('Merge “' + g.label + '” into “' + into.label + '”? Its channels show under “' + into.label + '”.')) { sel.value = ''; return; }
+              if (!confirm(t('Merge “{0}” into “{1}”? Its channels show under “{1}”.', g.label, into.label))) { sel.value = ''; return; }
               post('/group/merge', { from: g.key, into: into.key })
-                .then(function(){ setStatus('Merged into ' + into.label, 'ok'); el('back').onclick(); })
-                .catch(function(){ setStatus(UNREACH, 'err'); });
+                .then(function(){ setStatus(t('Merged into {0}', into.label), 'ok'); el('back').onclick(); })
+                .catch(function(){ setStatus(t(UNREACH), 'err'); });
             };
             box.appendChild(sel);
             // Groups merged into this one, each separable again.
             (data.merges || []).forEach(function(m){
               if (g.memberKeys.indexOf(m.into) < 0) return;
               var line = document.createElement('div'); line.className = 'incl';
-              var t = document.createElement('span'); t.textContent = 'Includes “' + m.fromLabel + '”'; t.style.flex = '1';
-              line.appendChild(t);
-              line.appendChild(mini('Separate', false, function(){
+              var s = document.createElement('span'); s.textContent = t('Includes “{0}”', m.fromLabel); s.style.flex = '1';
+              line.appendChild(s);
+              line.appendChild(mini(t('Separate'), false, function(){
                 post('/group/merge', { from: m.from })
-                  .then(function(){ setStatus('Separated', 'ok'); el('back').onclick(); })
-                  .catch(function(){ setStatus(UNREACH, 'err'); });
+                  .then(function(){ setStatus(t('Separated'), 'ok'); el('back').onclick(); })
+                  .catch(function(){ setStatus(t(UNREACH), 'err'); });
               }));
               box.appendChild(line);
             });
@@ -490,29 +664,21 @@ object ManagerPage {
             var listEl = el('chanList');
             listEl.innerHTML = '';
             var empty = el('chanEmpty');
-            el('chanPickBar').hidden = pickedRow < 0;
-            if (pickedRow >= 0) el('chanPickText').textContent = 'Tap where “' + rows[pickedRow].name + '” should go';
-            if (!rows.length) { empty.hidden = false; empty.textContent = 'No channels in this group.'; return; }
+            if (!rows.length) { empty.hidden = false; empty.textContent = t('No channels in this group.'); return; }
             empty.hidden = true;
-            rows.forEach(function(c, i){ listEl.appendChild(buildRow(c, i)); });
+            rows.forEach(function(c){ listEl.appendChild(buildRow(c)); });
           }
-          el('chanPickCancel').onclick = function(){ pickedRow = -1; renderRows(); };
 
           function patchRow(c, body, okMsg, after){
             body.ids = c.ids;
             post('/row', body)
               .then(function(){ if (after) after(); setStatus(okMsg, 'ok'); })
-              .catch(function(){ setStatus(UNREACH, 'err'); });
+              .catch(function(){ setStatus(t(UNREACH), 'err'); });
           }
 
-          function buildRow(c, index){
+          function buildRow(c){
             var row = document.createElement('div');
-            row.className = 'row' + (c.hidden ? ' hidden' : '') + (index === pickedRow ? ' picked' : (pickedRow >= 0 ? ' target' : ''));
-            row.onclick = function(){
-              if (pickedRow < 0) return;
-              if (index !== pickedRow) moveRow(pickedRow, index);
-              pickedRow = -1; renderRows();
-            };
+            row.className = 'row dragrow' + (c.hidden ? ' hidden' : '');
 
             var logo = document.createElement('img');
             logo.className = 'logo'; logo.alt = '';
@@ -521,31 +687,31 @@ object ManagerPage {
 
             var mid = document.createElement('div'); mid.className = 'rowmeta';
             var name = document.createElement('span'); name.className = 'name'; name.textContent = c.name;
-            name.onclick = function(e){ if (pickedRow >= 0) return; e.stopPropagation(); startRename(name, c); };
+            name.onclick = function(e){ e.stopPropagation(); startRename(name, c); };
             var sub = document.createElement('div'); sub.className = 'sub';
             (c.qualities || []).forEach(function(q){
               var b = document.createElement('span'); b.className = 'q'; b.textContent = q; sub.appendChild(b);
             });
-            if (c.hidden) { var h = document.createElement('span'); h.className = 'badge'; h.textContent = 'Hidden'; sub.appendChild(h); }
+            if (c.hidden) { var h = document.createElement('span'); h.className = 'badge'; h.textContent = t('Hidden'); sub.appendChild(h); }
             if (!sub.childNodes.length) sub.textContent = c.renamed ? c.original : ' ';
             mid.appendChild(name); mid.appendChild(sub);
 
             var ctrls = document.createElement('div'); ctrls.className = 'ctrls';
-            var star = btn('star' + (c.favourite ? ' on' : ''), c.favourite ? '&#9733;' : '&#9734;', 'Favourite', function(){
+            var star = btn('star' + (c.favourite ? ' on' : ''), c.favourite ? '&#9733;' : '&#9734;', t('Favourite'), function(){
               var target = !c.favourite;
-              patchRow(c, { favourite: target }, target ? 'Favourited' : 'Unfavourited', function(){
+              patchRow(c, { favourite: target }, t(target ? 'Favourited' : 'Unfavourited'), function(){
                 c.favourite = target;
                 if (currentGroup.key === FAV && !target) { rows.splice(rows.indexOf(c), 1); }
                 renderRows();
               });
             });
-            var eye = btn('eye' + (c.hidden ? '' : ' on'), c.hidden ? '&#128584;' : '&#128065;', c.hidden ? 'Hidden — tap to show' : 'Showing — tap to hide', function(){
+            var eye = btn('eye' + (c.hidden ? '' : ' on'), c.hidden ? '&#128584;' : '&#128065;', t(c.hidden ? 'Hidden — tap to show' : 'Showing — tap to hide'), function(){
               var target = !c.hidden;
-              patchRow(c, { hidden: target }, target ? 'Hidden from the TV' : 'Showing on the TV', function(){ c.hidden = target; renderRows(); });
+              patchRow(c, { hidden: target }, t(target ? 'Hidden from the TV' : 'Showing on the TV'), function(){ c.hidden = target; renderRows(); });
             });
-            var pick = btn('mv', '&#8645;', 'Move to…', function(){ pickedRow = (pickedRow === index) ? -1 : index; renderRows(); });
-            ctrls.appendChild(star); ctrls.appendChild(eye); ctrls.appendChild(pick);
-            if (currentGroup.key !== FAV) ctrls.appendChild(btn('mv', '&#8943;', 'Merge with…', function(){ openMerge(c); }));
+            ctrls.appendChild(star); ctrls.appendChild(eye);
+            if (currentGroup.key !== FAV) ctrls.appendChild(btn('mv', '&#8943;', t('Merge with…'), function(){ openMerge(c); }));
+            row.appendChild(handle(el('chanList'), moveRow));
             row.appendChild(logo); row.appendChild(mid); row.appendChild(ctrls);
             return row;
           }
@@ -560,7 +726,7 @@ object ManagerPage {
               if (closed) return; closed = true;
               var val = input.value.trim();
               if (save && val !== c.name) {
-                patchRow(c, { name: val }, 'Renamed', function(){ c.name = val || c.original; c.renamed = !!val; renderRows(); });
+                patchRow(c, { name: val }, t('Renamed'), function(){ c.name = val || c.original; c.renamed = !!val; renderRows(); });
               } else renderRows();
             }
             input.addEventListener('keydown', function(e){
@@ -576,8 +742,8 @@ object ManagerPage {
             rows.splice(to, 0, item);
             renderRows();
             post('/group/order', { group: currentGroup.key, keys: rows.map(function(c){ return c.key; }) })
-              .then(function(){ setStatus('Order saved', 'ok'); })
-              .catch(function(){ setStatus(UNREACH, 'err'); });
+              .then(function(){ setStatus(t('Order saved'), 'ok'); })
+              .catch(function(){ setStatus(t(UNREACH), 'err'); });
           }
 
           // ---- Merge two channels -------------------------------------------------------------
@@ -585,7 +751,7 @@ object ManagerPage {
           var searchTimer = null;
           function openMerge(c){
             mergeFrom = c;
-            el('sheetTitle').textContent = 'Merge “' + c.name + '” with…';
+            el('sheetTitle').textContent = t('Merge “{0}” with…', c.name);
             el('sheetSearch').value = '';
             el('sheet').hidden = false;
             renderMergeTargets(rows);
@@ -599,38 +765,38 @@ object ManagerPage {
             searchTimer = setTimeout(function(){
               getJson('/search?q=' + encodeURIComponent(q))
                 .then(function(r){ renderMergeTargets(r.rows || []); })
-                .catch(function(){ setStatus(UNREACH, 'err'); });
+                .catch(function(){ setStatus(t(UNREACH), 'err'); });
             }, 250);
           });
           function renderMergeTargets(list){
             var box = el('sheetList'); box.innerHTML = '';
-            list.forEach(function(t){
-              if (!mergeFrom || t.key === mergeFrom.key || t.key.charAt(0) === '#') return;
+            list.forEach(function(x){
+              if (!mergeFrom || x.key === mergeFrom.key || x.key.charAt(0) === '#') return;
               var row = document.createElement('div'); row.className = 'row'; row.style.cursor = 'pointer';
               var logo = document.createElement('img'); logo.className = 'logo'; logo.alt = '';
-              if (t.logo) logo.src = t.logo; else logo.style.visibility = 'hidden';
+              if (x.logo) logo.src = x.logo; else logo.style.visibility = 'hidden';
               logo.onerror = function(){ logo.style.visibility = 'hidden'; };
               var mid = document.createElement('div'); mid.className = 'rowmeta';
-              var n = document.createElement('span'); n.className = 'name'; n.textContent = t.name;
-              var sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = (t.qualities || []).join(' · ') || ' ';
+              var n = document.createElement('span'); n.className = 'name'; n.textContent = x.name;
+              var sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = (x.qualities || []).join(' · ') || ' ';
               mid.appendChild(n); mid.appendChild(sub);
               row.appendChild(logo); row.appendChild(mid);
-              row.onclick = function(){ mergeChannels(mergeFrom, t); };
+              row.onclick = function(){ mergeChannels(mergeFrom, x); };
               box.appendChild(row);
             });
             if (!box.childNodes.length) {
-              var d = document.createElement('div'); d.className = 'empty'; d.textContent = 'Type at least 2 letters to search every channel.';
+              var d = document.createElement('div'); d.className = 'empty'; d.textContent = t('Type at least 2 letters to search every channel.');
               box.appendChild(d);
             }
           }
           function mergeChannels(from, into){
-            if (from.key.charAt(0) === '#') { setStatus("This channel can't be merged.", 'err'); return; }
-            if (!confirm('Merge “' + from.name + '” into “' + into.name + '”? They become one channel called “' + into.name + '”.')) return;
+            if (from.key.charAt(0) === '#') { setStatus(t("This channel can't be merged."), 'err'); return; }
+            if (!confirm(t('Merge “{0}” into “{1}”? They become one channel called “{1}”.', from.name, into.name))) return;
             el('sheet').hidden = true;
-            setStatus('Merging… (takes a few seconds)');
+            setStatus(t('Merging… (takes a few seconds)'));
             post('/merge', { from: from.key, into: into.key, fromName: from.name, intoName: into.name })
-              .then(function(){ setStatus('Merged', 'ok'); if (currentGroup) reloadRows(); })
-              .catch(function(){ setStatus(UNREACH, 'err'); });
+              .then(function(){ setStatus(t('Merged'), 'ok'); if (currentGroup) reloadRows(); })
+              .catch(function(){ setStatus(t(UNREACH), 'err'); });
           }
 
           // ---- Duplicate suggestions and merges made -----------------------------------------
@@ -638,17 +804,19 @@ object ManagerPage {
           el('dupCard').addEventListener('toggle', function(){ if (el('dupCard').open && !dupsLoaded) loadDuplicates(); });
           async function loadDuplicates(){
             var list = el('dupList');
-            list.innerHTML = '<div class="empty">Looking for duplicates…</div>';
+            list.innerHTML = '';
+            var wait = document.createElement('div'); wait.className = 'empty'; wait.textContent = t('Looking for duplicates…');
+            list.appendChild(wait);
             try {
               var d = await getJson('/duplicates');
               dupsLoaded = true;
               renderDuplicates(d);
-            } catch (e) { list.innerHTML = ''; setStatus(UNREACH, 'err'); }
+            } catch (e) { list.innerHTML = ''; setStatus(t(UNREACH), 'err'); }
           }
           function renderDuplicates(d){
             var list = el('dupList'); list.innerHTML = '';
             if (!d.suggestions.length) {
-              var none = document.createElement('div'); none.className = 'hint'; none.textContent = 'No likely duplicates right now.';
+              var none = document.createElement('div'); none.className = 'hint'; none.textContent = t('No likely duplicates right now.');
               list.appendChild(none);
             }
             d.suggestions.forEach(function(s){
@@ -656,16 +824,16 @@ object ManagerPage {
               var what = document.createElement('div'); what.className = 'what';
               what.textContent = s.fromName + '  →  ' + s.intoName;
               line.appendChild(what);
-              line.appendChild(mini('Merge', true, function(){
-                setStatus('Merging… (takes a few seconds)');
+              line.appendChild(mini(t('Merge'), true, function(){
+                setStatus(t('Merging… (takes a few seconds)'));
                 post('/merge', { from: s.from, into: s.into, fromName: s.fromName, intoName: s.intoName })
-                  .then(function(){ setStatus('Merged', 'ok'); loadDuplicates(); })
-                  .catch(function(){ setStatus(UNREACH, 'err'); });
+                  .then(function(){ setStatus(t('Merged'), 'ok'); loadDuplicates(); })
+                  .catch(function(){ setStatus(t(UNREACH), 'err'); });
               }));
-              line.appendChild(mini('Ignore', false, function(){
+              line.appendChild(mini(t('Ignore'), false, function(){
                 post('/merge', { ignore: s.pairId })
-                  .then(function(){ line.remove(); setStatus('Ignored', 'ok'); })
-                  .catch(function(){ setStatus(UNREACH, 'err'); });
+                  .then(function(){ line.remove(); setStatus(t('Ignored'), 'ok'); })
+                  .catch(function(){ setStatus(t(UNREACH), 'err'); });
               }));
               list.appendChild(line);
             });
@@ -676,11 +844,11 @@ object ManagerPage {
               var what = document.createElement('div'); what.className = 'what';
               what.textContent = m.fromName + '  →  ' + m.intoName;
               line.appendChild(what);
-              line.appendChild(mini('Separate', false, function(){
-                setStatus('Separating…');
+              line.appendChild(mini(t('Separate'), false, function(){
+                setStatus(t('Separating…'));
                 post('/merge', { from: m.from })
-                  .then(function(){ setStatus('Separated', 'ok'); loadDuplicates(); })
-                  .catch(function(){ setStatus(UNREACH, 'err'); });
+                  .then(function(){ setStatus(t('Separated'), 'ok'); loadDuplicates(); })
+                  .catch(function(){ setStatus(t(UNREACH), 'err'); });
               }));
               merged.appendChild(line);
             });
@@ -709,7 +877,7 @@ object ManagerPage {
           }
           function showTest(r){
             if (r && r.ok) setStatus('Connected to the NAS — recordings will save there. ✓', 'ok');
-            else setStatus("Couldn't reach the NAS: " + ((r && r.error) || 'check the details') , 'err');
+            else setStatus(t("Couldn't reach the NAS: {0}", (r && r.error) || t('check the details')), 'err');
           }
           el('recSave').onclick = function(){
             var body = smbBody();
@@ -738,7 +906,7 @@ object ManagerPage {
             el('provUserField').hidden = (k !== 'xtream');
             el('provPassField').hidden = (k !== 'xtream');
             el('provMacField').hidden = (k !== 'stalker');
-            el('provUrlLabel').textContent = (k === 'm3u') ? 'Playlist URL' : (k === 'stalker' ? 'Portal URL' : 'Server address');
+            el('provUrlLabel').textContent = t((k === 'm3u') ? 'Playlist URL' : (k === 'stalker' ? 'Portal URL' : 'Server address'));
             el('provUrl').placeholder = (k === 'm3u') ? 'http://example.com/playlist.m3u'
               : (k === 'stalker' ? 'http://portal.example.com:80/c' : 'http://example.com:8080');
           }
@@ -768,7 +936,7 @@ object ManagerPage {
             post('/source', b)
               .then(function(r){
                 if (r && r.ok){
-                  setStatus('Added — ' + (r.channels || 0) + ' channels loaded.', 'ok');
+                  setStatus(t('Added — {0} channels loaded.', r.channels || 0), 'ok');
                   el('provUrl').value = ''; el('provUser').value = ''; el('provPass').value = '';
                   el('provMac').value = ''; el('provName').value = '';
                   loadGroups();
@@ -791,8 +959,8 @@ object ManagerPage {
               bakText = text;
               var n = (d.merges || []).length, ig = (d.ignoredPairs || []).length;
               var when = d.exportedAt ? new Date(d.exportedAt).toLocaleString() : '';
-              el('bakInfo').textContent = 'Saved ' + when + (d.app ? ' from OpenTV ' + d.app : '') + '.';
-              el('bakMergesLabel').textContent = 'Channel merges (' + n + ' merged, ' + ig + ' ignored) — added to the ones on the TV';
+              el('bakInfo').textContent = d.app ? t('Saved {0} from OpenTV {1}.', when, d.app) : t('Saved {0}.', when);
+              el('bakMergesLabel').textContent = t('Channel merges ({0} merged, {1} ignored) — added to the ones on the TV', n, ig);
               el('bakSettings').disabled = !d.settings;
               el('bakSettings').checked = !!d.settings;
               el('bakChoice').hidden = false;
@@ -810,11 +978,11 @@ object ManagerPage {
               .then(function(r){
                 if (!r || !r.ok) { setStatus((r && r.error) || 'Import failed', 'err'); return; }
                 var parts = [];
-                if (r.settings) parts.push('settings restored');
-                if (m) parts.push(r.merges + ' new merges');
-                if (r.guides) parts.push(r.guides + ' guide feeds');
-                var msg = 'Done — ' + parts.join(', ') + '. The TV is regrouping channels.';
-                if (r.languageChanged) msg += ' The language changes next time OpenTV starts.';
+                if (r.settings) parts.push(t('settings restored'));
+                if (m) parts.push(t('{0} new merges', r.merges));
+                if (r.guides) parts.push(t('{0} guide feeds', r.guides));
+                var msg = t('Done — {0}. The TV is regrouping channels.', parts.join(', '));
+                if (r.languageChanged) msg += ' ' + t('The language changes next time OpenTV starts.');
                 setStatus(msg, 'ok');
                 el('bakChoice').hidden = true; el('bakFile').value = ''; bakText = null;
               })
