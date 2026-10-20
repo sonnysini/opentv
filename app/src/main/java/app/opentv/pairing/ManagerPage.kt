@@ -265,12 +265,13 @@ object ManagerPage {
 
           var el = function(id){ return document.getElementById(id); };
           var statusTimer = null;
+          // A message without a kind ("Merging…") is work in progress: it stays up until the answer replaces it.
           function setStatus(msg, kind){
             var s = el('status');
             s.textContent = msg;
             s.className = 'show ' + (kind || '');
             if (statusTimer) clearTimeout(statusTimer);
-            statusTimer = setTimeout(function(){ s.className = kind || ''; }, 2600);
+            statusTimer = kind ? setTimeout(function(){ s.className = kind; }, 2600) : null;
           }
 
           function withToken(path){ return path + (path.indexOf('?') >= 0 ? '&' : '?') + 't=' + encodeURIComponent(token); }
@@ -626,7 +627,7 @@ object ManagerPage {
             if (from.key.charAt(0) === '#') { setStatus("This channel can't be merged.", 'err'); return; }
             if (!confirm('Merge “' + from.name + '” into “' + into.name + '”? They become one channel called “' + into.name + '”.')) return;
             el('sheet').hidden = true;
-            setStatus('Merging…');
+            setStatus('Merging… (takes a few seconds)');
             post('/merge', { from: from.key, into: into.key, fromName: from.name, intoName: into.name })
               .then(function(){ setStatus('Merged', 'ok'); if (currentGroup) reloadRows(); })
               .catch(function(){ setStatus(UNREACH, 'err'); });
@@ -656,7 +657,7 @@ object ManagerPage {
               what.textContent = s.fromName + '  →  ' + s.intoName;
               line.appendChild(what);
               line.appendChild(mini('Merge', true, function(){
-                setStatus('Merging…');
+                setStatus('Merging… (takes a few seconds)');
                 post('/merge', { from: s.from, into: s.into, fromName: s.fromName, intoName: s.intoName })
                   .then(function(){ setStatus('Merged', 'ok'); loadDuplicates(); })
                   .catch(function(){ setStatus(UNREACH, 'err'); });
