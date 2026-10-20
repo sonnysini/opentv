@@ -202,6 +202,15 @@ class AppSettings private constructor(context: Context) {
         _groupBadges.value = on
     }
 
+    /** The "Recent" section at the top of the live groups list. */
+    private val _showRecentGroups = pref { prefs.getBoolean(KEY_SHOW_RECENT_GROUPS, true) }
+    val showRecentGroups: StateFlow<Boolean> = _showRecentGroups.asStateFlow()
+
+    fun setShowRecentGroups(on: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_RECENT_GROUPS, on).apply()
+        _showRecentGroups.value = on
+    }
+
     private val _foreignSportOff = pref { prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false) }
     val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
 
@@ -766,6 +775,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
         private const val KEY_STRIP_CATEGORY_SOURCES = "strip_category_sources"
         private const val KEY_GROUP_BADGES = "group_badges"
+        private const val KEY_SHOW_RECENT_GROUPS = "show_recent_groups"
         private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"
@@ -815,7 +825,7 @@ class AppSettings private constructor(context: Context) {
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
             listOf(
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
-                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
+                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
                 KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS, KEY_QUALITY_BUTTON_CYCLES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }

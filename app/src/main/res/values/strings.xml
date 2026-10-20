@@ -536,6 +536,8 @@
     <string name="categories_merge_sources_desc">The same group split by source becomes one; pick the source from the Quality panel.</string>
     <string name="categories_strip_sources">Hide source in group names</string>
     <string name="categories_group_badges">Logos beside groups</string>
+    <string name="categories_recent_groups">Recent groups</string>
+    <string name="categories_recent_groups_desc">The groups you last watched from, at the top of the live groups list.</string>
     <string name="categories_group_badges_desc">Broadcaster logo, flag or emoji next to each group in the category list (☰).</string>
     <string name="categories_strip_sources_desc">A group with a single source drops the source from its name: "Bambini (…)" reads "Bambini".</string>
     <string name="categories_foreign_sport">International sport</string>

@@ -470,6 +470,8 @@
     <string name="categories_strip_sources">Togli la sorgente dai nomi dei gruppi</string>
     <string name="categories_group_badges">Loghi accanto ai gruppi</string>
     <string name="categories_group_badges_desc">Logo del marchio, bandiera o emoji accanto a ogni gruppo nella lista categorie (☰).</string>
+    <string name="categories_recent_groups">Gruppi recenti</string>
+    <string name="categories_recent_groups_desc">I gruppi da cui hai guardato di recente, in cima alla lista gruppi della Live.</string>
     <string name="categories_strip_sources_desc">Un gruppo con una sola sorgente perde il nome della sorgente: "Bambini (…)" diventa "Bambini".</string>
     <string name="categories_foreign_sport">Sport internazionale</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>

@@ -33,9 +33,10 @@ The fork stays under the GPL v3 like the original.
 - Each channel row shows a large logo, the programme on now, "Up next" on the same line, and a
   progress bar across the row. No channel numbers, because the list's numbering jumps about.
 - **Group logos** (Sky, DAZN, Discovery, flags…) with a channel count on each group, and the
-  groups you watched from recently at the top.
+  groups you watched from recently at the top (can be switched off in Settings → Grouping).
 - **Back steps up one level**: channels → groups → navigation menu → leave the app.
-- **Reopens on the last group and the last channel you watched.**
+- **Reopens on the last group and the last channel you watched**, with focus on the groups so the
+  list starts wide.
 - **Empty groups** (event-only feeds between events) are hidden, so you never open one onto
   nothing.
 

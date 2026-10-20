@@ -364,6 +364,9 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     /** The live groups last watched from, newest first — see [markGroupWatched]. */
     val recentLiveGroups: StateFlow<List<String>> = settings.recentLiveGroups
 
+    /** Whether the groups list shows its "Recent" section (Settings → Grouping). */
+    val showRecentGroups: StateFlow<Boolean> = settings.showRecentGroups
+
     /** A channel started from the current group: it moves to the top of the "Recent" groups. */
     fun markGroupWatched() {
         val group = when {
@@ -1550,6 +1553,10 @@ class GroupingViewModel(app: Application) : AndroidViewModel(app) {
     val groupBadges: StateFlow<Boolean> = graph.settings.groupBadges
 
     fun setGroupBadges(on: Boolean) = graph.settings.setGroupBadges(on)
+
+    val showRecentGroups: StateFlow<Boolean> = graph.settings.showRecentGroups
+
+    fun setShowRecentGroups(on: Boolean) = graph.settings.setShowRecentGroups(on)
 
     fun merge(s: app.opentv.data.parser.MergeSuggester.Suggestion) {
         graph.settings.addGroupMerge(app.opentv.data.model.GroupMerge(s.from.key, s.into.key, s.from.name, s.into.name))
