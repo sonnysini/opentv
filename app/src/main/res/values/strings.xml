@@ -189,8 +189,12 @@
     <string name="settings_channel_layout_list">Simple list</string>
     <string name="settings_channel_layout_fullscreen">Full-screen list (☰ categories)</string>
     <string name="live_categories_title">Categories</string>
-    <string name="live_menu_hint">☰ Categories   ← Menu</string>
-    <string name="live_menu_hint_categories">☰ Back to channels   ← Menu</string>
+    <string name="live_menu_hint">← Groups</string>
+    <string name="live_menu_hint_categories">→ Channels   ← Menu</string>
+    <string name="live_channel_count">%1$d channels</string>
+    <string name="live_groups_recent">Recent</string>
+    <string name="live_groups_all">All groups</string>
+    <string name="live_up_next">Up next: %1$s</string>
     <string name="live_merge_action">Merge with…</string>
     <string name="live_merge_banner">Merge %1$s with… pick the channel · BACK cancels</string>
     <string name="live_merge_done">Merged into %1$s · undo in Settings › Channel grouping</string>

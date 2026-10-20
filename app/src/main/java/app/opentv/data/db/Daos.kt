@@ -188,6 +188,10 @@ interface ChannelDao {
     @Query("SELECT DISTINCT categoryId FROM channels WHERE hidden = 0 AND categoryId IS NOT NULL")
     fun observeNonEmptyCategoryIds(): Flow<List<String>>
 
+    /** Every visible channel's category and grouping key — the full-screen list counts its groups from these. */
+    @Query("SELECT categoryId, groupKey FROM channels WHERE hidden = 0 AND categoryId IS NOT NULL")
+    fun observeCategoryChannelKeys(): Flow<List<CategoryChannelKey>>
+
     @Query("UPDATE channels SET favourite = :favourite WHERE id = :id")
     suspend fun setFavourite(id: Long, favourite: Boolean)
 
@@ -329,6 +333,8 @@ interface CategoryDao {
 
 /** Projection for [CategoryDao.namesFor]. */
 data class CategoryName(val id: String, val name: String)
+
+data class CategoryChannelKey(val categoryId: String, val groupKey: String)
 
 /** Projection for [ChannelDao.channelCountsByCategory]. */
 data class CategoryChannelCount(val sourceId: Long, val categoryId: String, val count: Int)

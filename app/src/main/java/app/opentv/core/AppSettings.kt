@@ -263,6 +263,19 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getString(KEY_LAST_LIVE_GROUP, null)
         set(value) { prefs.edit().putString(KEY_LAST_LIVE_GROUP, value).apply() }
 
+    /** The live groups last watched from, newest first ("fav"/"all"/group key) — the list's "Recent". */
+    private val _recentLiveGroups = pref {
+        prefs.getString(KEY_RECENT_LIVE_GROUPS, null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
+    }
+    val recentLiveGroups: StateFlow<List<String>> = _recentLiveGroups.asStateFlow()
+
+    fun addRecentLiveGroup(group: String) {
+        val list = (listOf(group) + _recentLiveGroups.value.filter { it != group }).take(RECENT_LIVE_GROUPS_MAX)
+        if (list == _recentLiveGroups.value) return
+        prefs.edit().putString(KEY_RECENT_LIVE_GROUPS, list.joinToString("\n")).apply()
+        _recentLiveGroups.value = list
+    }
+
     fun setSubtitlesEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SUBTITLES, enabled).apply()
         _subtitlesEnabled.value = enabled
@@ -739,6 +752,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_APP_STYLE = "app_style"
         private const val KEY_CHANNEL_LAYOUT = "channel_layout"
         private const val KEY_LAST_LIVE_GROUP = "last_live_group"
+        private const val KEY_RECENT_LIVE_GROUPS = "recent_live_groups"
+        private const val RECENT_LIVE_GROUPS_MAX = 3
         private const val KEY_SUBTITLES = "subtitles_enabled"
         private const val KEY_PREVIEW_VIDEO = "guide_preview_video"
         private const val KEY_PREFER_GUIDE_LOGOS = "prefer_guide_logos"

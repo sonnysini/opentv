@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.17.0 — 20 October 2026
+
+- **Groups and channels side by side.** The full-screen live list now shows the groups down the
+  left and the current group's channels beside them. Moving through the groups swaps the
+  channels after a short pause; → or OK goes into the channels, and the groups fold to a strip
+  of logos so the channels get the room. ← or Back opens the groups again.
+- **Channel counts and Recent groups.** Each group shows how many channels it holds, and the
+  groups you last watched from sit at the top under Favourites.
+- **Up next on the same line.** Each channel reads "11:00 – 12:30 · now on   Up next: 12:30 –
+  14:30 · next", with the progress bar across the whole row. The channel last watched is marked.
+- **Back no longer quits from the groups.** Back goes channels → groups → navigation menu; only
+  Back from the menu asks whether to leave.
+
 ## 0.16.9 — 20 October 2026
 
 - **Choose what OK on Quality does.** New switch in Settings › Display & playback, "OK on

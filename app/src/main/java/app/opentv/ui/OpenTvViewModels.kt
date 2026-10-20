@@ -329,9 +329,48 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * (event-only feeds like NBA/NHL Pass are empty between events and would open onto nothing).
      */
     val nonEmptyCategoryGroups: StateFlow<List<CategoryGroup>> by lazy {
-        combine(visibleCategoryGroups, graph.catalogRepository.observeNonEmptyCategoryIds()) { groups, filled ->
-            groups.filter { g -> g.ids.any { it in filled } }
+        combine(visibleCategoryGroups, groupCounts) { groups, counts ->
+            groups.filter { (counts[it.key] ?: 0) > 0 }
         }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }
+
+    /**
+     * Channels per group as the list shows them — one per grouping key, so FHD/HD/SD and the same
+     * channel from two sources count once. Keyed by group key, plus [LAST_GROUP_ALL] and
+     * [LAST_GROUP_FAVOURITES].
+     */
+    val groupCounts: StateFlow<Map<String, Int>> by lazy {
+        combine(
+            visibleCategoryGroups,
+            graph.catalogRepository.observeCategoryChannelKeys(),
+            graph.catalogRepository.observeFavouriteChannels(),
+        ) { groups, keys, favourites ->
+            val byCategory = HashMap<String, MutableSet<String>>()
+            for (k in keys) byCategory.getOrPut(k.categoryId) { HashSet() } += k.groupKey.ifEmpty { "#" + k.categoryId }
+            val all = HashSet<String>()
+            val counts = HashMap<String, Int>()
+            for (g in groups) {
+                val members = HashSet<String>()
+                g.ids.forEach { id -> byCategory[id]?.let(members::addAll) }
+                counts[g.key] = members.size
+                all += members
+            }
+            counts[LAST_GROUP_ALL] = all.size
+            counts[LAST_GROUP_FAVOURITES] = favourites.filter { !it.hidden }.distinctBy { it.groupKey.ifEmpty { it.id.toString() } }.size
+            counts
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    }
+
+    /** The live groups last watched from, newest first — see [markGroupWatched]. */
+    val recentLiveGroups: StateFlow<List<String>> = settings.recentLiveGroups
+
+    /** A channel started from the current group: it moves to the top of the "Recent" groups. */
+    fun markGroupWatched() {
+        val group = when {
+            favouritesOnly.value -> LAST_GROUP_FAVOURITES
+            else -> selectedCategory.value ?: LAST_GROUP_ALL
+        }
+        settings.addRecentLiveGroup(group)
     }
 
     /** The rail's view of categories: hidden ones drop out until the session is unlocked. */
@@ -750,12 +789,12 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private companion object {
-        const val GUIDE_LOOKAHEAD_MILLIS = 24 * 60 * 60 * 1000L  // a full day fits the grid
-        const val SHIFT_LOOKBACK_MILLIS = 3 * 60 * 60 * 1000L  // covers +1/+2/+3 copies
-        const val DAY_MILLIS = 24 * 60 * 60 * 1000L
-        const val GUIDE_MAX_DAYS = 6  // browse up to a week out, matching typical XMLTV depth
-        const val HALF_HOUR_MILLIS = 30 * 60 * 1000L
+    companion object {
+        private const val GUIDE_LOOKAHEAD_MILLIS = 24 * 60 * 60 * 1000L  // a full day fits the grid
+        private const val SHIFT_LOOKBACK_MILLIS = 3 * 60 * 60 * 1000L  // covers +1/+2/+3 copies
+        private const val DAY_MILLIS = 24 * 60 * 60 * 1000L
+        private const val GUIDE_MAX_DAYS = 6  // browse up to a week out, matching typical XMLTV depth
+        private const val HALF_HOUR_MILLIS = 30 * 60 * 1000L
         const val LAST_GROUP_ALL = "all"
         const val LAST_GROUP_FAVOURITES = "fav"
     }

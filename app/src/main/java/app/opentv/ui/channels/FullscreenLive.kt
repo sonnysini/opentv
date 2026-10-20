@@ -6,6 +6,14 @@
 package app.opentv.ui.channels
 
 import android.graphics.Paint
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_ALL
+import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_FAVOURITES
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,11 +82,11 @@ import kotlinx.coroutines.delay
 import app.opentv.ui.theme.focusLift
 
 /**
- * Live TV as one full-screen list, TiviMate-style: no preview, no rail, no menu — just the channels
- * of the current group with what's on now (and next) against each one. ☰ (the remote's menu key)
- * swaps the list for the categories in the same style, with the provider's own names — flags and
- * emoji included; OK on one goes back to its channels. OK on a channel plays it full-screen.
- * LEFT on a row of either list asks the host to reveal the app's navigation menu.
+ * Live TV on one screen, TiviMate-style: the groups down the left, the current group's channels
+ * filling the rest with what's on now (and next) against each one. While you browse the channels
+ * the groups shrink to a strip of badges; LEFT (or Back, or ☰) widens them again, and moving
+ * through them swaps the channels beside them. RIGHT or OK goes back into the channels; LEFT or
+ * Back from the groups asks the host to reveal the app's navigation menu.
  */
 @Composable
 fun FullscreenLive(
@@ -92,6 +100,9 @@ fun FullscreenLive(
     // Where to start when the highlight isn't in the list yet (rows only just loaded): the last
     // watched channel, so returning from the player lands back on it.
     fallbackKey: (List<ChannelsViewModel.Row>) -> Any?,
+    // Channels per group (group key, "all", "fav") and the groups last watched from, newest first.
+    groupCounts: Map<String, Int>,
+    recentGroups: List<String>,
     nowMillis: Long,
     onSelectCategory: (String?) -> Unit,
     onSelectFavourites: () -> Unit,
@@ -111,16 +122,18 @@ fun FullscreenLive(
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
 ) {
-    var showCategories by rememberSaveable { mutableStateOf(false) }
-    // Back climbs one level like ☰: channels → categories; from the categories it falls through
-    // to the screen's usual Back (the exit prompt).
-    BackHandler(enabled = !showCategories) { showCategories = true }
+    var groupsOpen by rememberSaveable { mutableStateOf(false) }
+    // Only while focus is in here: once LEFT/Back has handed it to the navigation menu, Back
+    // falls through to the screen's usual one (the exit prompt).
+    var focusInside by remember { mutableStateOf(false) }
+    // Back climbs one level: channels → groups → navigation menu.
+    BackHandler(enabled = focusInside) { if (groupsOpen) onExitLeft() else groupsOpen = true }
     // Declared later, so it wins: BACK first leaves "merge with…".
     BackHandler(enabled = mergingName != null) { onCancelMerge() }
 
-    // After picking another category the old group's rows are still on hand for a moment; hold the
-    // list back until the new ones arrive, so focus lands on the new group's first channel instead
-    // of on whatever sat at the old position. The timeout covers a group that comes back identical
+    // After picking another group the old group's rows are still on hand for a moment; hold the
+    // list back until the new ones arrive, so focus lands on the new group's channels instead of
+    // on whatever sat at the old position. The timeout covers a group that comes back identical
     // (two empty groups), which a StateFlow wouldn't re-emit.
     var awaitingRows by remember { mutableStateOf<List<ChannelsViewModel.Row>?>(null) }
     LaunchedEffect(rows) { if (awaitingRows != null && rows !== awaitingRows) awaitingRows = null }
@@ -133,19 +146,19 @@ fun FullscreenLive(
 
     // A group that turns out empty (all its channels gone, filtered or hidden) would otherwise sit
     // on the loading screen for good. Once the guide is known to be built, give it a moment, then
-    // go back to the categories so the user can pick another.
-    val groupEmpty = !showCategories && awaitingRows == null && rows.isEmpty() && rowsLoaded
-    LaunchedEffect(groupEmpty) {
-        if (groupEmpty) {
+    // open the groups so the user can pick another.
+    val groupEmpty = awaitingRows == null && rows.isEmpty() && rowsLoaded
+    LaunchedEffect(groupEmpty, groupsOpen) {
+        if (groupEmpty && !groupsOpen) {
             delay(1_500)
-            showCategories = true
+            groupsOpen = true
         }
     }
 
-    // When nothing in the list can hold focus (loading, empty), park it on the screen itself —
+    // When nothing in the channels can hold focus (loading, empty), park it on the screen itself —
     // with focus nowhere, the remote's keys (☰ included) would go nowhere either.
     val holderFocus = remember { FocusRequester() }
-    val needsHolder = !showCategories && (awaitingRows != null || rows.isEmpty())
+    val needsHolder = !groupsOpen && (awaitingRows != null || rows.isEmpty())
     LaunchedEffect(needsHolder) {
         if (needsHolder) {
             delay(50)
@@ -158,20 +171,23 @@ fun FullscreenLive(
     val title = when {
         favouritesOnly -> favouritesLabel
         selectedCategory == null -> allLabel
-        else -> categories.firstOrNull { selectedCategory in it.memberKeys }?.rawName ?: ""
+        else -> categories.firstOrNull { selectedCategory in it.memberKeys }?.let { g ->
+            if (LocalGroupBadges.current) GroupBadge.of(g.rawName).label else g.rawName
+        } ?: ""
     }
 
     Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .onFocusChanged { focusInside = it.hasFocus }
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // The user moved on before the regrouped list came back: don't yank focus later.
                 if (refocus != null) onRefocusDone()
                 when (e.key) {
-                    Key.Menu -> { showCategories = !showCategories; true }
-                    Key.DirectionLeft -> if (needsHolder) { onExitLeft(); true } else false
+                    Key.Menu -> { groupsOpen = !groupsOpen; true }
+                    Key.DirectionLeft -> if (needsHolder) { groupsOpen = true; true } else false
                     else -> false
                 }
             }
@@ -179,23 +195,24 @@ fun FullscreenLive(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (showCategories) stringResource(R.string.live_categories_title) else title,
+                title,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f, fill = false),
             )
-            if (!showCategories && rows.isNotEmpty()) {
+            if (rows.isNotEmpty() && awaitingRows == null) {
+                Spacer(Modifier.width(12.dp))
                 Text(
-                    "${rows.size}",
+                    stringResource(R.string.live_channel_count, rows.size),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.width(24.dp))
             }
+            Spacer(Modifier.weight(1f).width(24.dp))
             Text(
-                stringResource(if (showCategories) R.string.live_menu_hint_categories else R.string.live_menu_hint),
+                stringResource(if (groupsOpen) R.string.live_menu_hint_categories else R.string.live_menu_hint),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -217,63 +234,211 @@ fun FullscreenLive(
         }
         Spacer(Modifier.height(12.dp))
 
-        if (showCategories) {
-            data class Entry(
-                val key: String,
-                val label: String,
-                val selected: Boolean,
-                val badge: GroupBadge.Badge? = null,
-                val pick: () -> Unit,
-            )
-            val badges = LocalGroupBadges.current
-            fun shown(name: String) = if (badges) GroupBadge.of(name) else GroupBadge.Result(name, null)
-            val entries = buildList {
-                val fav = shown(favouritesLabel)
-                add(Entry("fav", fav.label, favouritesOnly, fav.badge) { onSelectFavourites() })
-                add(Entry("all", allLabel, !favouritesOnly && selectedCategory == null) { onSelectCategory(null) })
-                categories.forEach { g ->
-                    val s = shown(g.rawName)
-                    add(Entry("cat-${g.key}", s.label, !favouritesOnly && selectedCategory in g.memberKeys, s.badge) { onSelectCategory(g.key) })
-                }
-            }
-            val startIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
-            FocusedList(count = entries.size, startIndex = startIndex) { index, requester ->
-                val entry = entries[index]
-                CategoryEntry(
-                    label = entry.label,
-                    badge = entry.badge,
-                    showBadges = badges,
-                    selected = entry.selected,
-                    modifier = requester,
-                    onLeft = onExitLeft,
-                    onClick = {
-                        if (!entry.selected) {
-                            awaitingRows = rows
-                            entry.pick()
-                        }
-                        showCategories = false
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            val groupsWidth by animateDpAsState(if (groupsOpen) 340.dp else 104.dp, label = "groupsWidth")
+            Box(Modifier.width(groupsWidth).fillMaxHeight()) {
+                GroupsList(
+                    open = groupsOpen,
+                    categories = categories,
+                    selectedCategory = selectedCategory,
+                    favouritesOnly = favouritesOnly,
+                    counts = groupCounts,
+                    recentGroups = recentGroups,
+                    favouritesLabel = favouritesLabel,
+                    allLabel = allLabel,
+                    onSelectCategory = { key ->
+                        awaitingRows = rows
+                        onSelectCategory(key)
                     },
+                    onSelectFavourites = {
+                        awaitingRows = rows
+                        onSelectFavourites()
+                    },
+                    onEnter = { groupsOpen = false },
+                    onLeft = onExitLeft,
                 )
             }
-        } else if (awaitingRows != null) {
-            Spacer(Modifier.weight(1f).fillMaxWidth().focusRequester(holderFocus).focusable())
-        } else if (rows.isEmpty()) {
-            Box(Modifier.weight(1f).fillMaxWidth().focusRequester(holderFocus).focusable()) {
-                if (groupEmpty) {
-                    Text(
-                        stringResource(R.string.live_group_empty),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                } else {
-                    emptyContent()
+            Spacer(Modifier.width(20.dp))
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                ChannelsPane(
+                    rows = rows,
+                    active = !groupsOpen,
+                    waiting = awaitingRows != null,
+                    groupEmpty = groupEmpty,
+                    holderFocus = holderFocus,
+                    favouritesOnly = favouritesOnly,
+                    selectedCategory = selectedCategory,
+                    highlightedKey = highlightedKey,
+                    fallbackKey = fallbackKey,
+                    refocus = refocus,
+                    onRefocusDone = onRefocusDone,
+                    nowMillis = nowMillis,
+                    onFocusRow = onFocusRow,
+                    onPlay = onPlay,
+                    onToggleFavourite = onToggleFavourite,
+                    onLongPress = onLongPress,
+                    onLeft = { groupsOpen = true },
+                    emptyContent = emptyContent,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The groups column: Favourites, the groups last watched from, then every group. Open, it is a
+ * list of badges, names and channel counts that you move through — the channels beside it follow
+ * the focused group after a short pause, so holding a direction doesn't rebuild every group on
+ * the way. Closed, it is a strip of badges that can't take focus, the current group marked.
+ */
+@Composable
+private fun GroupsList(
+    open: Boolean,
+    categories: List<ChannelsViewModel.CategoryGroup>,
+    selectedCategory: String?,
+    favouritesOnly: Boolean,
+    counts: Map<String, Int>,
+    recentGroups: List<String>,
+    favouritesLabel: String,
+    allLabel: String,
+    onSelectCategory: (String?) -> Unit,
+    onSelectFavourites: () -> Unit,
+    onEnter: () -> Unit,
+    onLeft: () -> Unit,
+) {
+    data class Entry(
+        val key: String,
+        val label: String = "",
+        val selected: Boolean = false,
+        val count: Int? = null,
+        val badge: GroupBadge.Badge? = null,
+        // A section title ("Recent", "All groups") drawn above this group, in the same list item
+        // so every item can take focus.
+        val section: String? = null,
+        val pick: () -> Unit = {},
+    )
+    val badges = LocalGroupBadges.current
+    fun shown(name: String) = if (badges) GroupBadge.of(name) else GroupBadge.Result(name, null)
+    val recentTitle = stringResource(R.string.live_groups_recent)
+    val allTitle = stringResource(R.string.live_groups_all)
+    // The remembered entries' picks go through these, so they always reach the latest callbacks.
+    val selectCategory by rememberUpdatedState(onSelectCategory)
+    val selectFavourites by rememberUpdatedState(onSelectFavourites)
+    val entries = remember(categories, selectedCategory, favouritesOnly, counts, recentGroups, badges, favouritesLabel, allLabel) {
+        val allSelected = !favouritesOnly && selectedCategory == null
+        fun all(prefix: String) = Entry(prefix + "all", allLabel, allSelected, counts[LAST_GROUP_ALL]) { selectCategory(null) }
+        fun group(prefix: String, g: ChannelsViewModel.CategoryGroup): Entry {
+            val s = shown(g.rawName)
+            return Entry(prefix + "cat-" + g.key, s.label, !favouritesOnly && selectedCategory in g.memberKeys, counts[g.key], s.badge) {
+                selectCategory(g.key)
+            }
+        }
+        buildList {
+            val fav = shown(favouritesLabel)
+            add(Entry("fav", fav.label, favouritesOnly, counts[LAST_GROUP_FAVOURITES], fav.badge) { selectFavourites() })
+            val recent = recentGroups.mapNotNull { key ->
+                when (key) {
+                    LAST_GROUP_FAVOURITES -> null
+                    LAST_GROUP_ALL -> all("recent-")
+                    else -> categories.firstOrNull { key in it.memberKeys }?.let { group("recent-", it) }
                 }
             }
-        } else {
+            addAll(recent.mapIndexed { i, e -> if (i == 0) e.copy(section = recentTitle) else e })
+            add(all("").let { if (recent.isNotEmpty()) it.copy(section = allTitle) else it })
+            categories.forEach { add(group("", it)) }
+        }
+    }
+    // The pick behind the focused group, run after a pause unless focus moves on first.
+    var focusedKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focusedKey, open) {
+        val entry = entries.firstOrNull { it.key == focusedKey } ?: return@LaunchedEffect
+        if (!open || entry.selected) return@LaunchedEffect
+        delay(GROUP_FOLLOW_DELAY_MILLIS)
+        entry.pick()
+    }
+    val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
+    FocusedList(count = entries.size, startIndex = selectedIndex, active = open, activeIndex = selectedIndex) { index, requester ->
+        val entry = entries[index]
+        Column {
+            entry.section?.let { GroupsHeader(it, open) }
+            CategoryEntry(
+                label = entry.label,
+                badge = entry.badge,
+                showBadges = badges,
+                selected = entry.selected,
+                count = entry.count,
+                open = open,
+                modifier = requester,
+                onFocused = { focusedKey = entry.key },
+                onLeft = onLeft,
+                onEnter = {
+                    if (!entry.selected) entry.pick()
+                    onEnter()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupsHeader(title: String, open: Boolean) {
+    if (open) {
+        Text(
+            title.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 2.dp),
+        )
+    } else {
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+/**
+ * The channels of the current group, or what stands in for them while they load or when there
+ * are none. Only [active] (groups closed) does it take focus; while the groups are open it just
+ * shows what the focused group holds.
+ */
+@Composable
+private fun ChannelsPane(
+    rows: List<ChannelsViewModel.Row>,
+    active: Boolean,
+    waiting: Boolean,
+    groupEmpty: Boolean,
+    holderFocus: FocusRequester,
+    favouritesOnly: Boolean,
+    selectedCategory: String?,
+    highlightedKey: Any?,
+    fallbackKey: (List<ChannelsViewModel.Row>) -> Any?,
+    refocus: Triple<Any, Any, List<ChannelsViewModel.Row>>?,
+    onRefocusDone: () -> Unit,
+    nowMillis: Long,
+    onFocusRow: (ChannelsViewModel.Row) -> Unit,
+    onPlay: (ChannelsViewModel.Row) -> Unit,
+    onToggleFavourite: (ChannelsViewModel.Row) -> Unit,
+    onLongPress: (ChannelsViewModel.Row) -> Unit,
+    onLeft: () -> Unit,
+    emptyContent: @Composable () -> Unit,
+) {
+    when {
+        waiting -> Spacer(Modifier.fillMaxSize().focusRequester(holderFocus).focusable())
+        rows.isEmpty() -> Box(Modifier.fillMaxSize().focusRequester(holderFocus).focusable()) {
+            if (groupEmpty) {
+                Text(
+                    stringResource(R.string.live_group_empty),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            } else {
+                emptyContent()
+            }
+        }
+        else -> {
             val startIndex = rows.indexOfFirst { it.key == highlightedKey }.takeIf { it >= 0 }
                 ?: fallbackKey(rows)?.let { key -> rows.indexOfFirst { it.key == key } }?.coerceAtLeast(0)
                 ?: 0
+            val lastKey = fallbackKey(rows)
             // Keyed on the group so switching category re-focuses the new list's first row.
             val jumpTo = refocus?.takeIf { rows !== it.third }
                 ?.let { (key, _, _) -> rows.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
@@ -289,6 +454,7 @@ fun FullscreenLive(
                 FocusedList(
                     count = rows.size,
                     startIndex = startIndex,
+                    active = active,
                     jumpTo = jumpTo,
                     jumpVersion = rows,
                     onJumped = { if (refocusSettled) onRefocusDone() },
@@ -297,12 +463,13 @@ fun FullscreenLive(
                     FullscreenChannelRow(
                         row = row,
                         nowMillis = nowMillis,
+                        last = row.key == lastKey,
                         modifier = requester,
                         onFocus = { onFocusRow(row) },
                         onPlay = { onPlay(row) },
                         onToggleFavourite = { onToggleFavourite(row) },
                         onLongPress = { onLongPress(row) },
-                        onLeft = onExitLeft,
+                        onLeft = onLeft,
                     )
                 }
             }
@@ -320,6 +487,10 @@ fun FullscreenLive(
 private fun FocusedList(
     count: Int,
     startIndex: Int,
+    // Only an active list takes focus; becoming active puts it on [activeIndex] when given, else on
+    // the row last focused.
+    active: Boolean = true,
+    activeIndex: Int? = null,
     // Move focus to this row now (the list changed under it), then call [onJumped].
     jumpTo: Int? = null,
     // A new value re-runs the jump even to the same index (the list changed under it).
@@ -333,7 +504,9 @@ private fun FocusedList(
     // The requester follows focus, so coming back into the list (RIGHT from the navigation menu)
     // returns to the row you left rather than to whichever row sits nearest the menu.
     var focusedIndex by remember { mutableIntStateOf(startIndex) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(active) {
+        if (!active) return@LaunchedEffect
+        if (activeIndex != null && activeIndex in 0 until count) focusedIndex = activeIndex
         // The item has to be laid out — and, at app start, the window focused — before it can take
         // focus, and a request made too early is silently dropped. Keep asking until it sticks.
         repeat(40) {
@@ -371,7 +544,7 @@ private fun FocusedList(
             // throws ("FocusRequester is not initialized") and took the app down on a key press.
             .focusProperties {
                 enter = {
-                    if (listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
+                    if (active && listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
                     else FocusRequester.Default
                 }
             }
@@ -392,66 +565,118 @@ private fun CategoryEntry(
     badge: GroupBadge.Badge?,
     showBadges: Boolean,
     selected: Boolean,
+    count: Int?,
+    // Open: badge, name and count, focusable. Closed: the badge alone, which can't take focus.
+    open: Boolean,
     modifier: Modifier,
+    onFocused: () -> Unit,
     onLeft: () -> Unit,
-    onClick: () -> Unit,
+    onEnter: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
     Row(
         modifier
+            .focusProperties { canFocus = open }
             .leftReveals({ focused }, onLeft)
+            .onPreviewKeyEvent { e ->
+                if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { onEnter(); true } else false
+            }
             .fillMaxWidth()
             .focusLift(focused)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(shape)
             .background(
                 when {
-                    focused -> MaterialTheme.colorScheme.primary
-                    selected -> MaterialTheme.colorScheme.primaryContainer
+                    focused -> MaterialTheme.colorScheme.primaryContainer
+                    selected -> MaterialTheme.colorScheme.surfaceVariant
                     else -> MaterialTheme.colorScheme.surface
                 },
             )
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = if (showBadges) 10.dp else 14.dp),
+            .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
+            .clickable(interactionSource = null, indication = null, onClick = onEnter)
+            .padding(horizontal = if (open) 12.dp else 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (showBadges) {
-            // Every row keeps the badge's room, so the names line up whether a group has one or not.
-            Box(Modifier.size(width = 96.dp, height = 48.dp), contentAlignment = Alignment.Center) {
-                when (badge) {
-                    is GroupBadge.Image -> AsyncImage(
-                        model = badge.url,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
-                    )
-                    // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
-                    is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
-                        Text(badge.text, fontSize = 30.sp, maxLines = 1)
-                    }
-                    null -> Unit
+        Box(Modifier.size(width = 80.dp, height = 40.dp), contentAlignment = Alignment.Center) {
+            when {
+                // Without a badge a closed strip still needs something to tell the groups apart.
+                !showBadges || badge == null -> if (!open) Initials(label)
+                badge is GroupBadge.Image -> AsyncImage(
+                    model = badge.url,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
+                )
+                // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
+                badge is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
+                    Text(badge.text, fontSize = 26.sp, maxLines = 1)
+                } else if (!open) {
+                    Initials(label)
                 }
+                else -> Unit
             }
-            Spacer(Modifier.width(16.dp))
+            if (selected && !open) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
         }
-        Text(
-            label,
-            style = MaterialTheme.typography.titleLarge,
-            color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (open) {
+            Spacer(Modifier.width(14.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (selected) {
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+            }
+            if (count != null) {
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "$count",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
+/** A badge-less group in the closed strip: the start of its name. */
+@Composable
+private fun Initials(label: String) {
+    Text(
+        label.take(3),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+    )
+}
+
 /**
- * One channel across the full width: logo and name, with the programme on now and its
- * progress underneath, and what's next on the right where a full-screen row has room for it.
+ * One channel across the pane: logo and name, then the programme on now with what follows it on
+ * the same line, and the now programme's progress across the whole row underneath.
  */
 @Composable
 private fun FullscreenChannelRow(
     row: ChannelsViewModel.Row,
     nowMillis: Long,
+    // The channel last watched: marked so it's easy to find again.
+    last: Boolean,
     modifier: Modifier,
     onFocus: () -> Unit,
     onPlay: () -> Unit,
@@ -486,20 +711,41 @@ private fun FullscreenChannelRow(
             modifier = Modifier.size(width = 128.dp, height = 64.dp).clip(RoundedCornerShape(6.dp)),
         )
         Spacer(Modifier.width(20.dp))
-        Column(Modifier.weight(0.6f)) {
-            Text(
-                row.primary.shownName,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    row.primary.shownName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (last) {
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        stringResource(R.string.player_last).uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
             val nowProg = row.now
+            val nextProg = row.next
             Spacer(Modifier.height(2.dp))
+            val upNext = nextProg?.let { stringResource(R.string.live_up_next, slot(it.startUtcMillis, it.endUtcMillis, it.title)) }
+            val dim = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             Text(
-                text = nowProg?.let {
-                    "${clock.format(Date(it.startUtcMillis))}–${clock.format(Date(it.endUtcMillis))}  ${it.title}"
-                } ?: stringResource(R.string.guide_no_info),
+                text = buildAnnotatedString {
+                    append(nowProg?.let { slot(it.startUtcMillis, it.endUtcMillis, it.title) } ?: stringResource(R.string.guide_no_info))
+                    if (upNext != null) withStyle(SpanStyle(color = dim)) { append("     "); append(upNext) }
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -523,15 +769,7 @@ private fun FullscreenChannelRow(
                 }
             }
         }
-        Spacer(Modifier.width(24.dp))
-        Text(
-            row.next?.let { stringResource(R.string.guide_next_prefix, clock.format(Date(it.startUtcMillis)), it.title) } ?: "",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(0.4f),
-        )
+        Spacer(Modifier.width(12.dp))
         IconButton(onClick = onToggleFavourite, modifier = Modifier.size(44.dp)) {
             Icon(
                 imageVector = if (row.primary.favourite) Icons.Filled.Star else Icons.Outlined.StarOutline,
@@ -543,6 +781,10 @@ private fun FullscreenChannelRow(
         }
     }
 }
+
+/** "11:00 – 12:30 · Title", the way the list writes both the programme on now and the next one. */
+private fun slot(start: Long, end: Long, title: String) =
+    "${clock.format(Date(start))} – ${clock.format(Date(end))} · $title"
 
 /**
  * LEFT on the row itself (not on a child like the star button, which LEFT should just leave)
@@ -582,3 +824,6 @@ private fun Modifier.longPressOk(isRowFocused: () -> Boolean, onLongPress: () ->
 }
 
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+// How long the focus rests on a group before the channels beside it switch to that group.
+private const val GROUP_FOLLOW_DELAY_MILLIS = 400L
