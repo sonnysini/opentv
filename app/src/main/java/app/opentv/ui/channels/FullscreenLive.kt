@@ -312,8 +312,9 @@ private fun GroupsList(
         val selected: Boolean = false,
         val count: Int? = null,
         val badge: GroupBadge.Badge? = null,
-        // A section title ("Recent", "All groups"), not a group.
-        val header: Boolean = false,
+        // A section title ("Recent", "All groups") drawn above this group, in the same list item
+        // so every item can take focus.
+        val section: String? = null,
         val pick: () -> Unit = {},
     )
     val badges = LocalGroupBadges.current
@@ -342,12 +343,8 @@ private fun GroupsList(
                     else -> categories.firstOrNull { key in it.memberKeys }?.let { group("recent-", it) }
                 }
             }
-            if (recent.isNotEmpty()) {
-                add(Entry("h-recent", recentTitle, header = true))
-                addAll(recent)
-                add(Entry("h-all", allTitle, header = true))
-            }
-            add(all(""))
+            addAll(recent.mapIndexed { i, e -> if (i == 0) e.copy(section = recentTitle) else e })
+            add(all("").let { if (recent.isNotEmpty()) it.copy(section = allTitle) else it })
             categories.forEach { add(group("", it)) }
         }
     }
@@ -362,9 +359,8 @@ private fun GroupsList(
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     FocusedList(count = entries.size, startIndex = selectedIndex, active = open, activeIndex = selectedIndex) { index, requester ->
         val entry = entries[index]
-        if (entry.header) {
-            GroupsHeader(entry.label, open)
-        } else {
+        Column {
+            entry.section?.let { GroupsHeader(it, open) }
             CategoryEntry(
                 label = entry.label,
                 badge = entry.badge,
@@ -548,7 +544,7 @@ private fun FocusedList(
             // throws ("FocusRequester is not initialized") and took the app down on a key press.
             .focusProperties {
                 enter = {
-                    if (listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
+                    if (active && listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
                     else FocusRequester.Default
                 }
             }
