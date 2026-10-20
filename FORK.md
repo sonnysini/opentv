@@ -54,9 +54,9 @@ The fork stays under the GPL v3 like the original.
 ## Phone page
 
 The phone/laptop page (Settings › Manage on phone or laptop) shows the live groups and channels the
-way the TV lists them, and changes apply at once:
+way the TV lists them, and changes apply at once. It is in Italian on a phone set to Italian:
 
-- **Reorder groups** and **reorder channels inside a group** (arrows, or ⇅ then tap the spot).
+- **Reorder groups** and **reorder channels inside a group** by dragging the ≡ handle.
   The order survives catalogue refreshes and is in the settings backup. Favourites can be
   reordered too.
 - **Merge a group into another** and separate it again; **switch a whole group off** (same as the

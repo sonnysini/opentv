@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.1 — 20 October 2026
+
+- **Drag to reorder on the phone page.** Hold the ≡ handle and drag a group or a channel where you
+  want it; the page scrolls by itself near the screen edges.
+- **The phone page speaks Italian** on a phone set to Italian.
+
 ## 0.18.0 — 20 October 2026
 
 - **The phone page shows your live list as the TV does.** Groups come folded and in the TV's
