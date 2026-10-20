@@ -334,6 +334,15 @@ class AppSettings private constructor(context: Context) {
         _stallFallback.value = enabled
     }
 
+    /** Player Quality button: OK steps to the next feed (hold for the list); off, OK opens the list. */
+    private val _qualityButtonCycles = pref { prefs.getBoolean(KEY_QUALITY_BUTTON_CYCLES, true) }
+    val qualityButtonCycles: StateFlow<Boolean> = _qualityButtonCycles.asStateFlow()
+
+    fun setQualityButtonCycles(on: Boolean) {
+        prefs.edit().putBoolean(KEY_QUALITY_BUTTON_CYCLES, on).apply()
+        _qualityButtonCycles.value = on
+    }
+
     /** Freeze wait in milliseconds, in [FALLBACK_STEP_MILLIS] steps; migrates the old whole-seconds pref. */
     private val _stallFallbackMillis = pref {
         prefs.getInt(
@@ -781,6 +790,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
         private const val KEY_STALL_FALLBACK = "stall_fallback"
+        private const val KEY_QUALITY_BUTTON_CYCLES = "quality_button_cycles"
         private const val KEY_STALL_FALLBACK_SECONDS = "stall_fallback_seconds"
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
@@ -792,7 +802,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
                 KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
-                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS,
+                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS, KEY_QUALITY_BUTTON_CYCLES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,

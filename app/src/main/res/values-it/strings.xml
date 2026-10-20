@@ -481,6 +481,8 @@
     <string name="player_quality_fallback">%1$s non disponibile → %2$s</string>
     <string name="settings_stall_fallback_title">Cambia flusso se si blocca</string>
     <string name="settings_stall_fallback_subtitle">Durante la visione, se l\'immagine si blocca o resta in caricamento, passa da solo al flusso successivo del canale.</string>
+    <string name="settings_quality_button_cycles_title">OK su Qualità cambia flusso</string>
+    <string name="settings_quality_button_cycles_subtitle">Nel player, OK sul pulsante Qualità passa al flusso successivo del canale; tieni premuto per l\'elenco completo. Spento: OK apre l\'elenco e scegli tu il server.</string>
     <string name="settings_stall_timeout">Bloccato da: %1$s s</string>
     <string name="player_stall_fallback">%1$s bloccato → %2$s</string>
     <string name="player_info">Info</string>

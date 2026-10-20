@@ -423,6 +423,7 @@ fun PlayerScreen(
     // While watching: a stream that stops moving — stuck loading, an error the silent restart can't
     // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
     val stallFallback by settings.stallFallback.collectAsState()
+    val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
     LaunchedEffect(started, paused, stallFallback, stallMillis, currentId, watchEpoch) {
         if (!started || paused || !stallFallback) return@LaunchedEffect
@@ -895,16 +896,19 @@ fun PlayerScreen(
                             // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
                             Spacer(Modifier.width(28.dp))
                             if (variants.size > 1) {
-                                // OK steps to the next feed; a long press opens the full list.
+                                // OK steps to the next feed and a long press opens the full list — or,
+                                // with the setting off, OK opens the list straight away.
+                                val togglePicker: () -> Unit = {
+                                    panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY
+                                    interaction++
+                                }
                                 BarChip(
                                     icon = Icons.Filled.HighQuality,
                                     label = stringResource(R.string.player_quality),
                                     selected = panel == Panel.QUALITY,
                                     badge = QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge,
-                                    onLongClick = {
-                                        panel = if (panel == Panel.QUALITY) Panel.NONE else Panel.QUALITY; interaction++
-                                    },
-                                    onClick = { cycleQuality() },
+                                    onLongClick = if (qualityButtonCycles) togglePicker else null,
+                                    onClick = if (qualityButtonCycles) ::cycleQuality else togglePicker,
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }
