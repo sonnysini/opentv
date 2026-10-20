@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.17.3 — 20 October 2026
+
+- **Live opens on the groups.** The full-screen live list starts with focus on the groups, so the
+  list opens wide; OK or → goes into the channels.
+- **Recent groups can be switched off.** New switch in Settings › Grouping, "Recent groups" (on by
+  default).
+- **Holding OK on Quality opens the list properly.** The held press no longer falls into the list
+  and picks the first stream; choose with a fresh OK.
+- **Player bar timeout.** Settings › Display & playback, "Player bar hides after": 1 to 10 seconds
+  (5 by default).
+
 ## 0.17.2 — 20 October 2026
 
 - **Plainer source examples.** The grouping settings explain source folding in general terms

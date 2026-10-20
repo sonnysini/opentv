@@ -536,6 +536,8 @@
     <string name="categories_merge_sources_desc">The same group split by source becomes one; pick the source from the Quality panel.</string>
     <string name="categories_strip_sources">Hide source in group names</string>
     <string name="categories_group_badges">Logos beside groups</string>
+    <string name="categories_recent_groups">Recent groups</string>
+    <string name="categories_recent_groups_desc">The groups you last watched from, at the top of the live groups list.</string>
     <string name="categories_group_badges_desc">Broadcaster logo, flag or emoji next to each group in the category list (☰).</string>
     <string name="categories_strip_sources_desc">A group with a single source drops the source from its name: "Bambini (…)" reads "Bambini".</string>
     <string name="categories_foreign_sport">International sport</string>
@@ -554,6 +556,7 @@
     <string name="settings_stall_fallback_subtitle">While watching, if the picture freezes or keeps loading, move to the channel\'s next stream on its own.</string>
     <string name="settings_quality_button_cycles_title">OK on Quality switches stream</string>
     <string name="settings_quality_button_cycles_subtitle">In the player, OK on the Quality button moves to the channel\'s next stream; hold OK for the full list. Off: OK opens the list and you pick the server.</string>
+    <string name="settings_controls_timeout">Player bar hides after: %1$d s</string>
     <string name="settings_stall_timeout">Frozen for: %1$s s</string>
     <string name="player_stall_fallback">%1$s froze → %2$s</string>
     <string name="player_info">Info</string>

@@ -100,6 +100,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val stallFallback by settings.stallFallback.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
+    val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -335,6 +336,15 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 subtitle = stringResource(R.string.settings_quality_button_cycles_subtitle),
                 checked = qualityButtonCycles,
                 onToggle = settings::setQualityButtonCycles,
+            )
+            Spacer(Modifier.height(8.dp))
+            StepSlider(
+                label = stringResource(R.string.settings_controls_timeout, controlsTimeout),
+                value = controlsTimeout,
+                min = AppSettings.MIN_CONTROLS_TIMEOUT_SECONDS,
+                max = AppSettings.MAX_CONTROLS_TIMEOUT_SECONDS,
+                step = 1,
+                onChange = settings::setControlsTimeoutSeconds,
             )
         }
 

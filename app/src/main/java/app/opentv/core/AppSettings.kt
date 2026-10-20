@@ -202,6 +202,15 @@ class AppSettings private constructor(context: Context) {
         _groupBadges.value = on
     }
 
+    /** The "Recent" section at the top of the live groups list. */
+    private val _showRecentGroups = pref { prefs.getBoolean(KEY_SHOW_RECENT_GROUPS, true) }
+    val showRecentGroups: StateFlow<Boolean> = _showRecentGroups.asStateFlow()
+
+    fun setShowRecentGroups(on: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_RECENT_GROUPS, on).apply()
+        _showRecentGroups.value = on
+    }
+
     private val _foreignSportOff = pref { prefs.getBoolean(KEY_FOREIGN_SPORT_OFF, false) }
     val foreignSportOff: StateFlow<Boolean> = _foreignSportOff.asStateFlow()
 
@@ -369,6 +378,19 @@ class AppSettings private constructor(context: Context) {
         val ms = millis.coerceIn(MIN_FALLBACK_MILLIS, MAX_FALLBACK_MILLIS)
         prefs.edit().putInt(KEY_STALL_FALLBACK_MILLIS, ms).apply()
         _stallFallbackMillis.value = ms
+    }
+
+    /** How long the player's control bar stays up after the last key, in whole seconds. */
+    private val _controlsTimeoutSeconds = pref {
+        prefs.getInt(KEY_CONTROLS_TIMEOUT, DEFAULT_CONTROLS_TIMEOUT_SECONDS)
+            .coerceIn(MIN_CONTROLS_TIMEOUT_SECONDS, MAX_CONTROLS_TIMEOUT_SECONDS)
+    }
+    val controlsTimeoutSeconds: StateFlow<Int> = _controlsTimeoutSeconds.asStateFlow()
+
+    fun setControlsTimeoutSeconds(seconds: Int) {
+        val s = seconds.coerceIn(MIN_CONTROLS_TIMEOUT_SECONDS, MAX_CONTROLS_TIMEOUT_SECONDS)
+        prefs.edit().putInt(KEY_CONTROLS_TIMEOUT, s).apply()
+        _controlsTimeoutSeconds.value = s
     }
 
     /**
@@ -766,6 +788,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
         private const val KEY_STRIP_CATEGORY_SOURCES = "strip_category_sources"
         private const val KEY_GROUP_BADGES = "group_badges"
+        private const val KEY_SHOW_RECENT_GROUPS = "show_recent_groups"
         private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"
@@ -810,18 +833,19 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
         private const val KEY_UI_SCALE = "ui_scale"
+        private const val KEY_CONTROLS_TIMEOUT = "controls_timeout_seconds"
 
         /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
             listOf(
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
-                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
+                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
                 KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS, KEY_QUALITY_BUTTON_CYCLES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
-                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE,
+                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE, KEY_CONTROLS_TIMEOUT,
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
@@ -838,6 +862,12 @@ class AppSettings private constructor(context: Context) {
         const val UI_SCALE_STEP = 5
         /** Density multiplier at 100%: the stock layout is roomier than a TV list needs. */
         const val UI_SCALE_BASE = 0.8f
+
+        const val DEFAULT_CONTROLS_TIMEOUT_SECONDS = 5
+
+        const val MIN_CONTROLS_TIMEOUT_SECONDS = 1
+
+        const val MAX_CONTROLS_TIMEOUT_SECONDS = 10
 
         const val MIN_FALLBACK_MILLIS = 1_000
         const val MAX_FALLBACK_MILLIS = 10_000

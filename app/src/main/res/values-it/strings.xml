@@ -470,6 +470,8 @@
     <string name="categories_strip_sources">Togli la sorgente dai nomi dei gruppi</string>
     <string name="categories_group_badges">Loghi accanto ai gruppi</string>
     <string name="categories_group_badges_desc">Logo del marchio, bandiera o emoji accanto a ogni gruppo nella lista categorie (☰).</string>
+    <string name="categories_recent_groups">Gruppi recenti</string>
+    <string name="categories_recent_groups_desc">I gruppi da cui hai guardato di recente, in cima alla lista gruppi della Live.</string>
     <string name="categories_strip_sources_desc">Un gruppo con una sola sorgente perde il nome della sorgente: "Bambini (…)" diventa "Bambini".</string>
     <string name="categories_foreign_sport">Sport internazionale</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>
@@ -487,6 +489,7 @@
     <string name="settings_stall_fallback_subtitle">Durante la visione, se l\'immagine si blocca o resta in caricamento, passa da solo al flusso successivo del canale.</string>
     <string name="settings_quality_button_cycles_title">OK su Qualità cambia flusso</string>
     <string name="settings_quality_button_cycles_subtitle">Nel player, OK sul pulsante Qualità passa al flusso successivo del canale; tieni premuto per l\'elenco completo. Spento: OK apre l\'elenco e scegli tu il server.</string>
+    <string name="settings_controls_timeout">Barra del player sparisce dopo: %1$d s</string>
     <string name="settings_stall_timeout">Bloccato da: %1$s s</string>
     <string name="player_stall_fallback">%1$s bloccato → %2$s</string>
     <string name="player_info">Info</string>

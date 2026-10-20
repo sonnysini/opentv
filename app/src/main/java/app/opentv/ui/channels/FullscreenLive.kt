@@ -122,7 +122,8 @@ fun FullscreenLive(
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
 ) {
-    var groupsOpen by rememberSaveable { mutableStateOf(false) }
+    // Opens on the groups, so the list starts wide and the user picks a group first.
+    var groupsOpen by rememberSaveable { mutableStateOf(true) }
     // Only while focus is in here: once LEFT/Back has handed it to the navigation menu, Back
     // falls through to the screen's usual one (the exit prompt).
     var focusInside by remember { mutableStateOf(false) }
