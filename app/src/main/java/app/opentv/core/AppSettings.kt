@@ -380,6 +380,19 @@ class AppSettings private constructor(context: Context) {
         _stallFallbackMillis.value = ms
     }
 
+    /** How long the player's control bar stays up after the last key, in whole seconds. */
+    private val _controlsTimeoutSeconds = pref {
+        prefs.getInt(KEY_CONTROLS_TIMEOUT, DEFAULT_CONTROLS_TIMEOUT_SECONDS)
+            .coerceIn(MIN_CONTROLS_TIMEOUT_SECONDS, MAX_CONTROLS_TIMEOUT_SECONDS)
+    }
+    val controlsTimeoutSeconds: StateFlow<Int> = _controlsTimeoutSeconds.asStateFlow()
+
+    fun setControlsTimeoutSeconds(seconds: Int) {
+        val s = seconds.coerceIn(MIN_CONTROLS_TIMEOUT_SECONDS, MAX_CONTROLS_TIMEOUT_SECONDS)
+        prefs.edit().putInt(KEY_CONTROLS_TIMEOUT, s).apply()
+        _controlsTimeoutSeconds.value = s
+    }
+
     /**
      * Whole-UI zoom in percent, so a TV viewed from afar can fit more rows. 100% is
      * [UI_SCALE_BASE] of the system density; the 0.14.5 pref (100% = system density) is migrated.
@@ -820,6 +833,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
         private const val KEY_UI_SCALE = "ui_scale"
+        private const val KEY_CONTROLS_TIMEOUT = "controls_timeout_seconds"
 
         /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
@@ -831,7 +845,7 @@ class AppSettings private constructor(context: Context) {
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
-                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE,
+                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE, KEY_CONTROLS_TIMEOUT,
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
@@ -848,6 +862,12 @@ class AppSettings private constructor(context: Context) {
         const val UI_SCALE_STEP = 5
         /** Density multiplier at 100%: the stock layout is roomier than a TV list needs. */
         const val UI_SCALE_BASE = 0.8f
+
+        const val DEFAULT_CONTROLS_TIMEOUT_SECONDS = 5
+
+        const val MIN_CONTROLS_TIMEOUT_SECONDS = 1
+
+        const val MAX_CONTROLS_TIMEOUT_SECONDS = 10
 
         const val MIN_FALLBACK_MILLIS = 1_000
         const val MAX_FALLBACK_MILLIS = 10_000

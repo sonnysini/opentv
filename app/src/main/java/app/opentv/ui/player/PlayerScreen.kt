@@ -424,6 +424,7 @@ fun PlayerScreen(
     // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
     val stallFallback by settings.stallFallback.collectAsState()
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
+    val controlsTimeoutSeconds by settings.controlsTimeoutSeconds.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
     LaunchedEffect(started, paused, stallFallback, stallMillis, currentId, watchEpoch) {
         if (!started || paused || !stallFallback) return@LaunchedEffect
@@ -509,11 +510,11 @@ fun PlayerScreen(
     }
 
     // Auto-hide the bar after a few seconds — but never while paused or with a picker open.
-    LaunchedEffect(controlsVisible, interaction, state, paused, panel) {
+    LaunchedEffect(controlsVisible, interaction, state, paused, panel, controlsTimeoutSeconds) {
         if (controlsVisible && !paused && panel == Panel.NONE &&
             state is PlayerController.State.Playing
         ) {
-            delay(CONTROLS_TIMEOUT_MILLIS)
+            delay(controlsTimeoutSeconds * 1_000L)
             controlsVisible = false
         }
     }
@@ -1274,11 +1275,23 @@ private fun OptionPanel(
         Panel.NONE -> ""
     }
 
+    // Opened by holding OK on Quality, the same press keeps repeating into the list once focus lands
+    // here, and its release would pick the first row. Ignore OK until a fresh press.
+    var armed by remember(panel) { mutableStateOf(false) }
     Column(
         Modifier
             // The options are a vertical list: left/right mean nothing here, and without this they
             // let focus escape sideways onto the bar (right from Quality landed on Record).
-            .onPreviewKeyEvent { it.key == Key.DirectionLeft || it.key == Key.DirectionRight }
+            .onPreviewKeyEvent { e ->
+                val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                when {
+                    e.key == Key.DirectionLeft || e.key == Key.DirectionRight -> true
+                    armed || !ok -> false
+                    e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { armed = true; false }
+                    e.type == KeyEventType.KeyUp -> { armed = true; true }
+                    else -> true
+                }
+            }
             .widthIn(max = 460.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black.copy(alpha = 0.92f))
@@ -1481,7 +1494,6 @@ private fun BarChip(
     }
 }
 
-private const val CONTROLS_TIMEOUT_MILLIS = 5_000L
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
