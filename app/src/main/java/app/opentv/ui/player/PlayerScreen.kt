@@ -630,13 +630,9 @@ fun PlayerScreen(
                         interaction++
                         false
                     }
-                    // Immersive: left opens the channel list, right the quality picker.
+                    // Immersive: left opens the channel list, right brings up the playback bar.
                     event.key == Key.DirectionLeft -> { if (queue.isNotEmpty()) channelListVisible = true; true }
-                    event.key == Key.DirectionRight -> {
-                        reveal()
-                        if (variants.size > 1) panel = Panel.QUALITY
-                        true
-                    }
+                    event.key == Key.DirectionRight -> { reveal(); true }
                     else -> { reveal(); true }
                 }
             }
