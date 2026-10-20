@@ -1,5 +1,8 @@
 # OpenTV
 
+> **This is a fork** of [opentvproject/opentv](https://github.com/opentvproject/opentv) (from v0.11.8).
+> What it does differently: [FORK.md](FORK.md).
+
 **A free, open-source IPTV player for Android TV, Fire TV, phones and tablets.**
 
 No account. No subscription. No server of ours between you and your provider.
