@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.2 — 20 October 2026
+
+- **Plainer source examples.** The grouping settings explain source folding in general terms
+  instead of quoting names from one list, and the source tags the app recognises now live in one
+  place (`SourceTags.kt`).
+
 ## 0.17.1 — 20 October 2026
 
 - **No "last watched" tag** on channel rows in the live list.
@@ -30,7 +36,7 @@
   channel's next feed (wrapping round), and a notice says which one is on. Hold OK to open the
   full list as before. The button shows the quality playing (`4K`, `FHD 1`, `FHD 2`, `HD`…):
   feeds of the same quality are numbered, and the list and notices name them the same way
-  (`FHD 2 · SAT`).
+  (`FHD 2 · B`).
 - **Right opens the playback bar.** In full screen, → now brings up the playback bar instead of
   the quality list.
 
@@ -92,7 +98,7 @@
 ## 0.16.1 — 19 October 2026
 
 - **Switch stream if it freezes.** While you watch, a channel whose picture freezes or keeps
-  loading moves on its own to the channel's next stream ("HEVC · SAT froze → HEVC · Stel-dvs").
+  loading moves on its own to the channel's next stream ("HEVC · A froze → HEVC · B").
   Streams take turns, so one that only hiccuped comes back later; if every other one fails to
   start, it goes back to the one that was playing. A channel with a single stream restarts it.
   Settings › Display & playback › Playback: on by default, wait 1–15 s (default 3). Pause,
@@ -121,7 +127,7 @@
 ## 0.15.9 — 18 October 2026
 
 - **Group names without the source.** A group that comes from a single restream source drops the
-  tag from its name: `Bambini (Hermes)` reads "Bambini", `Basket LNP | Serie A2 (Hermes)` reads
+  tag from its name: `Bambini (A)` reads "Bambini", `Basket LNP | Serie A2 (A)` reads
   "Basket LNP | Serie A2". Quality and timing (`4K`, `RAW`, `LIVE`) stay. Turn it off in
   Settings › Channel grouping › Hide source in group names.
 
@@ -170,15 +176,15 @@
 
 ## 0.15.3 — 18 October 2026
 
-- **Fewer duplicate channels.** Restream sources written into channel names (`[STEL]`, `[KALI]`,
-  `Kaly`, `SAT`, `STELLINA`, `HERMES`, `QUALITY`, `(Q)`, `Duplicate`…) are taken out of the name:
-  the copies fold into one row and the source shows in the Quality picker (`FHD · SAT`). Tags are
-  also learned from the provider's own category names, so new sources fold with no update.
+- **Fewer duplicate channels.** Restream source tags written into channel names (`[A]`, `B`,
+  `QUALITY`, `(Q)`, `Duplicate`…) are taken out of the name: the copies fold into one row and the
+  source shows in the Quality picker (`FHD · B`). Tags are also learned from the list's own
+  category names, so new sources fold with no update.
 - **Timeshift channels kept apart.** `Discovery +2` no longer merges with `Discovery 2`, and the
   name fixes (Sky prefix, typos) now apply to +1/+2/+3 channels too.
 - **Accents and typos.** `Südtirol` = `SudTirol`; Suspence/Suspance, Trasformers, Nick Junior,
   HGVTV fold into the right channel; the MotoGP satellite feed joins Sky Sport MotoGP.
-- **Heading rows hidden.** `--Sky Sport (Hermes)--`, `== … ==`, `◈ DAZN KALI ◈` are no longer
+- **Heading rows hidden.** `--Sky Sport (A)--`, `== … ==`, `◈ DAZN B ◈` are no longer
   listed as channels.
 - **"Plus" stays in the name** (Disney Plus, Boing Plus) instead of reading as a quality.
 
@@ -260,11 +266,11 @@
 
 ## 0.14.3 — 18 October 2026
 
-- **Categories folded by source.** Groups the provider splits by restream source — "Sky Sport
-  (Hermes)", "(SAT)", "(DVS)", "DAZN KALI/STELLINA/…" — show as one "Sky Sport", "DAZN"… in the
+- **Categories folded by source.** Groups split by restream source — "Sky Sport (A)",
+  "(B)", "DAZN C/D/…" — show as one "Sky Sport", "DAZN"… in the
   category list (141 → ~89 on a big Italian list). Inside, each channel appears once.
 - **Sources in the Quality panel.** The same quality from different sources is offered separately
-  ("FHD · Hermes", "FHD · SAT"), and the automatic quality fallback tries the other sources too.
+  ("FHD · A", "FHD · B"), and the automatic quality fallback tries the other sources too.
 - **Switch:** Settings › Categories › Live › "Merge groups by source" (on by default) brings the
   separate groups back.
 

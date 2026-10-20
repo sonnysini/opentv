@@ -8,9 +8,8 @@ package app.opentv.data.parser
 /**
  * Folds live categories that are the same package from different restream sources.
  *
- * Italian resellers split one bouquet by where the feed comes from — `⚽ Sky Sport (Hermes)`,
- * `⚽ Sky Sport (SAT)`, `⚽ Sky Sport (Stel-DVS)`, `⚡ DAZN KALI`, `🏀 Basket LNP| STELLINA` — the way
- * channels are split by FHD/HD/SD. The source tag is stripped to find the family; the channels
+ * Some lists split one bouquet by where the feed comes from — `⚽ Sky Sport (A)`,
+ * `⚽ Sky Sport (B)`, `⚡ DAZN C`, `🏀 Basket LNP| D` — the way channels are split by FHD/HD/SD. The source tag is stripped to find the family; the channels
  * inside then fold by their own groupKey as usual, so "Sky Sport Uno" appears once.
  *
  * Tags only count as a suffix (bracketed, after `|`, or the trailing words), so a category that is
@@ -19,18 +18,28 @@ package app.opentv.data.parser
  */
 object CategoryFamily {
 
-    /** Restream source tags, longest first so `RAW / Power` wins over `RAW`. */
-    private const val TAG =
-        "raw\\s*/\\s*power|stel-dvs|high quality|only event|hermes|stellina|skynet\\+?|" +
-            "quality|hi-def|kali|kaly|dvs|sat|raw|4k|live"
+    /** Tags that describe the feed rather than name a source; [SourceTags.CATEGORY] adds the rest. */
+    private val GENERIC_TAGS = listOf(
+        "raw\\s*/\\s*power", "high quality", "only event", "quality", "hi-def", "raw", "4k", "live",
+    )
 
-    private val BRACKETED = Regex("""\(\s*($TAG)\s*\)""", RegexOption.IGNORE_CASE)
-    private val TRAILING = Regex("""(?:\s|\|)+($TAG)\s*$""", RegexOption.IGNORE_CASE)
+    /** Source tags as one alternation, longest first so `RAW / Power` wins over `RAW`. */
+    private fun tagPattern(extraTags: Collection<String>): String =
+        (GENERIC_TAGS + SourceTags.CATEGORY + extraTags.map { Regex.escape(it.lowercase()) })
+            .sortedByDescending { it.length }
+            .joinToString("|")
+
+    private class Matchers(tag: String) {
+        val bracketed = Regex("""\(\s*($tag)\s*\)""", RegexOption.IGNORE_CASE)
+        val trailing = Regex("""(?:\s|\|)+($tag)\s*$""", RegexOption.IGNORE_CASE)
+    }
+
+    private val BUILTIN = Matchers(tagPattern(emptyList()))
     private val TRAILING_PIPE = Regex("""\s*\|\s*$""")
 
     /**
      * Families the tag rule can't see, by stripped groupKey: the RAW split of "Intratt. & Cultura"
-     * is two shelves with their own names, and LBA's Stellina feed drops the "Serie A".
+     * is two shelves with their own names, and one of LBA's feeds drops the "Serie A".
      */
     private val ALIASES = mapOf(
         "intrattenimento" to "intrattcultura",
@@ -41,22 +50,24 @@ object CategoryFamily {
     data class Family(
         /** Join key across sources; empty when the name has nothing left after stripping. */
         val key: String,
-        /** The source tag that was stripped (`Hermes`, `SAT`…), or null for a plain category. */
+        /** The source tag that was stripped, or null for a plain category. */
         val source: String?,
         /** The name without its source tag, emoji intact: `⚽ Sky Sport`. */
         val name: String,
     )
 
-    fun of(name: String): Family {
+    /** [extraTags] are sources on top of the built-in ones (`ALPHA`…). */
+    fun of(name: String, extraTags: Set<String> = emptySet()): Family {
+        val matchers = if (extraTags.isEmpty()) BUILTIN else Matchers(tagPattern(extraTags))
         val folded = ChannelNameNormalizer.foldSuperscripts(name.trim())
         var source: String? = null
-        var working = BRACKETED.replace(folded) { m ->
+        var working = matchers.bracketed.replace(folded) { m ->
             if (source == null) source = sourceLabel(m.groupValues[1])
             ""
         }.trim()
-        // Up to two trailing tags: "Sky Sport Business SAT (Only Event)", "Discovery Live Kali".
+        // Up to two trailing tags: "Sky Sport Business SRC (Only Event)", "Discovery Live Src".
         repeat(2) {
-            val m = TRAILING.find(working) ?: return@repeat
+            val m = matchers.trailing.find(working) ?: return@repeat
             if (source == null) source = sourceLabel(m.groupValues[1])
             working = working.removeRange(m.range).trim()
         }
@@ -75,12 +86,12 @@ object CategoryFamily {
     private val KEEP_IN_NAME = setOf("4K", "RAW")
 
     /**
-     * A lone category's name without its restream source — `🧸 Bambini (Hermes)` → `🧸 Bambini`,
-     * `🏀 Basket LNP | Serie A2 (Hermes)` → `🏀 Basket LNP | Serie A2` — or null when there is no
+     * A lone category's name without its restream source — `🧸 Bambini (Src)` → `🧸 Bambini`,
+     * `🏀 Basket LNP | Serie A2 (Src)` → `🏀 Basket LNP | Serie A2` — or null when there is no
      * source to drop. `F1 LIVE` and `Sky Primafila 4K` stay as they are.
      */
-    fun displayName(name: String): String? {
-        val family = of(name)
+    fun displayName(name: String, extraTags: Set<String> = emptySet()): String? {
+        val family = of(name, extraTags)
         val source = family.source ?: return null
         if (source.uppercase() in KEEP_IN_NAME || family.key.isEmpty()) return null
         return family.name.ifEmpty { null }
@@ -93,7 +104,7 @@ object CategoryFamily {
 
     /**
      * Source tags this provider uses, learned from its own category names: a bracketed word that
-     * follows two or more different groups (`Sky Sport (Hermes)`, `Bambini (Hermes)`) is a
+     * follows two or more different groups (`Sky Sport (Src)`, `Bambini (Src)`) is a
      * restream source, not a topic. Returned uppercase, merged with the built-in list, so a
      * provider that invents `(Zeus)` tomorrow gets `Sky Sport F1 Zeus` folded too — no update.
      */
@@ -115,7 +126,7 @@ object CategoryFamily {
         return ChannelNameNormalizer.BUILTIN_SOURCE_TAGS + learned
     }
 
-    /** How a source reads next to a quality: `FHD · Hermes`. "RAW / Power" reads as "Power" so the
+    /** How a source reads next to a quality: `FHD · Src`. "RAW / Power" reads as "Power" so the
      * RAW quality preference doesn't mistake a whole feed for raw streams; "Only Event" says
      * nothing about the source and yields null so the next tag can speak. */
     internal fun sourceLabel(tag: String): String? {
@@ -123,7 +134,7 @@ object CategoryFamily {
         return when {
             t == "only event" || t == "live" -> null
             t.contains('/') -> "Power"
-            t == "skynet" || t == "skynet+" -> "SkyNet"
+            t in SourceTags.LABELS -> SourceTags.LABELS.getValue(t)
             t == "hi-def" -> "HI-DEF"
             t.length <= 4 -> t.uppercase()
             else -> t.replaceFirstChar { it.uppercase() }

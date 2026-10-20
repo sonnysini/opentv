@@ -283,7 +283,7 @@ fun PlayerScreen(
         }
     }
 
-    /** A variant's name for the switch notice and the picker: `FHD 2 · SAT`, numbered among its kind. */
+    /** A variant's name for the switch notice and the picker: `FHD 2 · B`, numbered among its kind. */
     fun variantName(channel: Channel): String =
         QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
             ?: channel.qualityLabel.ifBlank { channel.shownName }

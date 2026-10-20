@@ -167,33 +167,38 @@ class ChannelNameNormalizerTest {
         assertThat(aliases).containsExactly("skynickelodeon", "nickelodeon")
     }
 
-    private fun key(name: String) = ChannelNameNormalizer.normalize(name).groupKey
+    /** Made-up restream sources; the real ones live in SourceTags. */
+    private val sources = ChannelNameNormalizer.BUILTIN_SOURCE_TAGS + setOf("ALPHA", "BRAVO", "GAMMA", "DELTA", "ECHO")
+
+    private fun normalize(name: String) = ChannelNameNormalizer.normalize(name, sources, leadingTags = setOf("ECHO"))
+
+    private fun key(name: String) = normalize(name).groupKey
 
     @Test
     fun `source tags in channel names fold into the plain channel`() {
-        assertThat(key("[STEL] DAZN-LIGUE-WOMEN-1")).isEqualTo(key("[DVS] DAZN-LIGUE-WOMEN-1"))
+        assertThat(key("[ALPHA] DAZN-LIGUE-WOMEN-1")).isEqualTo(key("[BRAVO] DAZN-LIGUE-WOMEN-1"))
         assertThat(key("Sky Sport F1 FHD (Q)")).isEqualTo(key("Sky Sport F1 FHD"))
-        assertThat(key("Sky Sport F1 HD (HERMES)")).isEqualTo(key("Sky Sport F1 HD"))
-        assertThat(key("SKY SPORT BUSINESS 1 FHD STELLINA")).isEqualTo(key("SKY SPORT BUSINESS 1 sAT"))
-        assertThat(key("Sky Sport Moto Gp Sat FHD")).isEqualTo(key("Sky Sport Moto GP HD"))
-        assertThat(key("Kaly ComoTV 1")).isEqualTo(key("COMO TV 1"))
+        assertThat(key("Sky Sport F1 HD (DELTA)")).isEqualTo(key("Sky Sport F1 HD"))
+        assertThat(key("SKY SPORT BUSINESS 1 FHD GAMMA")).isEqualTo(key("SKY SPORT BUSINESS 1 bRAVO"))
+        assertThat(key("Sky Sport Moto Gp Bravo FHD")).isEqualTo(key("Sky Sport Moto GP HD"))
+        assertThat(key("Echo ComoTV 1")).isEqualTo(key("COMO TV 1"))
         assertThat(key("Sky Sport 256 FHD Duplicate")).isEqualTo(key("Sky Sport 256 HD"))
         assertThat(key("Sky Sport F1 4K RAW Richiede 30 Mbps")).isEqualTo(key("Sky Sport F1 HD"))
     }
 
     @Test
     fun `the stripped source is reported, the quality untouched`() {
-        val n = ChannelNameNormalizer.normalize("SKY SPORT BUSINESS 1 FHD STELLINA")
+        val n = normalize("SKY SPORT BUSINESS 1 FHD GAMMA")
         assertThat(n.baseName).isEqualTo("SKY SPORT BUSINESS 1")
         assertThat(n.qualityLabel).isEqualTo("FHD")
-        assertThat(n.source).isEqualTo("Stellina")
+        assertThat(n.source).isEqualTo("Gamma")
         assertThat(ChannelNameNormalizer.normalize("Sky Sport F1 FHD (Q)").source).isEqualTo("Q")
     }
 
     @Test
     fun `a source tag alone is still a name`() {
-        assertThat(ChannelNameNormalizer.normalize("SAT").baseName).isEqualTo("SAT")
-        assertThat(key("Moto GP Satellite 4K RAW")).isEqualTo("motogpsatellite")
+        assertThat(normalize("BRAVO").baseName).isEqualTo("BRAVO")
+        assertThat(key("Moto GP Bravissimo 4K RAW")).isEqualTo("motogpbravissimo")
     }
 
     @Test
@@ -237,7 +242,7 @@ class ChannelNameNormalizerTest {
     @Test
     fun `brand-only UHD channels keep their 4K`() {
         assertThat(ChannelNameNormalizer.normalize("Rai 4K RAW").baseName).isEqualTo("Rai 4K")
-        assertThat(ChannelNameNormalizer.normalize("SKY SPORT 4K STELLINA").baseName).isEqualTo("SKY SPORT 4K")
+        assertThat(normalize("SKY SPORT 4K GAMMA").baseName).isEqualTo("SKY SPORT 4K")
         assertThat(key("Rai 4K RAW")).isNotEqualTo(key("Rai 4"))
         assertThat(key("Rai 2 4K")).isEqualTo(key("Rai 2 HD"))
         assertThat(key("Sky Sport F1 4K")).isEqualTo(key("Sky Sport F1 HD"))
@@ -273,11 +278,11 @@ class ChannelNameNormalizerTest {
     fun `a DAZN prefix drops when the bare channel exists`() {
         val f = folded(
             "DAZN UFC 1 UHD", "UFC 1 HD", "IT DAZN| Eurosport 1", "Eurosport 1 HD",
-            "[DVS] DAZN-SERIE-A-WOMEN-1", "SERIE A WOMEN 1", "DAZN CHANNEL HD",
+            "[DELTA] DAZN-SERIE-A-WOMEN-1", "SERIE A WOMEN 1", "DAZN CHANNEL HD",
         )
         assertThat(f["DAZN UFC 1 UHD"]).isEqualTo("ufc1")
         assertThat(f["IT DAZN| Eurosport 1"]).isEqualTo("eurosport1")
-        assertThat(f["[DVS] DAZN-SERIE-A-WOMEN-1"]).isEqualTo("serieawomen1")
+        assertThat(f["[DELTA] DAZN-SERIE-A-WOMEN-1"]).isEqualTo("serieawomen1")
         assertThat(f["DAZN CHANNEL HD"]).isEqualTo("daznchannel")
     }
 

@@ -8,9 +8,9 @@ package app.opentv.player
 /**
  * Names for a channel's quality variants that tell same-quality feeds apart: with two FHD feeds
  * the Quality button reads `FHD 1` / `FHD 2`, and the picker and the switch notice say
- * `FHD 1 · Hermes` / `FHD 2 · SAT`. A quality with a single feed keeps its plain name (`HD`).
+ * `FHD 1 · A` / `FHD 2 · B`. A quality with a single feed keeps its plain name (`HD`).
  *
- * The quality is the label's first word (`FHD` of `FHD HEVC · Hermes`); feeds are numbered in
+ * The quality is the label's first word (`FHD` of `FHD HEVC · A`); feeds are numbered in
  * the order given, which is the channel's variant order.
  */
 object QualityNames {
@@ -18,7 +18,7 @@ object QualityNames {
     data class Name(
         /** Short text for the Quality button: `FHD 2`. Empty when the label says nothing. */
         val badge: String,
-        /** The full label with the number in: `FHD 2 · SAT`. Empty when the label is empty. */
+        /** The full label with the number in: `FHD 2 · B`. Empty when the label is empty. */
         val full: String,
     )
 

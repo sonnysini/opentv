@@ -41,7 +41,7 @@ object ChannelNameNormalizer {
         val qualityLabel: String,
         /** Country hint from a stripped prefix (`UK`, `US`…), or null. */
         val region: String?,
-        /** Restream source taken out of the name (`SAT`, `Hermes`, `STEL`…), or null. */
+        /** Restream source taken out of the name, or null. */
         val source: String? = null,
     )
 
@@ -67,19 +67,13 @@ object ChannelNameNormalizer {
     )
 
     /**
-     * Restream sources resellers write INTO channel names: `[STEL] DAZN-LIGUE-WOMEN-1`,
-     * `Sky Sport F1 HD (HERMES)`, `SKY SPORT BUSINESS 1 FHD STELLINA`, `Kaly ComoTV 1`. Same
-     * channel, other feed — so they are stripped from the name and kept as [Normalized.source].
-     * The list grows per provider with tags learned from its category names (see
+     * Restream sources written INTO channel names: `[SRC] DAZN-LIGUE-WOMEN-1`,
+     * `Sky Sport F1 HD (SRC)`, `SKY SPORT BUSINESS 1 FHD SRC`, `Src ComoTV 1`. Same channel, other
+     * feed — so they are stripped from the name and kept as [Normalized.source]. The list grows per
+     * provider with tags learned from its category names (see
      * [app.opentv.data.parser.CategoryFamily.learnSourceTags]).
      */
-    val BUILTIN_SOURCE_TAGS = setOf(
-        "STEL", "KALI", "KALY", "DVS", "SAT", "STELLINA", "HERMES", "QUALITY",
-        "SKYNET", "SKYNET+", "STEL-DVS",
-    )
-
-    /** Tags that also lead a name without brackets (`Kaly ComoTV 1`). Short ones like SAT don't. */
-    private val LEADING_SOURCE_TAGS = setOf("STEL", "KALI", "KALY")
+    val BUILTIN_SOURCE_TAGS = SourceTags.CHANNEL
 
     private val BRACKET_SOURCE = Regex("""^\s*\[\s*([A-Za-z][A-Za-z+\-]{1,11})\s*]\s*""")
     private val PAREN_SOURCE = Regex("""\(\s*([A-Za-z][A-Za-z+\-]{1,11})\s*\)""")
@@ -163,7 +157,11 @@ object ChannelNameNormalizer {
     /** Whether a single token is a non-resolution stream marker (`RAW`, `HEVC`, `60FPS`, `HDR`…). */
     fun isStreamMarker(token: String): Boolean = token.uppercase() in EXTRA_TOKENS
 
-    fun normalize(raw: String, sourceTags: Set<String> = BUILTIN_SOURCE_TAGS): Normalized {
+    fun normalize(
+        raw: String,
+        sourceTags: Set<String> = BUILTIN_SOURCE_TAGS,
+        leadingTags: Set<String> = SourceTags.LEADING,
+    ): Normalized {
         // Fold superscript decorations (ᴴᴰ → HD) so the token pass can see them.
         var working = foldSuperscripts(raw.trim())
         var source: String? = null
@@ -172,7 +170,7 @@ object ChannelNameNormalizer {
         }
 
         working = BANDWIDTH_NOTE.replace(working, " ")
-        // Source tags before the country prefix: `[STEL]` would otherwise pass for a country.
+        // Source tags before the country prefix: `[SRC]` would otherwise pass for a country.
         BRACKET_SOURCE.find(working)?.let { m ->
             if (m.groupValues[1].uppercase() in sourceTags) {
                 takeSource(m.groupValues[1])
@@ -252,14 +250,14 @@ object ChannelNameNormalizer {
 
         bestRank = withCodecBonus(bestRank, labelParts)
 
-        // Source tags at the edges of what's left: `… Sat`, `… STELLINA`, `Kaly ComoTV 1`.
+        // Source tags at the edges of what's left: `… Src`, `… SRC`, `Src ComoTV 1`.
         repeat(2) {
             val last = keptTokens.lastOrNull()?.uppercase()
             if (keptTokens.size > 1 && last != null && last in sourceTags) {
                 takeSource(keptTokens.removeAt(keptTokens.lastIndex))
             }
         }
-        if (keptTokens.size > 1 && keptTokens.first().uppercase() in LEADING_SOURCE_TAGS) {
+        if (keptTokens.size > 1 && keptTokens.first().uppercase() in leadingTags) {
             takeSource(keptTokens.removeAt(0))
         }
 

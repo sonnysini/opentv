@@ -466,11 +466,11 @@
     <string name="categories_italian_only">Solo italiano</string>
     <string name="categories_italian_only_desc">Spegne tutte le categorie live in altre lingue (da bandiera o nome), anche quelle che il provider aggiunge dopo. Puoi sempre riaccenderne una qui sotto.</string>
     <string name="categories_merge_sources">Unisci gruppi per sorgente</string>
-    <string name="categories_merge_sources_desc">Sky Sport (Hermes), (SAT), (DVS)… diventano un solo "Sky Sport"; le sorgenti si scelgono dal pannello Qualità.</string>
+    <string name="categories_merge_sources_desc">Lo stesso gruppo diviso per sorgente diventa uno solo; la sorgente si sceglie dal pannello Qualità.</string>
     <string name="categories_strip_sources">Togli la sorgente dai nomi dei gruppi</string>
     <string name="categories_group_badges">Loghi accanto ai gruppi</string>
     <string name="categories_group_badges_desc">Logo del marchio, bandiera o emoji accanto a ogni gruppo nella lista categorie (☰).</string>
-    <string name="categories_strip_sources_desc">Bambini (Hermes) diventa "Bambini", DAZN KALI diventa "DAZN".</string>
+    <string name="categories_strip_sources_desc">Un gruppo con una sola sorgente perde il nome della sorgente: "Bambini (…)" diventa "Bambini".</string>
     <string name="categories_foreign_sport">Sport internazionale</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — eventi con commento straniero.</string>
     <!-- Qualità preferita + fallback automatico -->

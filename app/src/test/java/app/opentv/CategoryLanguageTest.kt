@@ -37,8 +37,8 @@ class CategoryLanguageTest {
 
     @Test
     fun `italian groups without a flag stay`() {
-        listOf("⚽ DAZN LA LIGA DVS", "⚽ DAZN NFL HERMES", "🌍 DAZN VARI", "🏀 Basket LNP | Serie B (KALY)",
-            "💠 Pluto TV", "🎾 EuroSport", "📡 Canali Regionali", "🧸 Bambini (STEL-DVS)",
+        listOf("⚽ DAZN LA LIGA DELTA", "⚽ DAZN NFL ALPHA", "🌍 DAZN VARI", "🏀 Basket LNP | Serie B (ECHO)",
+            "💠 Pluto TV", "🎾 EuroSport", "📡 Canali Regionali", "🧸 Bambini (GAMMA)",
             "🏈 DAZN FOOTBALL AMERICANO").forEach {
             assertWithMessage(it).that(CategoryLanguage.isForeign(it)).isFalse()
             assertWithMessage(it).that(CategoryLanguage.isForeignSport(it)).isFalse()

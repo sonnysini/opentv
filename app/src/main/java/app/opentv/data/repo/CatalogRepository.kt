@@ -984,7 +984,7 @@ class CatalogRepository(
                     if (rank == 0) rank = c.qualityRank
                 }
             }
-            // A source written into the name ('… FHD STELLINA') reads like a category's: 'FHD · Stellina'.
+            // A source written into the name ('… FHD SRC') reads like a category's: 'FHD · Src'.
             if (n.source != null && !label.contains(n.source, ignoreCase = true)) {
                 label = listOf(label, n.source).filter { it.isNotEmpty() }.joinToString(" · ")
             }
@@ -1076,8 +1076,8 @@ class CatalogRepository(
 
     /**
      * Decorative list headings: starts AND ends with a run of banner characters (`#### UK ####`,
-     * `--Sky Sport (Hermes)--`, `== DAZN AMICHEVOLI ==`), or is wrapped in a single ornament
-     * (`◈ DAZN KALI ◈`).
+     * `--Sky Sport (Src)--`, `== DAZN AMICHEVOLI ==`), or is wrapped in a single ornament
+     * (`◈ DAZN SRC ◈`).
      */
     private fun isSeparatorRow(rawName: String): Boolean {
         val t = rawName.trim()
@@ -1140,9 +1140,9 @@ class CatalogRepository(
         if (channel.groupKey.isEmpty()) return listOf(channel)
         val all = channelDao.variantsInGroup(channel.groupKey)
         if (!settings.mergeCategorySources.value) return distinctByQuality(all).ifEmpty { listOf(channel) }
-        // The same quality from different restream sources ('Sky Sport (Hermes)' vs '(SAT)') is a
+        // The same quality from different restream sources ('Sky Sport (A)' vs '(B)') is a
         // real alternative — one may be down while the other plays — so it stays, labelled
-        // "FHD · Hermes", and the fallback walks through it. Plain dupes still collapse.
+        // "FHD · A", and the fallback walks through it. Plain dupes still collapse.
         val ids = all.mapNotNullTo(HashSet()) { it.categoryId }
         val sources = if (ids.isEmpty()) emptyMap() else categoryDao.namesFor(ids)
             .associate { it.id to CategoryFamily.of(it.name).source }
@@ -1152,7 +1152,7 @@ class CatalogRepository(
             // "4K · 4K" says nothing twice: a source tag that is already the quality stays off.
             val labelled = if (source == null || v.qualityLabel.contains(source, ignoreCase = true)) v
             else v.copy(qualityLabel = listOf(v.qualityLabel, source).filter { it.isNotEmpty() }.joinToString(" · "))
-            // One entry per label: 'HD · Hermes' from the name and from the category is one feed choice.
+            // One entry per label: 'HD · A' from the name and from the category is one feed choice.
             labelled.takeIf { seen.add("${it.qualityRank}|${it.qualityLabel.lowercase()}") }
         }.ifEmpty { listOf(channel) }
     }
