@@ -16,15 +16,15 @@ class QualityNamesTest {
     fun `numbers only repeated qualities`() {
         val names = QualityNames.of(
             listOf(
-                1L to "4K · SkyNet",
-                2L to "FHD · Hermes",
-                3L to "FHD · SAT",
+                1L to "4K · Delta",
+                2L to "FHD · Alpha",
+                3L to "FHD · Bravo",
                 4L to "HD",
             ),
         )
-        assertThat(names.getValue(1)).isEqualTo(QualityNames.Name("4K", "4K · SkyNet"))
-        assertThat(names.getValue(2)).isEqualTo(QualityNames.Name("FHD 1", "FHD 1 · Hermes"))
-        assertThat(names.getValue(3)).isEqualTo(QualityNames.Name("FHD 2", "FHD 2 · SAT"))
+        assertThat(names.getValue(1)).isEqualTo(QualityNames.Name("4K", "4K · Delta"))
+        assertThat(names.getValue(2)).isEqualTo(QualityNames.Name("FHD 1", "FHD 1 · Alpha"))
+        assertThat(names.getValue(3)).isEqualTo(QualityNames.Name("FHD 2", "FHD 2 · Bravo"))
         assertThat(names.getValue(4)).isEqualTo(QualityNames.Name("HD", "HD"))
     }
 

@@ -278,7 +278,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             val key = n.groupKey.ifEmpty { category.id }
             folded.getOrPut(key) { Folded(key, n.baseName, category.name.trim(), mutableListOf()) }.ids += category.id
         }
-        // Pass 2: source folding — 'Sky Sport (Hermes)' + 'Sky Sport (SAT)' become one "Sky Sport".
+        // Pass 2: source folding — 'Sky Sport (A)' + 'Sky Sport (B)' become one "Sky Sport".
         // Only families with 2+ members fold; a lone category keeps its own key and name, so saved
         // picks (last group, hidden groups) still find it. A folded family keys on its first
         // member, and [CategoryGroup.memberKeys] remembers the rest.
@@ -287,13 +287,13 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
             families.getOrPut(family) { mutableListOf() } += f
         }
-        // With source merging off, 'Sky Sport (Hermes)' and '(SAT)' stay apart and keep their tag.
+        // With source merging off, 'Sky Sport (A)' and '(B)' stay apart and keep their tag.
         val lonePerFamily = families.values.filter { it.size == 1 }
             .groupingBy { CategoryFamily.of(it.first().rawName).key }.eachCount()
         return families.values.map { members ->
             val first = members.first()
             if (members.size == 1) {
-                // A lone 'Bambini (Hermes)' still reads "Bambini"; the key stays, so saved picks hold.
+                // A lone 'Bambini (A)' still reads "Bambini"; the key stays, so saved picks hold.
                 val unique = lonePerFamily[CategoryFamily.of(first.rawName).key] == 1
                 val name = if (stripSources && unique) CategoryFamily.displayName(first.rawName) else null
                 if (name == null) {
