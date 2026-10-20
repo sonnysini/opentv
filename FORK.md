@@ -51,6 +51,20 @@ The fork stays under the GPL v3 like the original.
 - **Merge channels by hand**: hold OK on a channel and choose "Merge with…".
 - Tidier names: one spelling per channel, heading rows hidden, and typos and stray tags handled.
 
+## Phone page
+
+The phone/laptop page (Settings › Manage on phone or laptop) shows the live groups and channels the
+way the TV lists them, and changes apply at once:
+
+- **Reorder groups** and **reorder channels inside a group** (arrows, or ⇅ then tap the spot).
+  The order survives catalogue refreshes and is in the settings backup. Favourites can be
+  reordered too.
+- **Merge a group into another** and separate it again; **switch a whole group off** (same as the
+  switch in Settings › Categories) and turn switched-off groups back on.
+- **One row per channel** with its qualities: hide, favourite and rename act on every copy.
+- **Merge two channels** (search any channel) and a **Duplicate channels** list with Merge/Ignore
+  and the merges already made, each one separable.
+
 ## Player
 
 - **Default quality and automatic fallback.** You pick which quality plays first. If that copy
@@ -84,6 +98,6 @@ The fork stays under the GPL v3 like the original.
 
 ## Not changed
 
-Recording, Stalker/M3U support, the phone management page and the 30 translations come from the
+Recording, Stalker/M3U support, the rest of the phone page and the 30 translations come from the
 original project. New text added by the fork is in English and Italian only, so other languages
 fall back to English for it.

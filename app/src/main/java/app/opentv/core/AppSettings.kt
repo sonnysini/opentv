@@ -715,6 +715,55 @@ class AppSettings private constructor(context: Context) {
             prefs.getString(KEY_GROUP_MERGES, null)?.let { addonJson.decodeFromString<List<GroupMerge>>(it) }
         }.getOrNull() ?: emptyList()
 
+    // ---- Live layout (set from the phone page) ------------------------------------------------
+
+    /** Live groups in the user's order, by group key; groups not in it follow in the provider's order. */
+    private val _liveGroupOrder = pref { readJson(KEY_LIVE_GROUP_ORDER) { addonJson.decodeFromString<List<String>>(it) } ?: emptyList() }
+    val liveGroupOrder: StateFlow<List<String>> = _liveGroupOrder.asStateFlow()
+
+    fun setLiveGroupOrder(keys: List<String>) {
+        val clean = keys.filter { it.isNotBlank() }.distinct()
+        prefs.edit().putString(KEY_LIVE_GROUP_ORDER, addonJson.encodeToString(clean)).apply()
+        _liveGroupOrder.value = clean
+    }
+
+    /** Channel order inside a live group: group key → channel row keys, top first. */
+    private val _liveChannelOrder = pref {
+        readJson(KEY_LIVE_CHANNEL_ORDER) { addonJson.decodeFromString<Map<String, List<String>>>(it) } ?: emptyMap()
+    }
+    val liveChannelOrder: StateFlow<Map<String, List<String>>> = _liveChannelOrder.asStateFlow()
+
+    fun setLiveChannelOrder(groupKey: String, rowKeys: List<String>) {
+        if (groupKey.isBlank()) return
+        val clean = rowKeys.filter { it.isNotBlank() }.distinct()
+        val next = if (clean.isEmpty()) _liveChannelOrder.value - groupKey else _liveChannelOrder.value + (groupKey to clean)
+        prefs.edit().putString(KEY_LIVE_CHANNEL_ORDER, addonJson.encodeToString(next)).apply()
+        _liveChannelOrder.value = next
+    }
+
+    /** Live groups folded into another by hand: group key → the group key it joins. */
+    private val _categoryMerges = pref {
+        readJson(KEY_CATEGORY_MERGES) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap()
+    }
+    val categoryMerges: StateFlow<Map<String, String>> = _categoryMerges.asStateFlow()
+
+    fun addCategoryMerge(fromKey: String, intoKey: String) {
+        if (fromKey.isBlank() || intoKey.isBlank() || fromKey == intoKey) return
+        // Groups that pointed at the one being merged follow it into its new home.
+        val next = _categoryMerges.value.mapValues { (_, into) -> if (into == fromKey) intoKey else into } + (fromKey to intoKey)
+        persistCategoryMerges(next)
+    }
+
+    fun removeCategoryMerge(fromKey: String) = persistCategoryMerges(_categoryMerges.value - fromKey)
+
+    private fun persistCategoryMerges(map: Map<String, String>) {
+        prefs.edit().putString(KEY_CATEGORY_MERGES, addonJson.encodeToString(map)).apply()
+        _categoryMerges.value = map
+    }
+
+    private fun <T> readJson(key: String, decode: (String) -> T): T? =
+        runCatching { prefs.getString(key, null)?.let(decode) }.getOrNull()
+
     // ---- Backup ------------------------------------------------------------------------------
 
     /**
@@ -834,6 +883,9 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
         private const val KEY_UI_SCALE = "ui_scale"
         private const val KEY_CONTROLS_TIMEOUT = "controls_timeout_seconds"
+        private const val KEY_LIVE_GROUP_ORDER = "live_group_order"
+        private const val KEY_LIVE_CHANNEL_ORDER = "live_channel_order"
+        private const val KEY_CATEGORY_MERGES = "category_merges"
 
         /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
@@ -849,6 +901,7 @@ class AppSettings private constructor(context: Context) {
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
+                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }
