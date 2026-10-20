@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.1 — 20 October 2026
+
+- **No "last watched" tag** on channel rows in the live list.
+- **FORK.md** explains what this fork does differently from the original OpenTV.
+
 ## 0.17.0 — 20 October 2026
 
 - **Groups and channels side by side.** The full-screen live list now shows the groups down the
