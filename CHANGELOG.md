@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.21.0 — 21 October 2026
+
+- **Find a channel's guide by hand.** Hold OK on a channel › Find guide manually: a search over
+  your guide feeds, prefilled with the channel's name, showing each match with its logo, guide id,
+  feed, how many programmes it carries and what is on now. Pick one and the channel (every quality
+  of it) uses that guide straight away, through every sync; Automatic puts it back on the
+  automatic match. Handy for the provider's "EPG not available" placeholders.
+
 ## 0.20.0 — 21 October 2026
 
 - **One place for logos.** Settings › Logos: channel logos from the provider only (the default),
