@@ -5,15 +5,11 @@
  */
 package app.opentv.ui.channels
 
-import android.graphics.Paint
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_ALL
-import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_FAVOURITES
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,10 +65,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.opentv.R
 import app.opentv.data.parser.GroupBadge
-import coil.compose.AsyncImage
 import app.opentv.data.model.shownName
 import app.opentv.ui.ChannelsViewModel
 import java.text.SimpleDateFormat
@@ -307,48 +301,10 @@ private fun GroupsList(
     onEnter: () -> Unit,
     onLeft: () -> Unit,
 ) {
-    data class Entry(
-        val key: String,
-        val label: String = "",
-        val selected: Boolean = false,
-        val count: Int? = null,
-        val badge: GroupBadge.Badge? = null,
-        // A section title ("Recent", "All groups") drawn above this group, in the same list item
-        // so every item can take focus.
-        val section: String? = null,
-        val pick: () -> Unit = {},
+    val entries = rememberLiveGroupEntries(
+        categories, selectedCategory, favouritesOnly, counts, recentGroups,
+        favouritesLabel, allLabel, onSelectCategory, onSelectFavourites,
     )
-    val external = LocalExternalGroupLogos.current
-    fun shown(name: String) = GroupBadge.of(name, external)
-    val recentTitle = stringResource(R.string.live_groups_recent)
-    val allTitle = stringResource(R.string.live_groups_all)
-    // The remembered entries' picks go through these, so they always reach the latest callbacks.
-    val selectCategory by rememberUpdatedState(onSelectCategory)
-    val selectFavourites by rememberUpdatedState(onSelectFavourites)
-    val entries = remember(categories, selectedCategory, favouritesOnly, counts, recentGroups, external, favouritesLabel, allLabel) {
-        val allSelected = !favouritesOnly && selectedCategory == null
-        fun all(prefix: String) = Entry(prefix + "all", allLabel, allSelected, counts[LAST_GROUP_ALL]) { selectCategory(null) }
-        fun group(prefix: String, g: ChannelsViewModel.CategoryGroup): Entry {
-            val s = shown(g.rawName)
-            return Entry(prefix + "cat-" + g.key, s.label, !favouritesOnly && selectedCategory in g.memberKeys, counts[g.key], s.badge) {
-                selectCategory(g.key)
-            }
-        }
-        buildList {
-            val fav = shown(favouritesLabel)
-            add(Entry("fav", fav.label, favouritesOnly, counts[LAST_GROUP_FAVOURITES], fav.badge) { selectFavourites() })
-            val recent = recentGroups.mapNotNull { key ->
-                when (key) {
-                    LAST_GROUP_FAVOURITES -> null
-                    LAST_GROUP_ALL -> all("recent-")
-                    else -> categories.firstOrNull { key in it.memberKeys }?.let { group("recent-", it) }
-                }
-            }
-            addAll(recent.mapIndexed { i, e -> if (i == 0) e.copy(section = recentTitle) else e })
-            add(all("").let { if (recent.isNotEmpty()) it.copy(section = allTitle) else it })
-            categories.forEach { add(group("", it)) }
-        }
-    }
     // The pick behind the focused group, run after a pause unless focus moves on first.
     var focusedKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(focusedKey, open) {
@@ -598,33 +554,8 @@ private fun CategoryEntry(
             .padding(horizontal = if (open) 12.dp else 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(width = 80.dp, height = 40.dp), contentAlignment = Alignment.Center) {
-            when {
-                // Without a badge a closed strip still needs something to tell the groups apart.
-                badge == null -> if (!open) Initials(label)
-                badge is GroupBadge.Image -> AsyncImage(
-                    model = badge.url,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
-                )
-                // Old Fire OS fonts lack newer emoji (🧸 draws as bars): leave the slot empty then.
-                badge is GroupBadge.Emoji -> if (remember(badge.text) { Paint().hasGlyph(badge.text) }) {
-                    Text(badge.text, fontSize = 26.sp, maxLines = 1)
-                } else if (!open) {
-                    Initials(label)
-                }
-                else -> Unit
-            }
-            if (selected && !open) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                )
-            }
-        }
+        // Without a badge a closed strip still needs something to tell the groups apart.
+        GroupBadgeSlot(badge, label, initialsIfBlank = !open, modifier = Modifier.size(width = 80.dp, height = 40.dp))
         if (open) {
             Spacer(Modifier.width(14.dp))
             Text(
@@ -636,10 +567,6 @@ private fun CategoryEntry(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (selected) {
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-            }
             if (count != null) {
                 Spacer(Modifier.width(10.dp))
                 Text(
@@ -651,17 +578,6 @@ private fun CategoryEntry(
             }
         }
     }
-}
-
-/** A badge-less group in the closed strip: the start of its name. */
-@Composable
-private fun Initials(label: String) {
-    Text(
-        label.take(3),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 1,
-    )
 }
 
 /**

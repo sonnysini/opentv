@@ -70,6 +70,7 @@ import app.opentv.ui.channels.LocalLogoPack
 import app.opentv.ui.channels.LocalLogoSource
 import app.opentv.ui.channels.SearchScreen
 import app.opentv.ui.onboarding.AddSourceScreen
+import app.opentv.ui.ChannelsViewModel
 import app.opentv.ui.player.PlayerScreen
 import app.opentv.ui.settings.AboutScreen
 import app.opentv.ui.settings.AppearanceSettingsScreen
@@ -528,8 +529,16 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
             composable(Routes.PLAYER) { entry ->
                 val channelId = entry.arguments?.getString("channelId")?.toLongOrNull()
+                // The guide's own view model, so the side menu browses the same groups and the
+                // group picked there is the one the guide shows on the way back.
+                val homeEntry = remember(entry) {
+                    runCatching { navController.getBackStackEntry(Routes.HOME) }.getOrNull()
+                }
+                val channelsViewModel: ChannelsViewModel =
+                    if (homeEntry != null) viewModel(homeEntry) else viewModel()
                 PlayerScreen(
                     channelId = channelId,
+                    channels = channelsViewModel,
                     onBack = { navController.popBackStack() },
                 )
             }

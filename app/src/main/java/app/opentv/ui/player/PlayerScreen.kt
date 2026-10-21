@@ -11,6 +11,18 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.draw.clipToBounds
+import app.opentv.data.model.logo
+import app.opentv.ui.ChannelsViewModel
+import app.opentv.ui.channels.GroupBadgeSlot
+import app.opentv.ui.channels.LiveGroupEntry
+import app.opentv.ui.channels.LocalLogoPack
+import app.opentv.ui.channels.LocalLogoSource
+import app.opentv.ui.channels.rememberLiveGroupEntries
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -149,6 +161,8 @@ import app.opentv.core.AppText
 @Composable
 fun PlayerScreen(
     channelId: Long?,
+    // The guide's view model: the side menu browses its groups and channels.
+    channels: ChannelsViewModel,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -205,7 +219,7 @@ fun PlayerScreen(
     // go back to it rather than give up — it was working a moment ago.
     var stallReturnId by remember { mutableStateOf<Long?>(null) }
     // The channel we were on before this one — powers the "Last channel" recall in the list.
-    var previousId by remember { mutableStateOf<Long?>(null) }
+    var previousChannel by remember { mutableStateOf<Channel?>(null) }
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
     var numberEntry by remember { mutableStateOf("") }
     var paused by remember { mutableStateOf(false) }
@@ -224,6 +238,10 @@ fun PlayerScreen(
     var showInfo by remember { mutableStateOf(false) }
     var streamInfo by remember { mutableStateOf<StreamInfo.Snapshot?>(null) }
     var channelListVisible by remember { mutableStateOf(false) }
+    // The side menu shows the groups in place of the channels (LEFT from a channel).
+    var sideGroups by remember { mutableStateOf(false) }
+    // A group was just picked there: the channels it had until the new group's arrive.
+    var awaitingRows by remember { mutableStateOf<List<ChannelsViewModel.Row>?>(null) }
     var interaction by remember { mutableIntStateOf(0) }
     // Offered once per session the first time the user records here while OpenTV isn't exempt from
     // battery optimisation, so the capture survives the screen sleeping. Never blocks recording.
@@ -250,10 +268,34 @@ fun PlayerScreen(
     val panelFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val listFocus = remember { FocusRequester() }
+    val groupFocus = remember { FocusRequester() }
 
-    // The channel list you were browsing, for channel up/down and the in-player list. Snapshotted
-    // on entry so it doesn't shift under you mid-session.
-    val queue = remember { PlaybackQueue.items }
+    // The channel list you were browsing, for channel up/down. Snapshotted on entry so it doesn't
+    // shift under you mid-session; playing from another group in the side menu swaps it for that one.
+    var queue by remember { mutableStateOf(PlaybackQueue.items) }
+
+    // The side menu browses the guide's current group, with what's on now, and its groups.
+    val browseRows by channels.rows.collectAsState()
+    val browseGroups by channels.nonEmptyCategoryGroups.collectAsState()
+    val groupCounts by channels.groupCounts.collectAsState()
+    val recentLiveGroups by channels.recentLiveGroups.collectAsState()
+    val showRecentGroups by channels.showRecentGroups.collectAsState()
+    val browseCategory by channels.selectedCategory.collectAsState()
+    val browseFavourites by channels.favouritesOnly.collectAsState()
+    val groupEntries = rememberLiveGroupEntries(
+        categories = browseGroups,
+        selectedCategory = browseCategory,
+        favouritesOnly = browseFavourites,
+        counts = groupCounts,
+        recentGroups = if (showRecentGroups) recentLiveGroups else emptyList(),
+        favouritesLabel = stringResource(R.string.guide_favourites),
+        allLabel = stringResource(R.string.guide_all_channels),
+        onSelectCategory = channels::selectCategory,
+        onSelectFavourites = channels::selectFavourites,
+    )
+    val logoSource = LocalLogoSource.current
+    val logoPack = LocalLogoPack.current
+    fun canBrowse() = queue.isNotEmpty() || browseRows.isNotEmpty() || groupEntries.isNotEmpty()
 
     fun reveal() {
         controlsVisible = true
@@ -356,7 +398,7 @@ fun PlayerScreen(
     fun playChannelId(id: Long) {
         // Remember where we came from so "Last channel" can bounce straight back. Quality switches
         // go through tuneTo directly, so they never count as a channel change here.
-        listedId?.let { if (it != id) previousId = it }
+        listedChannel?.let { if (it.id != id) previousChannel = it }
         scope.launch {
             val channel = graph.catalogRepository.channel(id) ?: return@launch
             startChannel(channel)
@@ -468,9 +510,10 @@ fun PlayerScreen(
         }
     }
 
-    // Keep the clock and progress bar moving while the panel is on screen; ticks on the minute.
-    LaunchedEffect(controlsVisible) {
-        while (controlsVisible) {
+    // Keep the clock and progress bars moving while the panel or the side menu is on screen;
+    // ticks on the minute.
+    LaunchedEffect(controlsVisible, channelListVisible) {
+        while (controlsVisible || channelListVisible) {
             val now = System.currentTimeMillis()
             clock = now
             delay((60_000L - now % 60_000L).coerceAtMost(15_000L))
@@ -537,6 +580,7 @@ fun PlayerScreen(
     // you wanted to dismiss the bar.
     BackHandler {
         when {
+            channelListVisible && sideGroups -> sideGroups = false
             channelListVisible -> channelListVisible = false
             panel != Panel.NONE -> panel = Panel.NONE
             controlsVisible -> controlsVisible = false
@@ -557,13 +601,33 @@ fun PlayerScreen(
         if (target != null) playChannelId(target.id)
     }
 
-    // Focus the channel list when it opens; hand focus back to the video catcher when it closes.
-    LaunchedEffect(channelListVisible) {
+    // Focus the side menu's channels or groups as they come up (they slide in, so keep asking
+    // until the row is there); hand focus back to the video catcher when the menu closes.
+    LaunchedEffect(channelListVisible, sideGroups) {
         if (channelListVisible) {
-            delay(40)
-            runCatching { listFocus.requestFocus() }
-        } else if (!controlsVisible) {
-            runCatching { rootFocus.requestFocus() }
+            val target = if (sideGroups) groupFocus else listFocus
+            repeat(10) {
+                delay(60)
+                if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
+            }
+        } else {
+            sideGroups = false
+            awaitingRows = null
+            if (!controlsVisible) runCatching { rootFocus.requestFocus() }
+        }
+    }
+
+    // A group picked in the side menu: once its channels are in, land on the first (or the one playing).
+    LaunchedEffect(browseRows, awaitingRows) {
+        val old = awaitingRows ?: return@LaunchedEffect
+        if (browseRows === old) {
+            // The group may simply hold the same list; don't wait on it forever.
+            delay(GROUP_LOAD_TIMEOUT_MILLIS)
+        }
+        awaitingRows = null
+        repeat(10) {
+            delay(60)
+            if (runCatching { listFocus.requestFocus() }.isSuccess) return@LaunchedEffect
         }
     }
 
@@ -583,6 +647,7 @@ fun PlayerScreen(
                             if (!backArmed) return@onPreviewKeyEvent false
                             backArmed = false
                             when {
+                                channelListVisible && sideGroups -> sideGroups = false
                                 channelListVisible -> channelListVisible = false
                                 panel != Panel.NONE -> { panel = Panel.NONE; interaction++ }
                                 else -> controlsVisible = false
@@ -605,7 +670,7 @@ fun PlayerScreen(
                     event.key == Key.Menu -> {
                         if (channelListVisible) {
                             channelListVisible = false
-                        } else if (queue.isNotEmpty()) {
+                        } else if (canBrowse()) {
                             panel = Panel.NONE
                             controlsVisible = false
                             channelListVisible = true
@@ -633,7 +698,7 @@ fun PlayerScreen(
                         false
                     }
                     // Immersive: left opens the channel list, right brings up the playback bar.
-                    event.key == Key.DirectionLeft -> { if (queue.isNotEmpty()) channelListVisible = true; true }
+                    event.key == Key.DirectionLeft -> { if (canBrowse()) channelListVisible = true; true }
                     event.key == Key.DirectionRight -> { reveal(); true }
                     else -> { reveal(); true }
                 }
@@ -952,56 +1017,135 @@ fun PlayerScreen(
             }
         }
 
-        // Left-side transparent channel list — d-pad Left opens it, pick a channel to switch.
+        // Left-side transparent menu — d-pad Left opens the current group's channels with what's
+        // on now; LEFT again slides the groups in, in their place, to browse another one.
         AnimatedVisibility(
             visible = channelListVisible && !inPip,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.CenterStart),
         ) {
-            val currentIndex = queueIndex().coerceAtLeast(0)
-            val listState = rememberLazyListState()
-            LaunchedEffect(Unit) { runCatching { listState.scrollToItem(currentIndex) } }
-            Column(
-                Modifier
+            AnimatedContent(
+                targetState = sideGroups,
+                transitionSpec = {
+                    // Groups come in from the left, channels from the right.
+                    val dir = if (targetState) -1 else 1
+                    (slideInHorizontally { it * dir } + fadeIn()) togetherWith (slideOutHorizontally { -it * dir } + fadeOut())
+                },
+                modifier = Modifier
                     .fillMaxHeight()
-                    .width(380.dp)
-                    .background(Color.Black.copy(alpha = 0.72f))
-                    .padding(vertical = 16.dp),
-            ) {
-                Text(
-                    stringResource(R.string.common_channels),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(8.dp))
-                // A quick "jump back to the channel you just left" pin, TiviMate-style.
-                val lastItem = previousId?.let { pid -> queue.firstOrNull { it.id == pid } }
-                if (lastItem != null && lastItem.id != queue.getOrNull(queueIndex())?.id) {
-                    ChannelListRow(
-                        item = lastItem,
-                        playing = false,
-                        focusRequester = null,
-                        leadingLabel = stringResource(R.string.player_last),
-                        onClick = {
-                            playChannelId(lastItem.id)
-                            channelListVisible = false
+                    .width(SIDE_MENU_WIDTH)
+                    .background(Color.Black.copy(alpha = 0.74f))
+                    .clipToBounds(),
+                label = "sideMenu",
+            ) { showGroups ->
+                if (showGroups) {
+                    SideGroups(
+                        entries = groupEntries,
+                        focusRequester = groupFocus,
+                        onPick = { entry ->
+                            if (!entry.selected) {
+                                awaitingRows = browseRows
+                                entry.pick()
+                            }
+                            sideGroups = false
                         },
+                        onRight = { sideGroups = false },
                     )
-                    Spacer(Modifier.height(4.dp))
-                }
-                LazyColumn(state = listState) {
-                    itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
-                        ChannelListRow(
-                            item = item,
-                            playing = item.id == queue.getOrNull(currentIndex)?.id,
-                            focusRequester = if (index == currentIndex) listFocus else null,
-                            onClick = {
-                                playChannelId(item.id)
-                                channelListVisible = false
-                            },
+                } else {
+                    val playingIndex = browseRows.indexOfFirst { row ->
+                        row.variants.any { it.id == listedId || it.id == currentId }
+                    }
+                    val title = groupEntries.firstOrNull { it.selected }?.label
+                        ?: stringResource(R.string.common_channels)
+                    Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
+                        Text(
+                            "◀  $title",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
+                        Spacer(Modifier.height(8.dp))
+                        // A quick "jump back to the channel you just left" pin, TiviMate-style.
+                        val last = previousChannel
+                        if (last != null && last.id != listedId) {
+                            val lastRow = browseRows.firstOrNull { row -> row.variants.any { it.id == last.id } }
+                            ChannelListRow(
+                                name = last.shownName,
+                                logoUrl = last.shownLogo(),
+                                now = lastRow?.onAt(clock),
+                                nowMillis = clock,
+                                playing = false,
+                                focusRequester = null,
+                                leadingLabel = stringResource(R.string.player_last),
+                                onLeft = { sideGroups = true },
+                                onClick = {
+                                    playChannelId(last.id)
+                                    channelListVisible = false
+                                },
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        when {
+                            awaitingRows != null -> Box(
+                                Modifier.fillMaxSize().focusRequester(listFocus).focusable(),
+                                contentAlignment = Alignment.Center,
+                            ) { CircularProgressIndicator() }
+                            browseRows.isNotEmpty() -> {
+                                val start = playingIndex.coerceAtLeast(0)
+                                val listState = rememberLazyListState()
+                                LaunchedEffect(browseRows) { runCatching { listState.scrollToItem((start - 3).coerceAtLeast(0)) } }
+                                LazyColumn(state = listState) {
+                                    itemsIndexed(browseRows, key = { _, row -> row.key }) { index, row ->
+                                        ChannelListRow(
+                                            name = row.primary.shownName,
+                                            logoUrl = row.primary.shownLogo(),
+                                            now = row.onAt(clock),
+                                            nowMillis = clock,
+                                            playing = index == playingIndex,
+                                            focusRequester = if (index == start) listFocus else null,
+                                            onLeft = { sideGroups = true },
+                                            onClick = {
+                                                // Zapping now runs through the group this channel came from.
+                                                queue = browseRows.map {
+                                                    PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logo(logoSource, logoPack), it.primary.number)
+                                                }
+                                                PlaybackQueue.items = queue
+                                                channels.markGroupWatched()
+                                                playChannelId(row.primary.id)
+                                                channelListVisible = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                            // The guide's list isn't in yet (straight into the player at start-up):
+                            // the snapshot this player opened with, without the guide.
+                            else -> {
+                                val currentIndex = queueIndex().coerceAtLeast(0)
+                                val listState = rememberLazyListState()
+                                LaunchedEffect(Unit) { runCatching { listState.scrollToItem(currentIndex) } }
+                                LazyColumn(state = listState) {
+                                    itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
+                                        ChannelListRow(
+                                            name = item.name,
+                                            logoUrl = item.logoUrl,
+                                            now = null,
+                                            nowMillis = clock,
+                                            playing = index == currentIndex,
+                                            focusRequester = if (index == currentIndex) listFocus else null,
+                                            onLeft = { sideGroups = true },
+                                            onClick = {
+                                                playChannelId(item.id)
+                                                channelListVisible = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1177,18 +1321,28 @@ private fun OnAirPanel(info: OnAir, clock: Long) {
 private fun clockText(utcMillis: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(utcMillis))
 
+/** What [this] channel airs at [millis]: from its guide window, so it keeps up while the menu is open. */
+private fun ChannelsViewModel.Row.onAt(millis: Long): Programme? =
+    programmes.firstOrNull { millis >= it.startUtcMillis && millis < it.endUtcMillis }
+        ?: now?.takeIf { millis < it.endUtcMillis }
+
+/** A channel in the side menu: logo, name, and what's on now with its times and progress. */
 @Composable
 private fun ChannelListRow(
-    item: PlaybackQueue.Item,
+    name: String,
+    logoUrl: String?,
+    now: Programme?,
+    nowMillis: Long,
     playing: Boolean,
     focusRequester: FocusRequester?,
+    onLeft: () -> Unit,
     onClick: () -> Unit,
     leadingLabel: String? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
         focused -> MaterialTheme.colorScheme.primary
-        playing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        playing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
         else -> Color.Transparent
     }
     val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
@@ -1197,6 +1351,9 @@ private fun ChannelListRow(
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { e ->
+                if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft) { onLeft(); true } else false
+            }
             .focusLift(focused)
             .background(bg)
             .clickable(interactionSource = null, indication = null, onClick = onClick)
@@ -1205,22 +1362,133 @@ private fun ChannelListRow(
     ) {
         // No channel number (the provider's jump about): its room goes to the logo.
         AsyncImage(
-            model = item.logoUrl,
+            model = logoUrl,
             contentDescription = null,
-            modifier = Modifier.size(width = 72.dp, height = 36.dp).clip(RoundedCornerShape(4.dp)),
+            modifier = Modifier.size(width = 64.dp, height = 32.dp).clip(RoundedCornerShape(4.dp)),
         )
         Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = fg,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (leadingLabel != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(leadingLabel, style = MaterialTheme.typography.labelMedium, color = fg.copy(alpha = 0.7f), maxLines = 1)
+                }
+            }
+            if (now != null) {
+                Text(
+                    now.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = fg.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${clockText(now.startUtcMillis)}–${clockText(now.endUtcMillis)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = fg.copy(alpha = 0.6f),
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(fg.copy(alpha = 0.2f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(now.progressAt(nowMillis).coerceIn(0f, 1f))
+                                .height(3.dp)
+                                .background(if (focused) fg else MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The side menu's groups, in the channels' place: OK or RIGHT on the current one goes back to its channels. */
+@Composable
+private fun SideGroups(
+    entries: List<LiveGroupEntry>,
+    focusRequester: FocusRequester,
+    onPick: (LiveGroupEntry) -> Unit,
+    onRight: () -> Unit,
+) {
+    val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedIndex - 3).coerceAtLeast(0))
+    Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
         Text(
-            item.name,
+            stringResource(R.string.player_groups),
             style = MaterialTheme.typography.titleMedium,
-            color = fg,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
+            color = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
-        if (leadingLabel != null) {
-            Spacer(Modifier.width(8.dp))
-            Text(leadingLabel, style = MaterialTheme.typography.labelMedium, color = fg.copy(alpha = 0.7f), maxLines = 1)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(state = listState) {
+            itemsIndexed(entries, key = { _, e -> e.key }) { index, entry ->
+                Column {
+                    entry.section?.let {
+                        Text(
+                            it.uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp),
+                        )
+                    }
+                    var focused by remember { mutableStateOf(false) }
+                    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(if (index == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier)
+                            .onFocusChanged { focused = it.isFocused }
+                            .onPreviewKeyEvent { e ->
+                                if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { onRight(); true } else false
+                            }
+                            .focusLift(focused)
+                            .background(
+                                when {
+                                    focused -> MaterialTheme.colorScheme.primary
+                                    entry.selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                    else -> Color.Transparent
+                                },
+                            )
+                            .clickable(interactionSource = null, indication = null) { onPick(entry) }
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        GroupBadgeSlot(entry.badge, entry.label, initialsIfBlank = false, modifier = Modifier.size(width = 64.dp, height = 32.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            entry.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (entry.selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = fg,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        entry.count?.let {
+                            Spacer(Modifier.width(8.dp))
+                            Text("$it", style = MaterialTheme.typography.labelLarge, color = fg.copy(alpha = 0.6f), maxLines = 1)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1496,6 +1764,10 @@ private fun BarChip(
 }
 
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
+// The side menu: narrow enough to leave most of the picture showing.
+private val SIDE_MENU_WIDTH = 360.dp
+// How long a picked group may take to bring its channels before the menu stops waiting.
+private const val GROUP_LOAD_TIMEOUT_MILLIS = 5_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
