@@ -111,6 +111,8 @@
     <string name="player_record">Registra</string>
     <string name="player_pop_out">Finestra mobile</string>
     <string name="player_last">Ultimo</string>
+    <string name="player_groups">Gruppi</string>
+    <string name="player_sources">Fonti</string>
     <string name="player_quality_standard">Standard</string>
     <string name="player_aspect_fit">Adatta</string>
     <string name="player_aspect_fill">Riempi</string>

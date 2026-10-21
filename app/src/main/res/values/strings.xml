@@ -125,6 +125,8 @@
     <string name="player_record">Record</string>
     <string name="player_pop_out">Pop out</string>
     <string name="player_last">Last</string>
+    <string name="player_groups">Groups</string>
+    <string name="player_sources">Sources</string>
     <string name="player_quality_standard">Standard</string>
     <string name="player_aspect_fit">Fit</string>
     <string name="player_aspect_fill">Fill</string>
