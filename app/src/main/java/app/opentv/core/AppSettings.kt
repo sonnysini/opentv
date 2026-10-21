@@ -951,7 +951,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_LOGOS_EXTERNAL, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
                 KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_QUALITY_BUTTON_CYCLES,
-                // Pre-0.19.1 logo switches: a restore of an older backup still migrates from them.
+                // The old logo switches: a restore of an older backup still migrates from them.
                 KEY_PREFER_GUIDE_LOGOS, KEY_GROUP_BADGES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
