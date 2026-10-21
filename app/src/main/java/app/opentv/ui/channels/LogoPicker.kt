@@ -47,6 +47,7 @@ import androidx.compose.ui.window.Dialog
 import app.opentv.R
 import app.opentv.core.LogoPack
 import app.opentv.data.model.logo
+import app.opentv.data.model.shownName
 import app.opentv.data.repo.CatalogRepository
 import app.opentv.ui.ChannelsViewModel
 
