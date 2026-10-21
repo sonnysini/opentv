@@ -12,6 +12,7 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
@@ -1382,7 +1383,14 @@ private fun SourcesList(names: List<String>, current: Int) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
         Box(Modifier.fillMaxWidth().height(rowHeight * visible).clipToBounds()) {
-            Box(Modifier.fillMaxWidth().offset(y = -scroll)) {
+            // The whole list at full height, unbounded by the window: squeezed into it, the rows past
+            // the ninth were measured to nothing and scrolled in blank.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                    .offset(y = -scroll),
+            ) {
                 Box(
                     Modifier
                         .offset(y = highlight)
