@@ -50,6 +50,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Serves a "manage your channels from your phone or laptop" web app off this television.
@@ -115,7 +117,7 @@ class ManagerServer(
         val host = lanAddress()
         if (host == null) {
             _state.value = State.Failed(
-                "This device doesn't appear to be on a network, so a phone or laptop can't reach it.",
+                AppText.get(R.string.mgr_no_network),
             )
             return
         }
@@ -134,7 +136,7 @@ class ManagerServer(
             ServerSocket(0)
         } catch (e: Exception) {
             Log.w(TAG, "Could not open a socket", e)
-            _state.value = State.Failed("Could not start the channel manager on this device.")
+            _state.value = State.Failed(AppText.get(R.string.mgr_start_failed))
             return
         }
 
@@ -174,7 +176,7 @@ class ManagerServer(
                 if (running && idleFor > TimeUnit.MINUTES.toMillis(IDLE_TIMEOUT_MINUTES)) {
                     stop()
                     _state.value = State.Failed(
-                        "The channel manager closed after a while unused. Reopen it when you need it.",
+                        AppText.get(R.string.mgr_idle_closed),
                     )
                     break
                 }

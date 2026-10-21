@@ -5,6 +5,11 @@
  */
 package app.opentv.pairing
 
+import android.content.Context
+import androidx.annotation.StringRes
+import app.opentv.R
+import app.opentv.core.AppText
+
 /**
  * The page the phone sees.
  *
@@ -12,13 +17,16 @@ package app.opentv.pairing
  * no frameworks, no analytics. The phone is talking to a television on the local network,
  * which may have no route to the internet at all, and a page that needs a CDN to render would
  * simply fail.
+ *
+ * Written in the phone's language ([lang] is a context built from its Accept-Language header,
+ * see [AppText.forBrowser]), not the TV's.
  */
 object PairingPage {
 
-    fun form(token: String, error: String?): String = page(
+    fun form(token: String, error: String?, lang: Context?): String = page(lang,
         """
-        <h1>Set up OpenTV</h1>
-        <p class="sub">Filling this in here beats using the remote.</p>
+        <h1>${s(lang, R.string.pp_title)}</h1>
+        <p class="sub">${s(lang, R.string.pp_sub)}</p>
 
         ${if (error != null) "<div class=\"error\">${escape(error)}</div>" else ""}
 
@@ -28,64 +36,61 @@ object PairingPage {
           <div class="seg">
             <label class="segbtn">
               <input type="radio" name="kind" value="xtream" checked onchange="toggle()">
-              <span>Xtream login</span>
+              <span>${s(lang, R.string.pp_kind_xtream)}</span>
             </label>
             <label class="segbtn">
               <input type="radio" name="kind" value="m3u" onchange="toggle()">
-              <span>M3U playlist</span>
+              <span>${s(lang, R.string.pp_kind_m3u)}</span>
             </label>
           </div>
 
-          <label for="name">Name <span class="opt">optional</span></label>
-          <input id="name" name="name" type="text" placeholder="Living room provider">
+          <label for="name">${s(lang, R.string.pp_name)} <span class="opt">${s(lang, R.string.pp_optional)}</span></label>
+          <input id="name" name="name" type="text" placeholder="${s(lang, R.string.pp_name_placeholder)}">
 
-          <label for="url" id="url-label">Server address</label>
+          <label for="url" id="url-label">${s(lang, R.string.pp_server)}</label>
           <input id="url" name="url" type="url" inputmode="url" required
                  placeholder="http://example.com:8080"
                  autocapitalize="off" autocorrect="off" spellcheck="false">
           <p class="hint" id="url-hint">
-            Paste the whole line from your provider if that's easier — extra bits get trimmed.
+            ${s(lang, R.string.pp_server_hint)}
           </p>
 
           <div id="creds">
-            <label for="username">Username</label>
+            <label for="username">${s(lang, R.string.pp_username)}</label>
             <input id="username" name="username" type="text"
                    autocapitalize="off" autocorrect="off" spellcheck="false">
 
-            <label for="password">Password</label>
+            <label for="password">${s(lang, R.string.pp_password)}</label>
             <input id="password" name="password" type="password">
           </div>
 
-          <label for="epg">Guide (XMLTV) URL <span class="opt">optional</span></label>
+          <label for="epg">${s(lang, R.string.pp_epg)} <span class="opt">${s(lang, R.string.pp_optional)}</span></label>
           <input id="epg" name="epg" type="url" inputmode="url"
                  autocapitalize="off" autocorrect="off" spellcheck="false">
-          <p class="hint">Leave blank to use your provider's guide automatically.</p>
+          <p class="hint">${s(lang, R.string.pp_epg_hint)}</p>
 
           <hr>
 
-          <label for="code">Code shown on the TV</label>
+          <label for="code">${s(lang, R.string.pp_code)}</label>
           <input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9]*"
                  maxlength="6" required class="code" placeholder="000000"
                  autocomplete="one-time-code">
-          <p class="hint">This is what proves it's you standing in front of the telly.</p>
+          <p class="hint">${s(lang, R.string.pp_code_hint)}</p>
 
-          <button type="submit">Send to TV</button>
+          <button type="submit">${s(lang, R.string.pp_send)}</button>
         </form>
 
-        <p class="privacy">
-          This page is served by your television, over your own network. What you type goes
-          straight to it and nowhere else — there is no OpenTV account and no OpenTV server.
-        </p>
+        <p class="privacy">${s(lang, R.string.pp_privacy)}</p>
 
         <script>
           function toggle() {
             var isM3u = document.querySelector('input[name=kind]:checked').value === 'm3u';
             document.getElementById('creds').style.display = isM3u ? 'none' : 'block';
             document.getElementById('url-label').textContent =
-              isM3u ? 'Playlist URL' : 'Server address';
+              isM3u ? ${js(lang, R.string.pp_playlist_url)} : ${js(lang, R.string.pp_server)};
             document.getElementById('url-hint').textContent = isM3u
-              ? 'The full http link to your .m3u or .m3u8 file.'
-              : "Paste the whole line from your provider if that's easier.";
+              ? ${js(lang, R.string.pp_playlist_hint)}
+              : ${js(lang, R.string.pp_server_hint_short)};
             document.getElementById('username').required = !isM3u;
             document.getElementById('password').required = !isM3u;
           }
@@ -94,21 +99,21 @@ object PairingPage {
         """.trimIndent(),
     )
 
-    fun message(title: String, body: String): String = page(
+    fun message(title: String, body: String, lang: Context?): String = page(lang,
         """
         <h1>${escape(title)}</h1>
         <p class="sub">${escape(body)}</p>
         """.trimIndent(),
     )
 
-    private fun page(content: String): String = """
+    private fun page(lang: Context?, content: String): String = """
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="${s(lang, R.string.pp_html_lang)}">
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="robots" content="noindex, nofollow">
-        <title>Set up OpenTV</title>
+        <title>${s(lang, R.string.pp_title)}</title>
         <style>
           :root { --bg:#07080c; --surface:#12141d; --line:#2a2f3d; --text:#e8eaf0;
                   --muted:#a8aec0; --accent:#7c93ff; --err:#ff6b6b; }
@@ -148,6 +153,16 @@ object PairingPage {
         </div></body>
         </html>
     """.trimIndent()
+
+    /** A string in the phone's language, HTML-escaped. */
+    private fun s(lang: Context?, @StringRes id: Int): String =
+        escape(lang?.getString(id) ?: AppText.get(id))
+
+    /** A string in the phone's language as a JavaScript string literal. */
+    private fun js(lang: Context?, @StringRes id: Int): String {
+        val raw = lang?.getString(id) ?: AppText.get(id)
+        return "'" + raw.replace("\\", "\\\\").replace("'", "\\'").replace("<", "\\u003c") + "'"
+    }
 
     /** Minimal HTML escaping. Everything interpolated into the page goes through here. */
     private fun escape(value: String): String = value

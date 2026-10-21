@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Pulls a watch-history bundle from another OpenTV that is currently sharing on the LAN.
@@ -32,8 +34,8 @@ class SyncClient(private val httpClient: OkHttpClient) {
                 if (!response.isSuccessful) {
                     error(
                         when (response.code) {
-                            401 -> "That code doesn't match the one on the other device."
-                            else -> "The other device didn't accept the connection (HTTP ${response.code})."
+                            401 -> AppText.get(R.string.share_code_mismatch)
+                            else -> AppText.get(R.string.share_refused, response.code)
                         },
                     )
                 }

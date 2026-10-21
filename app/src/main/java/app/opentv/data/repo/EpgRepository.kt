@@ -32,6 +32,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Owns the electronic programme guide, end to end: feeds in, matched channels out.
@@ -272,7 +274,7 @@ class EpgRepository(
                 }
 
                 if (written == 0 && stats.programmeCount == 0) {
-                    return FeedResult.Failed("Downloaded, but contained no programmes.")
+                    return FeedResult.Failed(AppText.get(R.string.epg_no_programmes))
                 }
                 return FeedResult.Success(written, stats.channelCount)
             }
@@ -281,7 +283,7 @@ class EpgRepository(
         } catch (e: Exception) {
             // Deliberately no cleanup. Whatever was written is newer than what was there,
             // and what was there is still there.
-            return FeedResult.Failed(e.message ?: "Download failed.")
+            return FeedResult.Failed(e.message ?: AppText.get(R.string.epg_download_failed))
         }
     }
 
@@ -297,19 +299,19 @@ class EpgRepository(
         val raw: InputStream = when {
             feed.providerSourceId != null -> {
                 val source: Source = sourceDao.byId(feed.providerSourceId)
-                    ?: throw IllegalStateException("Provider for this guide no longer exists.")
+                    ?: throw IllegalStateException(AppText.get(R.string.epg_provider_gone))
                 api.openEpgStream(source)
             }
             feed.url != null -> {
                 val response = http.newCall(Request.Builder().url(feed.url).build()).execute()
                 if (!response.isSuccessful) {
                     response.close()
-                    throw IllegalStateException("Guide download failed (HTTP ${response.code}).")
+                    throw IllegalStateException(AppText.get(R.string.xt_guide_http, response.code))
                 }
                 response.body?.byteStream()
-                    ?: throw IllegalStateException("The server returned an empty guide.")
+                    ?: throw IllegalStateException(AppText.get(R.string.xt_guide_empty))
             }
-            else -> throw IllegalStateException("Feed has no URL and no provider.")
+            else -> throw IllegalStateException(AppText.get(R.string.epg_feed_no_url))
         }
 
         val buffered = BufferedInputStream(raw, 8 * 1024)

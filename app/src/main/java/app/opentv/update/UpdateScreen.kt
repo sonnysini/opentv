@@ -30,6 +30,8 @@ import app.opentv.core.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import app.opentv.R
+import androidx.compose.ui.res.stringResource
 
 /**
  * The one-line entry point: drop [UpdateGate] into the top-level layout and a sideloaded
@@ -45,12 +47,12 @@ fun UpdateGate(viewModel: UpdateViewModel = viewModel()) {
 
         is UpdateUiState.Available -> AlertDialog(
             onDismissRequest = viewModel::dismiss,
-            confirmButton = { TextButton(onClick = viewModel::install) { Text("Update") } },
-            dismissButton = { TextButton(onClick = viewModel::dismiss) { Text("Later") } },
-            title = { Text("Update available") },
+            confirmButton = { TextButton(onClick = viewModel::install) { Text(stringResource(R.string.update_install)) } },
+            dismissButton = { TextButton(onClick = viewModel::dismiss) { Text(stringResource(R.string.update_later)) } },
+            title = { Text(stringResource(R.string.update_available_title)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("OpenTV ${s.update.versionName} is available. You have ${BuildConfig.VERSION_NAME}.")
+                    Text(stringResource(R.string.update_available_body, s.update.versionName, BuildConfig.VERSION_NAME))
                     if (s.update.notes.isNotBlank()) {
                         Text(
                             text = s.update.notes,
@@ -66,7 +68,7 @@ fun UpdateGate(viewModel: UpdateViewModel = viewModel()) {
         is UpdateUiState.Downloading -> AlertDialog(
             onDismissRequest = {}, // a download in flight should not be dismissed by a stray click
             confirmButton = {},
-            title = { Text("Downloading update…") },
+            title = { Text(stringResource(R.string.update_downloading)) },
             text = {
                 Column {
                     if (s.fraction >= 0f) {
@@ -84,10 +86,10 @@ fun UpdateGate(viewModel: UpdateViewModel = viewModel()) {
 
         is UpdateUiState.Failed -> AlertDialog(
             onDismissRequest = viewModel::dismiss,
-            confirmButton = { TextButton(onClick = viewModel::install) { Text("Retry") } },
-            dismissButton = { TextButton(onClick = viewModel::dismiss) { Text("Close") } },
-            title = { Text("Update failed") },
-            text = { Text("Could not download the update. Check the connection and try again.") },
+            confirmButton = { TextButton(onClick = viewModel::install) { Text(stringResource(R.string.update_retry)) } },
+            dismissButton = { TextButton(onClick = viewModel::dismiss) { Text(stringResource(R.string.update_close)) } },
+            title = { Text(stringResource(R.string.update_failed_title)) },
+            text = { Text(stringResource(R.string.update_failed_body)) },
         )
     }
 }

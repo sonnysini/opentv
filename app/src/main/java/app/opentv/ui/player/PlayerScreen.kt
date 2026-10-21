@@ -131,6 +131,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import app.opentv.ui.theme.focusLift
+import app.opentv.core.AppText
 
 /**
  * Full-screen live playback.
@@ -1376,7 +1377,7 @@ private fun trackLabel(label: String?, language: String?, index: Int): String {
     if (!language.isNullOrBlank() && language != "und") {
         return runCatching { Locale(language).displayLanguage.ifBlank { language } }.getOrDefault(language)
     }
-    return "Track ${index + 1}"
+    return AppText.get(R.string.track_n, index + 1)
 }
 
 @Composable

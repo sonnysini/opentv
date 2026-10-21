@@ -31,6 +31,8 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Client for the Xtream Codes "player API".
@@ -57,14 +59,14 @@ class XtreamApi(
     suspend fun authenticate(source: Source): AccountInfo = withContext(Dispatchers.IO) {
         val body = getJson(source, action = null).jsonObject
         val userInfo = body["user_info"]?.jsonObjectOrNull
-            ?: throw XtreamException("The server did not return account information.")
+            ?: throw XtreamException(AppText.get(R.string.xt_no_account))
 
         val status = userInfo["status"].asStringOrNull
         if (status != null && !status.equals("Active", ignoreCase = true)) {
-            throw XtreamException("This account is $status.")
+            throw XtreamException(AppText.get(R.string.xt_account_status, status))
         }
         if (userInfo["auth"].asIntOrNull == 0) {
-            throw XtreamException("Username or password rejected by the server.")
+            throw XtreamException(AppText.get(R.string.xt_bad_login))
         }
 
         AccountInfo(
@@ -303,10 +305,10 @@ class XtreamApi(
         val response = http.newCall(request(source, url)).execute()
         if (!response.isSuccessful) {
             response.close()
-            throw XtreamException("Guide download failed (HTTP ${response.code}).")
+            throw XtreamException(AppText.get(R.string.xt_guide_http, response.code))
         }
         response.body?.byteStream()
-            ?: throw XtreamException("The server returned an empty guide.")
+            ?: throw XtreamException(AppText.get(R.string.xt_guide_empty))
     }
 
     // ---- URL construction ----------------------------------------------------------------
@@ -363,15 +365,14 @@ class XtreamApi(
                 throw XtreamException(describeHttpFailure(response.code))
             }
             val text = response.body?.string().orEmpty()
-            if (text.isBlank()) throw XtreamException("The server returned an empty response.")
+            if (text.isBlank()) throw XtreamException(AppText.get(R.string.xt_empty_response))
             return try {
                 json.parseToJsonElement(text)
             } catch (e: Exception) {
                 // Panels behind a captive portal or Cloudflare return HTML here. Saying
                 // "not valid JSON" is useless to a user; say what it probably means.
                 throw XtreamException(
-                    "The server replied with something that is not a valid catalogue. " +
-                        "Check the address and port are correct.",
+                    AppText.get(R.string.xt_not_catalogue),
                     e,
                 )
             }
@@ -403,7 +404,7 @@ class XtreamApi(
 
         http.newCall(request(source, url)).execute().use { response ->
             if (!response.isSuccessful) throw XtreamException(describeHttpFailure(response.code))
-            val body = response.body ?: throw XtreamException("The server returned an empty response.")
+            val body = response.body ?: throw XtreamException(AppText.get(R.string.xt_empty_response))
             var total = 0
             val batch = ArrayList<T>(batchSize)
             try {
@@ -425,13 +426,12 @@ class XtreamApi(
                 throw e
             } catch (e: SerializationException) {
                 throw XtreamException(
-                    "The server replied with something that is not a valid catalogue. " +
-                        "Check the address and port are correct.",
+                    AppText.get(R.string.xt_not_catalogue),
                     e,
                 )
             } catch (e: IllegalArgumentException) {
                 // kotlinx reports some malformed input (e.g. an HTML error page) this way.
-                throw XtreamException("The server's catalogue could not be read.", e)
+                throw XtreamException(AppText.get(R.string.xt_catalogue_unreadable), e)
             }
             if (batch.isNotEmpty()) {
                 onBatch(ArrayList(batch))
@@ -448,15 +448,12 @@ class XtreamApi(
             .build()
 
     private fun describeHttpFailure(code: Int): String = when (code) {
-        401, 403 -> "The server refused the request (HTTP $code). The username or password " +
-            "may be wrong, or the provider may be blocking this app's User-Agent — try " +
-            "changing it in the source's advanced settings."
-        404 -> "No Xtream API at that address (HTTP 404). Check the URL and port."
-        405 -> "The server rejected the request method (HTTP 405). This usually means the " +
-            "address points at a plain playlist rather than an Xtream panel."
-        429 -> "The server is rate-limiting this device (HTTP 429). Try again shortly."
-        in 500..599 -> "The provider's server is having problems (HTTP $code)."
-        else -> "The server returned HTTP $code."
+        401, 403 -> AppText.get(R.string.xt_http_auth, code)
+        404 -> AppText.get(R.string.xt_http_404)
+        405 -> AppText.get(R.string.xt_http_405)
+        429 -> AppText.get(R.string.xt_http_429)
+        in 500..599 -> AppText.get(R.string.xt_http_5xx, code)
+        else -> AppText.get(R.string.perr_http_other, code)
     }
 
     companion object {

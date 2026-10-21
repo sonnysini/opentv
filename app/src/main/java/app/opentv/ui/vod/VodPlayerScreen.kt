@@ -100,6 +100,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import app.opentv.ui.theme.focusLift
+import app.opentv.core.AppText
 
 /**
  * Plays a movie or episode: a single non-live stream, with resume and a proper transport bar.
@@ -551,7 +552,7 @@ private fun vodTrackLabel(label: String?, language: String?, index: Int): String
     if (!language.isNullOrBlank() && language != "und") {
         return runCatching { java.util.Locale(language).displayLanguage.ifBlank { language } }.getOrDefault(language)
     }
-    return "Track ${index + 1}"
+    return AppText.get(R.string.track_n, index + 1)
 }
 
 private fun formatDuration(ms: Long): String {

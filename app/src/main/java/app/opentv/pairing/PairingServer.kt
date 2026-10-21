@@ -5,6 +5,7 @@
  */
 package app.opentv.pairing
 
+import android.content.Context
 import android.util.Log
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Lets someone fill in their provider details from a phone instead of a TV remote.
@@ -88,7 +91,7 @@ class PairingServer(private val scope: CoroutineScope) {
         val host = lanAddress()
         if (host == null) {
             _state.value = State.Failed(
-                "This device doesn't appear to be on a network, so it can't talk to your phone.",
+                AppText.get(R.string.pair_no_network),
             )
             return
         }
@@ -104,7 +107,7 @@ class PairingServer(private val scope: CoroutineScope) {
             ServerSocket(0)
         } catch (e: Exception) {
             Log.w(TAG, "Could not open a socket", e)
-            _state.value = State.Failed("Could not start the pairing server on this device.")
+            _state.value = State.Failed(AppText.get(R.string.pair_start_failed))
             return
         }
 
@@ -138,7 +141,7 @@ class PairingServer(private val scope: CoroutineScope) {
             kotlinx.coroutines.delay(TimeUnit.MINUTES.toMillis(SESSION_TIMEOUT_MINUTES))
             if (running && _state.value is State.Listening) {
                 stop()
-                _state.value = State.Failed("Pairing timed out. Start again when you're ready.")
+                _state.value = State.Failed(AppText.get(R.string.pair_timeout))
             }
         }
     }
@@ -194,12 +197,15 @@ class PairingServer(private val scope: CoroutineScope) {
             return
         }
 
+        // The page speaks the phone's language, not the TV's.
+        val lang = AppText.forBrowser(headers["accept-language"])
+
         when {
             method == "GET" -> output.write(
-                PairingHttp.httpResponse("200 OK", "text/html", PairingPage.form(token, null)),
+                PairingHttp.httpResponse("200 OK", "text/html", PairingPage.form(token, null, lang)),
             )
 
-            method == "POST" && path.startsWith("/submit") -> handleSubmit(output, body)
+            method == "POST" && path.startsWith("/submit") -> handleSubmit(output, body, lang)
 
             else -> output.write(
                 PairingHttp.httpResponse("405 Method Not Allowed", "text/plain", "No."),
@@ -207,7 +213,7 @@ class PairingServer(private val scope: CoroutineScope) {
         }
     }
 
-    private fun handleSubmit(output: java.io.OutputStream, body: String) {
+    private fun handleSubmit(output: java.io.OutputStream, body: String, lang: Context?) {
         val form = PairingHttp.parseFormEncoded(body)
 
         val code = form["code"].orEmpty().filter { it.isDigit() }
@@ -219,13 +225,14 @@ class PairingServer(private val scope: CoroutineScope) {
                         "403 Forbidden",
                         "text/html",
                         PairingPage.message(
-                            "Too many attempts",
-                            "Start pairing again on the TV to get a new code.",
+                            text(lang, R.string.pp_too_many_title),
+                            text(lang, R.string.pp_too_many_body),
+                            lang,
                         ),
                     ),
                 )
                 stop()
-                _state.value = State.Failed("Too many incorrect codes. Pairing cancelled.")
+                _state.value = State.Failed(AppText.get(R.string.pair_too_many_tv))
                 return
             }
             output.write(
@@ -234,8 +241,8 @@ class PairingServer(private val scope: CoroutineScope) {
                     "text/html",
                     PairingPage.form(
                         token,
-                        "That code doesn't match the one on the TV. " +
-                            "${MAX_CODE_ATTEMPTS - wrongCodeAttempts} attempts left.",
+                        text(lang, R.string.pp_wrong_code, MAX_CODE_ATTEMPTS - wrongCodeAttempts),
+                        lang,
                     ),
                 ),
             )
@@ -249,7 +256,7 @@ class PairingServer(private val scope: CoroutineScope) {
                 PairingHttp.httpResponse(
                     "200 OK",
                     "text/html",
-                    PairingPage.form(token, "Please fill in the server address."),
+                    PairingPage.form(token, text(lang, R.string.pp_fill_server), lang),
                 ),
             )
             return
@@ -257,7 +264,7 @@ class PairingServer(private val scope: CoroutineScope) {
 
         val draft = Source(
             name = form["name"].orEmpty().trim().ifBlank {
-                if (kind == SourceKind.XTREAM) "My provider" else "My playlist"
+                if (kind == SourceKind.XTREAM) AppText.get(R.string.default_provider_name) else AppText.get(R.string.default_playlist_name)
             },
             kind = kind,
             url = url,
@@ -271,8 +278,9 @@ class PairingServer(private val scope: CoroutineScope) {
                 "200 OK",
                 "text/html",
                 PairingPage.message(
-                    "Sent to your TV",
-                    "You can put your phone down — the rest happens on the telly.",
+                    text(lang, R.string.pp_sent_title),
+                    text(lang, R.string.pp_sent_body),
+                    lang,
                 ),
             ),
         )
@@ -286,6 +294,9 @@ class PairingServer(private val scope: CoroutineScope) {
         serverSocket = null
         token = ""
     }
+
+    private fun text(lang: Context?, id: Int, vararg args: Any): String =
+        lang?.getString(id, *args) ?: AppText.get(id, *args)
 
     // ---- Finding our own address -----------------------------------------------------------
 
