@@ -1005,7 +1005,7 @@ fun PlayerScreen(
                                     selected = panel == Panel.QUALITY,
                                     badge = QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge,
                                     onLongClick = if (qualityButtonCycles) togglePicker else null,
-                                    onClick = if (qualityButtonCycles) ::cycleQuality else togglePicker,
+                                    onClick = if (qualityButtonCycles) ({ cycleQuality() }) else togglePicker,
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }
