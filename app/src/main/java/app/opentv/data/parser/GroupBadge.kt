@@ -12,6 +12,7 @@ import java.text.Normalizer
  * only id, name and parent), so it is worked out from the name alone: a broadcaster's logo when
  * the name starts with one, else the country flag, else the emoji the provider put in front.
  * Nothing is bundled — logos and flags load from public repositories like any channel logo.
+ * Without [of]'s `external`, only the provider's emoji is used.
  */
 object GroupBadge {
 
@@ -42,7 +43,7 @@ object GroupBadge {
         "f1" to "international/f1-tv-int.png",
     ).sortedByDescending { it.first.length }
 
-    fun of(rawName: String): Result {
+    fun of(rawName: String, external: Boolean = true): Result {
         val name = rawName.trim()
         val lead = leadingSymbols(name)
         // "⭐ Serie A Replay ⭐": the closing emoji goes with the opening one.
@@ -50,16 +51,23 @@ object GroupBadge {
         val label = name.substring(lead.length).trim()
             .let { if (emoji.isNotEmpty() && it.endsWith(emoji)) it.dropLast(emoji.length).trim() else it }
             .ifEmpty { name }
-        val key = brandKey(label)
-        BRANDS.firstOrNull { (prefix, _) -> key == prefix || key.startsWith("$prefix ") }?.let {
-            return Result(label, Image(TV_LOGOS + it.second))
+        if (external) {
+            badgeFromOutside(label, lead)?.let { return Result(label, it) }
         }
-        flagCountry(lead)?.let { return Result(label, Image("https://flagcdn.com/w160/$it.png")) }
         return if (emoji.isNotEmpty() && emoji.any { it.code > 0x2000 }) {
             Result(label, Emoji(emoji))
         } else {
             Result(name, null)
         }
+    }
+
+    /** A broadcaster's logo for a name that starts with one, else the flag of a flag emoji. */
+    private fun badgeFromOutside(label: String, lead: String): Badge? {
+        val key = brandKey(label)
+        BRANDS.firstOrNull { (prefix, _) -> key == prefix || key.startsWith("$prefix ") }?.let {
+            return Image(TV_LOGOS + it.second)
+        }
+        return flagCountry(lead)?.let { Image("https://flagcdn.com/w160/$it.png") }
     }
 
     /** Everything before the first letter or digit: `❤️‍🔥 `, `🇮🇹  `, `⚽ `. */

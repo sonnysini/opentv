@@ -119,7 +119,7 @@
     <string name="player_none_available">Keine verfügbar</string>
     <string name="player_subtitles_off">Aus</string>
     <string name="settings_providers_title">Anbieter</string>
-    <string name="settings_providers_subtitle">Füge deine IPTV-Quellen hinzu, entferne oder teste sie erneut</string>
+    <string name="settings_providers_subtitle">IPTV-Quellen hinzufügen, entfernen und neu testen; festlegen, was geladen wird</string>
     <string name="settings_addons_title">Add-ons (Stremio)</string>
     <string name="settings_addons_subtitle">Wiedergabe über selbst eingerichtete Stremio-Add-ons</string>
     <string name="addons_note">Füge ein Stremio-Add-on hinzu, indem du dessen Manifest-URL einfügst. OpenTV liefert keines mit — du bringst deine eigenen mit. Falls das Add-on auf einem Debrid-Dienst basiert, richte deinen Debrid-Schlüssel auf der Website des Add-ons ein und füge die personalisierte URL ein, die du dort erhältst; dein Schlüssel bleibt dort, niemals in OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Einzelne Sender ausblenden oder favorisieren</string>
     <string name="settings_webmanager_title">Auf Smartphone oder Laptop verwalten</string>
     <string name="settings_webmanager_subtitle">Sender im Browser organisieren, mit Tastatur und Maus</string>
-    <string name="settings_display_title">Anzeige &amp; Wiedergabe</string>
-    <string name="settings_display_subtitle">Design, Untertitel, Live-Vorschau im Guide</string>
     <string name="settings_recording_title">Aufnahme</string>
     <string name="settings_recording_subtitle">Wo Aufnahmen gespeichert werden — diese Box oder ein NAS</string>
     <string name="settings_parental_title">Kindersicherung</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Von hier freigeben</string>
     <string name="sync_receive">Empfangen</string>
     <string name="sync_ready_to_share">Bereit zum Teilen</string>
-    <string name="sync_on_other_device">Auf dem anderen Gerät: Einstellungen → Sync → Empfangen, und gib ein:</string>
+    <string name="sync_on_other_device">Auf dem anderen Gerät: Einstellungen → Wiedergabeverlauf synchronisieren → Empfangen, und gib ein:</string>
     <string name="sync_address">Adresse</string>
     <string name="sync_code">Code</string>
     <string name="sync_type_in_one_go">Oder gib es in einem Schritt ein:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Schlüssel speichern</string>
     <string name="settings_tmdb_saved">TMDB-Schlüssel gespeichert</string>
     <string name="settings_tmdb_active">Aktiv</string>
+    <string name="settings_hub_sources">Quellen</string>
+    <string name="settings_hub_channels">Sender</string>
+    <string name="settings_hub_watching">Wiedergabe &amp; Ansicht</string>
+    <string name="settings_hub_system">System</string>
+    <string name="settings_appearance_subtitle">Stil, Design, Größe, Sprache, Senderliste</string>
+    <string name="settings_playback_subtitle">Qualität, Streamwechsel, Untertitel, Sleep-Timer</string>
+    <string name="settings_section_player">Player</string>
+    <string name="settings_tmdb_title">Filme &amp; Serien (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Dein TMDB-Schlüssel ergänzt fehlende Poster und Inhalte</string>
+    <string name="settings_logos_title">Logos</string>
+    <string name="settings_logos_subtitle">Sender- und Gruppenlogos: vom Anbieter oder extern</string>
+    <string name="logos_channels_title">Senderlogos</string>
+    <string name="logos_source_provider">Nur Anbieter</string>
+    <string name="logos_source_provider_then_external">Anbieter, dann externe</string>
+    <string name="logos_source_external_then_provider">Externe, dann Anbieter</string>
+    <string name="logos_source_note">Externe Logos sind dein Logopaket, danach die der kostenlosen TV-Guides. Ein Sender ohne Logo zeigt seine Initialen. Ein von Hand gewähltes Logo hat immer Vorrang.</string>
+    <string name="logos_groups_title">Gruppenlogos</string>
+    <string name="logos_groups_external">Externe Gruppenlogos</string>
+    <string name="logos_groups_external_desc">Senderlogos und Flaggen neben den Gruppen (☰). Aus, oder wenn keines gefunden wird, erscheint das Emoji des Anbieters.</string>
+    <string name="logo_pack_desc">Die Adresse einer index.json mit deinen eigenen Logos (z. B. Vereinswappen) für die darin genannten Sender. Einfacher über die Handy-Seite.</string>
 </resources>

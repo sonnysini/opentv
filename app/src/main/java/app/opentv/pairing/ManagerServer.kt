@@ -12,6 +12,7 @@ import app.opentv.core.AppSettings
 import app.opentv.core.SettingsBackup
 import app.opentv.core.LiveLayout
 import app.opentv.core.LogoPack
+import app.opentv.core.LogoSource
 import app.opentv.core.ServiceLocator
 import app.opentv.data.model.Channel
 import app.opentv.data.model.GroupMerge
@@ -587,18 +588,30 @@ class ManagerServer(
         writeOk(output)
     }
 
-    private fun logoPackDto(error: String?) =
-        LogoPackDto(url = settings.logoPackUrl.value, count = settings.logoPack.value.byKey.size, error = error)
+    private fun logoPackDto(error: String?) = LogoPackDto(
+        url = settings.logoPackUrl.value,
+        count = settings.logoPack.value.byKey.size,
+        error = error,
+        source = settings.logoSource.value.name,
+        externalGroups = settings.externalGroupLogos.value,
+    )
 
-    /** `POST /logopack {url}` → save the logo pack address and load it now; blank removes the pack. */
+    /**
+     * `POST /logopack {url?, source?, externalGroups?}` → Settings › Logos from the phone. Each field
+     * is optional: a url is saved and loaded now (blank removes the pack), source and externalGroups
+     * set the two choices.
+     */
     private fun handleLogoPack(output: OutputStream, body: String) {
         val req = runCatching { json.decodeFromString(LogoPackReq.serializer(), body) }.getOrNull()
         if (req == null) {
             output.write(PairingHttp.httpResponse("400 Bad Request", "text/plain", "Bad request."))
             return
         }
-        settings.setLogoPackUrl(req.url)
-        val error = if (req.url.isBlank()) null else runBlocking {
+        req.source?.let { name -> runCatching { LogoSource.valueOf(name) }.getOrNull()?.let(settings::setLogoSource) }
+        req.externalGroups?.let(settings::setExternalGroupLogos)
+        val url = req.url ?: return writeJson(output, LogoPackDto.serializer(), logoPackDto(null))
+        settings.setLogoPackUrl(url)
+        val error = if (url.isBlank()) null else runBlocking {
             runCatching { LogoPack.refresh(settings, ServiceLocator.get(appContext).httpClient) }
                 .exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }
         }
@@ -777,9 +790,19 @@ class ManagerServer(
 
 @Serializable private data class TestDto(val ok: Boolean, val error: String?)
 
-@Serializable private data class LogoPackReq(val url: String = "")
+@Serializable private data class LogoPackReq(
+    val url: String? = null,
+    val source: String? = null,
+    val externalGroups: Boolean? = null,
+)
 
-@Serializable private data class LogoPackDto(val url: String, val count: Int, val error: String?)
+@Serializable private data class LogoPackDto(
+    val url: String,
+    val count: Int,
+    val error: String?,
+    val source: String,
+    val externalGroups: Boolean,
+)
 
 @Serializable private data class SourceReq(
     val kind: String = "xtream",

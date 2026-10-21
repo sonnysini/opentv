@@ -119,7 +119,7 @@
     <string name="player_none_available">Geen beschikbaar</string>
     <string name="player_subtitles_off">Uit</string>
     <string name="settings_providers_title">Providers</string>
-    <string name="settings_providers_subtitle">Voeg je IPTV-bronnen toe, verwijder ze of test ze opnieuw</string>
+    <string name="settings_providers_subtitle">IPTV-bronnen toevoegen, verwijderen en opnieuw testen; kies wat je downloadt</string>
     <string name="settings_addons_title">Add-ons (Stremio)</string>
     <string name="settings_addons_subtitle">Afspelen vanuit Stremio-add-ons die je zelf hebt ingesteld</string>
     <string name="addons_note">Voeg een Stremio-add-on toe door de manifest-URL te plakken. OpenTV wordt zonder geleverd — je voegt je eigen toe. Als de add-on debrid-ondersteund is, stel je debrid-sleutel dan in op de site van de add-on zelf en plak de gepersonaliseerde URL die je daar krijgt; je sleutel blijft daar, nooit in OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Verberg zenders of maak ze favoriet</string>
     <string name="settings_webmanager_title">Beheren op telefoon of laptop</string>
     <string name="settings_webmanager_subtitle">Organiseer zenders in een browser, met toetsenbord en muis</string>
-    <string name="settings_display_title">Beeld en afspelen</string>
-    <string name="settings_display_subtitle">Thema, ondertitels, live voorbeeld van de gids</string>
     <string name="settings_recording_title">Opname</string>
     <string name="settings_recording_subtitle">Waar opnames worden opgeslagen — deze box of een NAS</string>
     <string name="settings_parental_title">Ouderlijk toezicht</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Delen vanaf hier</string>
     <string name="sync_receive">Ontvangen</string>
     <string name="sync_ready_to_share">Klaar om te delen</string>
-    <string name="sync_on_other_device">Op het andere apparaat: Instellingen → Synchroniseren → Ontvangen, en voer in:</string>
+    <string name="sync_on_other_device">Op het andere apparaat: Instellingen → Kijkgeschiedenis synchroniseren → Ontvangen, en voer in:</string>
     <string name="sync_address">Adres</string>
     <string name="sync_code">Code</string>
     <string name="sync_type_in_one_go">Of typ het in één keer:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Sleutel opslaan</string>
     <string name="settings_tmdb_saved">TMDB-sleutel opgeslagen</string>
     <string name="settings_tmdb_active">Actief</string>
+    <string name="settings_hub_sources">Bronnen</string>
+    <string name="settings_hub_channels">Zenders</string>
+    <string name="settings_hub_watching">Kijken</string>
+    <string name="settings_hub_system">Systeem</string>
+    <string name="settings_appearance_subtitle">Stijl, thema, grootte, taal, zenderlijst</string>
+    <string name="settings_playback_subtitle">Kwaliteit, streamwissel, ondertitels, slaaptimer</string>
+    <string name="settings_section_player">Speler</string>
+    <string name="settings_tmdb_title">Films &amp; series (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Je TMDB-sleutel vult ontbrekende posters en beschrijvingen aan</string>
+    <string name="settings_logos_title">Logo\'s</string>
+    <string name="settings_logos_subtitle">Zender- en groepslogo\'s: van de provider of extern</string>
+    <string name="logos_channels_title">Zenderlogo\'s</string>
+    <string name="logos_source_provider">Alleen provider</string>
+    <string name="logos_source_provider_then_external">Provider, dan extern</string>
+    <string name="logos_source_external_then_provider">Extern, dan provider</string>
+    <string name="logos_source_note">Externe logo\'s zijn je logopakket, daarna die van de gratis tv-gidsen. Een zender zonder logo toont zijn initialen. Een met de hand gekozen logo wint altijd.</string>
+    <string name="logos_groups_title">Groepslogo\'s</string>
+    <string name="logos_groups_external">Externe groepslogo\'s</string>
+    <string name="logos_groups_external_desc">Omroeplogo\'s en vlaggen naast de groepen (☰). Uit, of als er geen gevonden wordt, verschijnt de emoji van de provider.</string>
+    <string name="logo_pack_desc">Het adres van een index.json met je eigen logo\'s (clubwapens bijvoorbeeld), voor de zenders die erin staan. Makkelijker via de telefoonpagina.</string>
 </resources>

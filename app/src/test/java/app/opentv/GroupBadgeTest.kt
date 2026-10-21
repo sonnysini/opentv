@@ -46,4 +46,13 @@ class GroupBadgeTest {
         assertThat(GroupBadge.of("?")).isEqualTo(GroupBadge.Result("?", null))
         assertThat(GroupBadge.of("-- Sport --").badge).isNull()
     }
+
+    @Test
+    fun withoutOutsideLogosOnlyTheProvidersEmojiShows() {
+        assertThat(GroupBadge.of("🏀 DAZN BASKETBALL", external = false))
+            .isEqualTo(GroupBadge.Result("DAZN BASKETBALL", GroupBadge.Emoji("🏀")))
+        assertThat(GroupBadge.of("🇮🇹  Top Italia", external = false))
+            .isEqualTo(GroupBadge.Result("Top Italia", GroupBadge.Emoji("🇮🇹")))
+        assertThat(GroupBadge.of("Sky Sport", external = false)).isEqualTo(GroupBadge.Result("Sky Sport", null))
+    }
 }

@@ -97,6 +97,10 @@ fun ProvidersScreen(
                     onSetLiveFormat = { viewModel.setLiveFormat(source, it) },
                 )
             }
+            item(key = "content") {
+                Spacer(Modifier.height(8.dp))
+                ContentSection()
+            }
         }
     }
 }

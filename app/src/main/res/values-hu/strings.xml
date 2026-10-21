@@ -119,7 +119,7 @@
     <string name="player_none_available">Nincs elérhető</string>
     <string name="player_subtitles_off">Kikapcsolva</string>
     <string name="settings_providers_title">Szolgáltatók</string>
-    <string name="settings_providers_subtitle">IPTV-forrásainak hozzáadása, eltávolítása és újratesztelése</string>
+    <string name="settings_providers_subtitle">IPTV-források hozzáadása, eltávolítása és újratesztelése; mi töltődjön le</string>
     <string name="settings_addons_title">Bővítmények (Stremio)</string>
     <string name="settings_addons_subtitle">Lejátszás az Ön által beállított Stremio-bővítményekből</string>
     <string name="addons_note">Adjon hozzá egy Stremio-bővítményt a manifest URL-jének beillesztésével. Az OpenTV egyet sem tartalmaz — Ön hozza a sajátját. Ha a bővítmény debrid-alapú, állítsa be a debrid kulcsát a bővítmény saját weboldalán, és illessze be az onnan kapott személyre szabott URL-t; a kulcsa ott marad, soha nem kerül az OpenTV-be.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Egyes csatornák elrejtése vagy kedvencnek jelölése</string>
     <string name="settings_webmanager_title">Kezelés telefonon vagy laptopon</string>
     <string name="settings_webmanager_subtitle">Csatornák rendezése böngészőben, billentyűzettel és egérrel</string>
-    <string name="settings_display_title">Kijelző &amp; lejátszás</string>
-    <string name="settings_display_subtitle">Téma, feliratok, élő előnézet a műsorújságban</string>
     <string name="settings_recording_title">Felvétel</string>
     <string name="settings_recording_subtitle">Hová kerülnek a felvételek — erre a készülékre vagy egy NAS-ra</string>
     <string name="settings_parental_title">Szülői felügyelet</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Megosztás innen</string>
     <string name="sync_receive">Fogadás</string>
     <string name="sync_ready_to_share">Kész a megosztásra</string>
-    <string name="sync_on_other_device">A másik eszközön: Beállítások → Szinkronizálás → Fogadás, majd adja meg:</string>
+    <string name="sync_on_other_device">A másik eszközön: Beállítások → Megtekintési előzmények szinkronizálása → Fogadás, majd adja meg:</string>
     <string name="sync_address">Cím</string>
     <string name="sync_code">Kód</string>
     <string name="sync_type_in_one_go">Vagy írja be egyben:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Kulcs mentése</string>
     <string name="settings_tmdb_saved">TMDB-kulcs elmentve</string>
     <string name="settings_tmdb_active">Aktív</string>
+    <string name="settings_hub_sources">Források</string>
+    <string name="settings_hub_channels">Csatornák</string>
+    <string name="settings_hub_watching">Nézés</string>
+    <string name="settings_hub_system">Rendszer</string>
+    <string name="settings_appearance_subtitle">Stílus, téma, méret, nyelv, csatornalista</string>
+    <string name="settings_playback_subtitle">Minőség, streamváltás, felirat, elalvási időzítő</string>
+    <string name="settings_section_player">Lejátszó</string>
+    <string name="settings_tmdb_title">Filmek és sorozatok (TMDB)</string>
+    <string name="settings_tmdb_subtitle">A TMDB-kulcsod pótolja a hiányzó plakátokat és tartalmakat</string>
+    <string name="settings_logos_title">Logók</string>
+    <string name="settings_logos_subtitle">Csatorna- és csoportlogók: a szolgáltatóé vagy külső</string>
+    <string name="logos_channels_title">Csatornalogók</string>
+    <string name="logos_source_provider">Csak szolgáltató</string>
+    <string name="logos_source_provider_then_external">Szolgáltató, aztán külső</string>
+    <string name="logos_source_external_then_provider">Külső, aztán szolgáltató</string>
+    <string name="logos_source_note">A külső logók a logócsomagod, majd az ingyenes tévéműsor-újságok logói. A logó nélküli csatorna a kezdőbetűit mutatja. A kézzel választott logó mindig nyer.</string>
+    <string name="logos_groups_title">Csoportlogók</string>
+    <string name="logos_groups_external">Külső csoportlogók</string>
+    <string name="logos_groups_external_desc">Műsorszolgáltatói logók és zászlók a csoportok mellett (☰). Kikapcsolva, vagy ha nincs találat, a szolgáltató emojija jelenik meg.</string>
+    <string name="logo_pack_desc">Egy index.json címe a saját logóiddal (pl. csapatcímerek) az abban szereplő csatornákhoz. Egyszerűbb a telefonos oldalról.</string>
 </resources>

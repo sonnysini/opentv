@@ -173,7 +173,7 @@ fun FullscreenLive(
         favouritesOnly -> favouritesLabel
         selectedCategory == null -> allLabel
         else -> categories.firstOrNull { selectedCategory in it.memberKeys }?.let { g ->
-            if (LocalGroupBadges.current) GroupBadge.of(g.rawName).label else g.rawName
+            GroupBadge.of(g.rawName).label
         } ?: ""
     }
 
@@ -318,14 +318,14 @@ private fun GroupsList(
         val section: String? = null,
         val pick: () -> Unit = {},
     )
-    val badges = LocalGroupBadges.current
-    fun shown(name: String) = if (badges) GroupBadge.of(name) else GroupBadge.Result(name, null)
+    val external = LocalExternalGroupLogos.current
+    fun shown(name: String) = GroupBadge.of(name, external)
     val recentTitle = stringResource(R.string.live_groups_recent)
     val allTitle = stringResource(R.string.live_groups_all)
     // The remembered entries' picks go through these, so they always reach the latest callbacks.
     val selectCategory by rememberUpdatedState(onSelectCategory)
     val selectFavourites by rememberUpdatedState(onSelectFavourites)
-    val entries = remember(categories, selectedCategory, favouritesOnly, counts, recentGroups, badges, favouritesLabel, allLabel) {
+    val entries = remember(categories, selectedCategory, favouritesOnly, counts, recentGroups, external, favouritesLabel, allLabel) {
         val allSelected = !favouritesOnly && selectedCategory == null
         fun all(prefix: String) = Entry(prefix + "all", allLabel, allSelected, counts[LAST_GROUP_ALL]) { selectCategory(null) }
         fun group(prefix: String, g: ChannelsViewModel.CategoryGroup): Entry {
@@ -365,7 +365,6 @@ private fun GroupsList(
             CategoryEntry(
                 label = entry.label,
                 badge = entry.badge,
-                showBadges = badges,
                 selected = entry.selected,
                 count = entry.count,
                 open = open,
@@ -562,7 +561,6 @@ private fun FocusedList(
 private fun CategoryEntry(
     label: String,
     badge: GroupBadge.Badge?,
-    showBadges: Boolean,
     selected: Boolean,
     count: Int?,
     // Open: badge, name and count, focusable. Closed: the badge alone, which can't take focus.
@@ -603,7 +601,7 @@ private fun CategoryEntry(
         Box(Modifier.size(width = 80.dp, height = 40.dp), contentAlignment = Alignment.Center) {
             when {
                 // Without a badge a closed strip still needs something to tell the groups apart.
-                !showBadges || badge == null -> if (!open) Initials(label)
+                badge == null -> if (!open) Initials(label)
                 badge is GroupBadge.Image -> AsyncImage(
                     model = badge.url,
                     contentDescription = null,

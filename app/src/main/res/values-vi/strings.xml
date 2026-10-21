@@ -119,7 +119,7 @@
     <string name="player_none_available">Không có sẵn</string>
     <string name="player_subtitles_off">Tắt</string>
     <string name="settings_providers_title">Nhà cung cấp</string>
-    <string name="settings_providers_subtitle">Thêm, xóa và kiểm tra lại nguồn IPTV của bạn</string>
+    <string name="settings_providers_subtitle">Thêm, xóa và kiểm tra lại nguồn IPTV; chọn nội dung cần tải</string>
     <string name="settings_addons_title">Tiện ích mở rộng (Stremio)</string>
     <string name="settings_addons_subtitle">Phát từ các tiện ích Stremio bạn tự thiết lập</string>
     <string name="addons_note">Thêm một tiện ích Stremio bằng cách dán URL manifest của nó. OpenTV không đi kèm sẵn tiện ích nào — bạn tự thêm. Nếu tiện ích dùng debrid, hãy thiết lập khóa debrid của bạn trên trang web của tiện ích đó và dán URL cá nhân hóa mà nó cung cấp; khóa của bạn ở lại đó, không bao giờ nằm trong OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Ẩn hoặc đánh dấu yêu thích từng kênh</string>
     <string name="settings_webmanager_title">Quản lý trên điện thoại hoặc laptop</string>
     <string name="settings_webmanager_subtitle">Sắp xếp kênh trên trình duyệt, với bàn phím và chuột</string>
-    <string name="settings_display_title">Hiển thị &amp; phát lại</string>
-    <string name="settings_display_subtitle">Giao diện, phụ đề, xem trước lịch phát trực tiếp</string>
     <string name="settings_recording_title">Ghi hình</string>
     <string name="settings_recording_subtitle">Nơi lưu bản ghi — thiết bị này hoặc NAS</string>
     <string name="settings_parental_title">Kiểm soát của phụ huynh</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Chia sẻ từ đây</string>
     <string name="sync_receive">Nhận</string>
     <string name="sync_ready_to_share">Sẵn sàng chia sẻ</string>
-    <string name="sync_on_other_device">Trên thiết bị kia: Cài đặt → Đồng bộ → Nhận, và nhập:</string>
+    <string name="sync_on_other_device">Trên thiết bị kia: Cài đặt → Đồng bộ lịch sử xem → Nhận, và nhập:</string>
     <string name="sync_address">Địa chỉ</string>
     <string name="sync_code">Mã</string>
     <string name="sync_type_in_one_go">Hoặc nhập một lần:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Lưu khóa</string>
     <string name="settings_tmdb_saved">Đã lưu khóa TMDB</string>
     <string name="settings_tmdb_active">Đang hoạt động</string>
+    <string name="settings_hub_sources">Nguồn</string>
+    <string name="settings_hub_channels">Kênh</string>
+    <string name="settings_hub_watching">Xem</string>
+    <string name="settings_hub_system">Hệ thống</string>
+    <string name="settings_appearance_subtitle">Kiểu, chủ đề, kích thước, ngôn ngữ, danh sách kênh</string>
+    <string name="settings_playback_subtitle">Chất lượng, đổi luồng, phụ đề, hẹn giờ tắt</string>
+    <string name="settings_section_player">Trình phát</string>
+    <string name="settings_tmdb_title">Phim &amp; phim bộ (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Khóa TMDB của bạn bổ sung áp phích và tóm tắt còn thiếu</string>
+    <string name="settings_logos_title">Logo</string>
+    <string name="settings_logos_subtitle">Logo kênh và nhóm: của nhà cung cấp hoặc bên ngoài</string>
+    <string name="logos_channels_title">Logo kênh</string>
+    <string name="logos_source_provider">Chỉ nhà cung cấp</string>
+    <string name="logos_source_provider_then_external">Nhà cung cấp, rồi bên ngoài</string>
+    <string name="logos_source_external_then_provider">Bên ngoài, rồi nhà cung cấp</string>
+    <string name="logos_source_note">Logo bên ngoài là gói logo của bạn, sau đó là logo từ các hướng dẫn TV miễn phí. Kênh không có logo sẽ hiện chữ cái đầu. Logo bạn tự chọn cho một kênh luôn được ưu tiên.</string>
+    <string name="logos_groups_title">Logo nhóm</string>
+    <string name="logos_groups_external">Logo nhóm từ bên ngoài</string>
+    <string name="logos_groups_external_desc">Logo đài và cờ bên cạnh các nhóm (☰). Khi tắt, hoặc không tìm thấy, sẽ hiện emoji của nhà cung cấp.</string>
+    <string name="logo_pack_desc">Địa chỉ của index.json liệt kê logo riêng của bạn (ví dụ huy hiệu đội bóng) cho các kênh được nêu. Dễ đặt hơn từ trang điện thoại.</string>
 </resources>

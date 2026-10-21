@@ -6,6 +6,7 @@
 package app.opentv.data.model
 
 import app.opentv.core.LogoPack
+import app.opentv.core.LogoSource
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
@@ -131,7 +132,7 @@ data class Channel(
     val logoUrl: String?,
     /**
      * The `<icon>` of the guide this channel is matched to, refreshed by the matcher. Shown when
-     * the provider has no logo, or instead of the provider's when the user prefers guide logos.
+     * Settings › Logos allows it (before or after the provider's).
      */
     val guideLogoUrl: String? = null,
     /** Guide id supplied by the provider, when it bothers. Often blank. */
@@ -230,13 +231,18 @@ object TimeShift {
 val Channel.shownName: String get() = customName?.takeIf { it.isNotBlank() } ?: displayName
 
 /**
- * The logo to show: the user's logo pack first, then the provider's, else the guide's — the last
- * two the other way round when [preferGuide].
+ * The logo to show: one picked by hand for this channel, else as [source] says — the provider's
+ * alone, or the provider's and the outside ones (logo pack, then the guide's) in either order.
  */
-fun Channel.logo(preferGuide: Boolean, pack: LogoPack = LogoPack.EMPTY): String? {
-    pack.logoFor(groupKey)?.let { return it }
+fun Channel.logo(source: LogoSource, pack: LogoPack = LogoPack.EMPTY): String? {
+    pack.customFor(groupKey)?.let { return it }
     val provider = logoUrl?.takeIf { it.isNotBlank() }
-    return if (preferGuide) guideLogoUrl ?: provider else provider ?: guideLogoUrl
+    val external = { pack.packFor(groupKey) ?: guideLogoUrl?.takeIf { it.isNotBlank() } }
+    return when (source) {
+        LogoSource.PROVIDER -> provider
+        LogoSource.PROVIDER_THEN_EXTERNAL -> provider ?: external()
+        LogoSource.EXTERNAL_THEN_PROVIDER -> external() ?: provider
+    }
 }
 
 /**

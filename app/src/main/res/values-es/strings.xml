@@ -119,7 +119,7 @@
     <string name="player_none_available">Ninguno disponible</string>
     <string name="player_subtitles_off">Desactivado</string>
     <string name="settings_providers_title">Proveedores</string>
-    <string name="settings_providers_subtitle">Agrega, quita y vuelve a probar tus fuentes IPTV</string>
+    <string name="settings_providers_subtitle">Añade, quita y vuelve a probar tus fuentes IPTV; elige qué descargar</string>
     <string name="settings_addons_title">Complementos (Stremio)</string>
     <string name="settings_addons_subtitle">Reproduce contenido de complementos de Stremio que configures tú mismo</string>
     <string name="addons_note">Agrega un complemento de Stremio pegando la URL de su manifiesto. OpenTV no incluye ninguno — tú agregas los tuyos. Si el complemento funciona con un servicio debrid, configura tu clave debrid en el sitio del complemento y pega la URL personalizada que te dé; tu clave se queda ahí, nunca en OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Oculta canales individuales o márcalos como favoritos</string>
     <string name="settings_webmanager_title">Gestionar desde el teléfono o la computadora</string>
     <string name="settings_webmanager_subtitle">Organiza canales en un navegador, con teclado y mouse</string>
-    <string name="settings_display_title">Pantalla y reproducción</string>
-    <string name="settings_display_subtitle">Tema, subtítulos, vista previa en vivo de la guía</string>
     <string name="settings_recording_title">Grabación</string>
     <string name="settings_recording_subtitle">Dónde se guardan las grabaciones — este dispositivo o un NAS</string>
     <string name="settings_parental_title">Control parental</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Compartir desde aquí</string>
     <string name="sync_receive">Recibir</string>
     <string name="sync_ready_to_share">Listo para compartir</string>
-    <string name="sync_on_other_device">En el otro dispositivo: Ajustes → Sincronizar → Recibir, e ingresa:</string>
+    <string name="sync_on_other_device">En el otro dispositivo: Ajustes → Sincronizar historial de visualización → Recibir, e ingresa:</string>
     <string name="sync_address">Dirección</string>
     <string name="sync_code">Código</string>
     <string name="sync_type_in_one_go">O escríbelo todo junto:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Guardar clave</string>
     <string name="settings_tmdb_saved">Clave de TMDB guardada</string>
     <string name="settings_tmdb_active">Activa</string>
+    <string name="settings_hub_sources">Fuentes</string>
+    <string name="settings_hub_channels">Canales</string>
+    <string name="settings_hub_watching">Reproducción y vista</string>
+    <string name="settings_hub_system">Sistema</string>
+    <string name="settings_appearance_subtitle">Estilo, tema, tamaño, idioma, lista de canales</string>
+    <string name="settings_playback_subtitle">Calidad, cambio de stream, subtítulos, temporizador</string>
+    <string name="settings_section_player">Reproductor</string>
+    <string name="settings_tmdb_title">Películas y series (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Tu clave de TMDB completa los pósters y sinopsis que faltan</string>
+    <string name="settings_logos_title">Logotipos</string>
+    <string name="settings_logos_subtitle">Logotipos de canales y grupos: del proveedor o externos</string>
+    <string name="logos_channels_title">Logotipos de canales</string>
+    <string name="logos_source_provider">Solo el proveedor</string>
+    <string name="logos_source_provider_then_external">Proveedor, luego externos</string>
+    <string name="logos_source_external_then_provider">Externos, luego proveedor</string>
+    <string name="logos_source_note">Los logotipos externos son tu paquete de logotipos y después los de las guías de TV gratuitas. Un canal sin logotipo muestra sus iniciales. Un logotipo elegido a mano para un canal siempre gana.</string>
+    <string name="logos_groups_title">Logotipos de grupos</string>
+    <string name="logos_groups_external">Logotipos de grupos externos</string>
+    <string name="logos_groups_external_desc">Logotipos de cadenas y banderas junto a los grupos (☰). Desactivado, o si no se encuentra ninguno, se muestra el emoji del proveedor.</string>
+    <string name="logo_pack_desc">La dirección de un index.json con tus propios logotipos (escudos de equipos, por ejemplo), para los canales que nombra. Más cómodo desde la página del teléfono.</string>
 </resources>

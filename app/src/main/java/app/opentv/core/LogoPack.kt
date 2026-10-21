@@ -15,8 +15,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
- * A logo pack: the user's own set of logos (team crests, say) that beats the provider's and the
- * guide's on the channels it names. The app ships no logos — the pack lives wherever the user
+ * Settings › Logos: where a channel's logo comes from. "External" is the logo pack, then the
+ * free guides' icons. A logo picked by hand for one channel beats all three.
+ */
+enum class LogoSource { PROVIDER, PROVIDER_THEN_EXTERNAL, EXTERNAL_THEN_PROVIDER }
+
+/**
+ * A logo pack: the user's own set of logos (team crests, say) for the channels it names, used as
+ * [LogoSource] says. The app ships no logos — the pack lives wherever the user
  * hosts it, as an `index.json` next to the images:
  *
  * ```
@@ -37,10 +43,14 @@ class LogoPack(val byKey: Map<String, String>, val custom: Map<String, String> =
      * The logo for a channel with this group key, or null: one the user picked for that exact
      * channel (channel menu › Change logo) first, then the pack's.
      */
-    fun logoFor(groupKey: String): String? {
-        if (groupKey.isEmpty()) return null
-        custom[groupKey]?.let { return it }
-        if (byKey.isEmpty()) return null
+    fun logoFor(groupKey: String): String? = customFor(groupKey) ?: packFor(groupKey)
+
+    /** The logo picked by hand for this exact channel, if any. */
+    fun customFor(groupKey: String): String? = if (groupKey.isEmpty()) null else custom[groupKey]
+
+    /** The pack's logo for this channel, if the pack names it. */
+    fun packFor(groupKey: String): String? {
+        if (groupKey.isEmpty() || byKey.isEmpty()) return null
         val base = groupKey.substringBefore('+')
         return byKey[base] ?: ChannelNameNormalizer.teamOf(base)?.let(byKey::get)
     }

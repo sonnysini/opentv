@@ -19,21 +19,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,30 +66,46 @@ fun SettingsHubScreen(
     onOpenProviders: () -> Unit,
     onOpenAddons: () -> Unit,
     onOpenGuide: () -> Unit,
+    onOpenTmdb: () -> Unit,
     onOpenChannels: () -> Unit,
     onOpenCategories: () -> Unit,
     onOpenGrouping: () -> Unit,
+    onOpenLogos: () -> Unit,
     onOpenWebManager: () -> Unit,
-    onOpenDisplay: () -> Unit,
+    onOpenAppearance: () -> Unit,
+    onOpenPlayback: () -> Unit,
     onOpenParental: () -> Unit,
     onOpenSync: () -> Unit,
     onOpenRecordings: () -> Unit,
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val entries = listOf(
-        HubEntry(Icons.Filled.Dns, stringResource(R.string.settings_providers_title), stringResource(R.string.settings_providers_subtitle), onOpenProviders),
-        HubEntry(Icons.Filled.Extension, stringResource(R.string.settings_addons_title), stringResource(R.string.settings_addons_subtitle), onOpenAddons),
-        HubEntry(Icons.Filled.LiveTv, stringResource(R.string.settings_guide_title), stringResource(R.string.settings_guide_subtitle), onOpenGuide),
-        HubEntry(Icons.Filled.GridView, stringResource(R.string.common_channels), stringResource(R.string.settings_channels_subtitle), onOpenChannels),
-        HubEntry(Icons.Filled.Category, stringResource(R.string.settings_categories_title), stringResource(R.string.settings_categories_subtitle), onOpenCategories),
-        HubEntry(Icons.Filled.Link, stringResource(R.string.settings_grouping_title), stringResource(R.string.settings_grouping_subtitle), onOpenGrouping),
-        HubEntry(Icons.Filled.PhoneAndroid, stringResource(R.string.settings_webmanager_title), stringResource(R.string.settings_webmanager_subtitle), onOpenWebManager),
-        HubEntry(Icons.Filled.Tune, stringResource(R.string.settings_display_title), stringResource(R.string.settings_display_subtitle), onOpenDisplay),
-        HubEntry(Icons.Filled.Storage, stringResource(R.string.settings_recording_title), stringResource(R.string.settings_recording_subtitle), onOpenRecordings),
-        HubEntry(Icons.Filled.Lock, stringResource(R.string.settings_parental_title), stringResource(R.string.settings_parental_subtitle), onOpenParental),
-        HubEntry(Icons.Filled.Sync, stringResource(R.string.settings_sync_title), stringResource(R.string.settings_sync_subtitle), onOpenSync),
-        HubEntry(Icons.Filled.Info, stringResource(R.string.settings_about_title), stringResource(R.string.settings_about_subtitle), onOpenAbout),
+    // Four sections: where content comes from, how channels are organised, how watching
+    // behaves, and the rest.
+    val sections = listOf(
+        stringResource(R.string.settings_hub_sources) to listOf(
+            HubEntry(Icons.Filled.Dns, stringResource(R.string.settings_providers_title), stringResource(R.string.settings_providers_subtitle), onOpenProviders),
+            HubEntry(Icons.Filled.Extension, stringResource(R.string.settings_addons_title), stringResource(R.string.settings_addons_subtitle), onOpenAddons),
+            HubEntry(Icons.Filled.LiveTv, stringResource(R.string.settings_guide_title), stringResource(R.string.settings_guide_subtitle), onOpenGuide),
+            HubEntry(Icons.Filled.Movie, stringResource(R.string.settings_tmdb_title), stringResource(R.string.settings_tmdb_subtitle), onOpenTmdb),
+        ),
+        stringResource(R.string.settings_hub_channels) to listOf(
+            HubEntry(Icons.Filled.Category, stringResource(R.string.settings_categories_title), stringResource(R.string.settings_categories_subtitle), onOpenCategories),
+            HubEntry(Icons.Filled.GridView, stringResource(R.string.common_channels), stringResource(R.string.settings_channels_subtitle), onOpenChannels),
+            HubEntry(Icons.Filled.Link, stringResource(R.string.settings_grouping_title), stringResource(R.string.settings_grouping_subtitle), onOpenGrouping),
+            HubEntry(Icons.Filled.Image, stringResource(R.string.settings_logos_title), stringResource(R.string.settings_logos_subtitle), onOpenLogos),
+            HubEntry(Icons.Filled.PhoneAndroid, stringResource(R.string.settings_webmanager_title), stringResource(R.string.settings_webmanager_subtitle), onOpenWebManager),
+        ),
+        stringResource(R.string.settings_hub_watching) to listOf(
+            HubEntry(Icons.Filled.Palette, stringResource(R.string.settings_appearance), stringResource(R.string.settings_appearance_subtitle), onOpenAppearance),
+            HubEntry(Icons.Filled.PlayCircle, stringResource(R.string.settings_section_playback), stringResource(R.string.settings_playback_subtitle), onOpenPlayback),
+            HubEntry(Icons.Filled.Storage, stringResource(R.string.settings_recording_title), stringResource(R.string.settings_recording_subtitle), onOpenRecordings),
+        ),
+        stringResource(R.string.settings_hub_system) to listOf(
+            HubEntry(Icons.Filled.Lock, stringResource(R.string.settings_parental_title), stringResource(R.string.settings_parental_subtitle), onOpenParental),
+            HubEntry(Icons.Filled.Sync, stringResource(R.string.settings_sync_title), stringResource(R.string.settings_sync_subtitle), onOpenSync),
+            HubEntry(Icons.Filled.Info, stringResource(R.string.settings_about_title), stringResource(R.string.settings_about_subtitle), onOpenAbout),
+        ),
     )
 
     Column(
@@ -103,13 +121,29 @@ fun SettingsHubScreen(
             HubTextButton(stringResource(R.string.common_done), onBack)
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(12.dp))
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(entries) { entry -> HubRow(entry) }
+            sections.forEach { (title, entries) ->
+                // The header rides with the first row so every list item can take focus.
+                items(entries.size) { i ->
+                    Column {
+                        if (i == 0) {
+                            Text(
+                                title.uppercase(),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 6.dp, top = 12.dp, bottom = 8.dp),
+                            )
+                        }
+                        HubRow(entries[i])
+                    }
+                }
+            }
         }
     }
 }

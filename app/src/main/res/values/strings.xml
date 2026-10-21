@@ -136,7 +136,7 @@
     <!-- ============================ Settings hub ============================ -->
     <string name="settings_providers_title">Providers</string>
     <string name="settings_edit_provider_title">Edit provider</string>
-    <string name="settings_providers_subtitle">Add, remove and re-test your IPTV sources</string>
+    <string name="settings_providers_subtitle">Add, remove and re-test your IPTV sources; choose what to download</string>
     <string name="settings_addons_title">Add-ons (Stremio)</string>
     <string name="settings_addons_subtitle">Play from Stremio add-ons you set up yourself</string>
     <string name="addons_note">Add a Stremio add-on by pasting its manifest URL. OpenTV ships with none — you bring your own. If the add-on is debrid-backed, set your debrid key up on the add-on\'s own site and paste the personalised URL it gives you; your key stays there, never in OpenTV.</string>
@@ -151,8 +151,6 @@
     <string name="settings_channels_subtitle">Hide or favourite individual channels</string>
     <string name="settings_webmanager_title">Manage on phone or laptop</string>
     <string name="settings_webmanager_subtitle">Organise channels in a browser, with a keyboard and mouse</string>
-    <string name="settings_display_title">Display &amp; playback</string>
-    <string name="settings_display_subtitle">Theme, subtitles, live guide preview</string>
     <string name="settings_recording_title">Recording</string>
     <string name="settings_recording_subtitle">Where recordings are saved — this box or a NAS</string>
     <string name="settings_parental_title">Parental controls</string>
@@ -314,14 +312,12 @@
     <!-- ============================ TV guide (EPG) settings ============================ -->
     <string name="epg_updating">Updating…</string>
     <string name="epg_update_now">Update guide now</string>
-    <string name="epg_prefer_logos">Logos from the guide</string>
     <string name="logo_pack_title">Logo pack</string>
-    <string name="logo_pack_desc">The address of an index.json listing your own logos (team crests, say). They replace the provider\'s and the guide\'s on the channels they name. Easier to set from the phone page.</string>
+    <string name="logo_pack_desc">The address of an index.json listing your own logos (team crests, say), for the channels it names. Easier to set from the phone page.</string>
     <string name="logo_pack_url">Logo pack address</string>
     <string name="logo_pack_load">Load</string>
     <string name="logo_pack_loaded">%1$d names in the pack</string>
     <string name="logo_pack_failed">Could not load the pack: %1$s</string>
-    <string name="epg_prefer_logos_desc">Show the TV guide\'s channel logos instead of your provider\'s. Off: the guide\'s logos are only used where the provider has none.</string>
     <string name="epg_desc">Your provider\'s guide is used automatically. If it\'s empty — many are — turn on a free guide for your country and channels are matched to it by name.</string>
     <string name="epg_add_own">Add your own guide (XMLTV URL)</string>
     <string name="epg_name_optional">Name (optional)</string>
@@ -333,7 +329,7 @@
     <string name="sync_share_from_here">Share from here</string>
     <string name="sync_receive">Receive</string>
     <string name="sync_ready_to_share">Ready to share</string>
-    <string name="sync_on_other_device">On the other device: Settings → Sync → Receive, and enter:</string>
+    <string name="sync_on_other_device">On the other device: Settings → Sync watch history → Receive, and enter:</string>
     <string name="sync_address">Address</string>
     <string name="sync_code">Code</string>
     <string name="sync_type_in_one_go">Or type it in one go:  %1$s#%2$s</string>
@@ -545,10 +541,8 @@
     <string name="categories_merge_sources">Merge groups by source</string>
     <string name="categories_merge_sources_desc">The same group split by source becomes one; pick the source from the Quality panel.</string>
     <string name="categories_strip_sources">Hide source in group names</string>
-    <string name="categories_group_badges">Logos beside groups</string>
     <string name="categories_recent_groups">Recent groups</string>
     <string name="categories_recent_groups_desc">The groups you last watched from, at the top of the live groups list.</string>
-    <string name="categories_group_badges_desc">Broadcaster logo, flag or emoji next to each group in the category list (☰).</string>
     <string name="categories_strip_sources_desc">A group with a single source drops the source from its name: "Bambini (…)" reads "Bambini".</string>
     <string name="categories_foreign_sport">International sport</string>
     <string name="categories_foreign_sport_desc">ESPN+, NBA/NHL/MLB Pass, NCAA, PPV, beIN… — events with foreign commentary.</string>
@@ -723,4 +717,23 @@
     <string name="pp_sent_body">You can put your phone down — the rest happens on the telly.</string>
 
     <string name="pp_html_lang">en</string>
+    <string name="settings_hub_sources">Sources</string>
+    <string name="settings_hub_channels">Channels</string>
+    <string name="settings_hub_watching">Watching</string>
+    <string name="settings_hub_system">System</string>
+    <string name="settings_appearance_subtitle">Style, theme, size, language, channel list</string>
+    <string name="settings_playback_subtitle">Quality, stream switching, subtitles, sleep timer</string>
+    <string name="settings_section_player">Player</string>
+    <string name="settings_tmdb_title">Movies &amp; series (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Your TMDB key fills in missing posters and plots</string>
+    <string name="settings_logos_title">Logos</string>
+    <string name="settings_logos_subtitle">Channel and group logos: the provider\'s or from outside</string>
+    <string name="logos_channels_title">Channel logos</string>
+    <string name="logos_source_provider">Provider only</string>
+    <string name="logos_source_provider_then_external">Provider, then outside logos</string>
+    <string name="logos_source_external_then_provider">Outside logos, then provider</string>
+    <string name="logos_source_note">Outside logos are your logo pack, then the free TV guides\' ones. A channel with no logo shows its initials. A logo picked by hand for a channel always wins.</string>
+    <string name="logos_groups_title">Group logos</string>
+    <string name="logos_groups_external">Group logos from outside</string>
+    <string name="logos_groups_external_desc">Broadcaster logos and flags beside the groups (☰). Off, or when none is found, the provider\'s emoji shows instead.</string>
 </resources>

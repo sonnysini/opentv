@@ -64,15 +64,15 @@ fun LogoPickerDialog(
     onDismiss: () -> Unit,
 ) {
     val pack = LocalLogoPack.current
-    val preferGuide = LocalPreferGuideLogos.current
+    val source = LocalLogoSource.current
     val groupKey = row.primary.groupKey
-    val current = row.primary.logo(preferGuide, pack)
+    val current = row.primary.logo(source, pack)
     val similar by produceState(emptyList<String>(), groupKey) { value = catalog.similarLogos(groupKey) }
     val choices = remember(row, pack, similar) {
         buildList {
             pack.custom[groupKey]?.let(::add)
             row.variants.forEach { add(it.logoUrl); add(it.guideLogoUrl) }
-            add(LogoPack(pack.byKey).logoFor(groupKey))
+            add(pack.packFor(groupKey))
             addAll(similar)
         }.filterNotNull().filter { it.isNotBlank() }.distinct()
     }

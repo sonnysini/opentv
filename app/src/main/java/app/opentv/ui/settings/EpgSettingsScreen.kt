@@ -29,12 +29,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
@@ -53,11 +51,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
-import app.opentv.core.LogoPack
-import app.opentv.core.ServiceLocator
 import app.opentv.data.model.EpgFeed
 import app.opentv.ui.EpgViewModel
-import kotlinx.coroutines.launch
 
 /**
  * Guide settings: where guide data comes from.
@@ -74,9 +69,6 @@ fun EpgSettingsScreen(
     viewModel: EpgViewModel = viewModel(),
 ) {
     val ui by viewModel.ui.collectAsState()
-    val context = LocalContext.current
-    val settings = remember { ServiceLocator.get(context).settings }
-    val preferGuideLogos by settings.preferGuideLogos.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     var newName by remember { mutableStateOf("") }
@@ -116,15 +108,6 @@ fun EpgSettingsScreen(
         Spacer(Modifier.height(16.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                SwitchRow(
-                    label = stringResource(R.string.epg_prefer_logos),
-                    subtitle = stringResource(R.string.epg_prefer_logos_desc),
-                    checked = preferGuideLogos,
-                    onToggle = settings::setPreferGuideLogos,
-                )
-            }
-            item { LogoPackRow() }
             items(ui.feeds, key = { it.id }) { feed ->
                 FeedRow(
                     feed = feed,
@@ -223,72 +206,11 @@ private fun FeedRow(
  * On a TV remote a text field swallows up/down, so focus can never leave it. Up and down
  * move to the previous/next control instead; left and right still move the cursor.
  */
-private fun Modifier.dpadLeavesField(focusManager: FocusManager): Modifier = onPreviewKeyEvent { event ->
+internal fun Modifier.dpadLeavesField(focusManager: FocusManager): Modifier = onPreviewKeyEvent { event ->
     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
     when (event.key) {
         Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
         Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
         else -> false
-    }
-}
-
-/** Settings › TV guide › Logo pack: the address, a Load button and how the last load went. */
-@Composable
-private fun LogoPackRow() {
-    val context = LocalContext.current
-    val graph = remember { ServiceLocator.get(context) }
-    val saved by graph.settings.logoPackUrl.collectAsState()
-    val pack by graph.settings.logoPack.collectAsState()
-    val focusManager = LocalFocusManager.current
-    val scope = rememberCoroutineScope()
-    var url by remember(saved) { mutableStateOf(saved) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    Card {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(stringResource(R.string.logo_pack_title), style = MaterialTheme.typography.titleMedium)
-            Text(
-                stringResource(R.string.logo_pack_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.logo_pack_url)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.moveFocus(FocusDirection.Right) }),
-                    modifier = Modifier.weight(1f).dpadLeavesField(focusManager),
-                )
-                Spacer(Modifier.width(12.dp))
-                Button(
-                    enabled = !loading,
-                    onClick = {
-                        graph.settings.setLogoPackUrl(url)
-                        error = null
-                        if (url.isBlank()) return@Button
-                        loading = true
-                        scope.launch {
-                            runCatching { LogoPack.refresh(graph.settings, graph.httpClient) }
-                                .onFailure { error = it.message ?: it.javaClass.simpleName }
-                            loading = false
-                        }
-                    },
-                ) { Text(stringResource(R.string.logo_pack_load)) }
-            }
-            val status = error?.let { stringResource(R.string.logo_pack_failed, it) }
-                ?: if (saved.isNotEmpty() && pack.byKey.isNotEmpty()) stringResource(R.string.logo_pack_loaded, pack.byKey.size) else null
-            if (status != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    status,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
     }
 }

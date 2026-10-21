@@ -119,7 +119,7 @@
     <string name="player_none_available">Nic k dispozici</string>
     <string name="player_subtitles_off">Vypnuto</string>
     <string name="settings_providers_title">Poskytovatelé</string>
-    <string name="settings_providers_subtitle">Přidávejte, odebírejte a opakovaně testujte své zdroje IPTV</string>
+    <string name="settings_providers_subtitle">Přidávejte, odebírejte a znovu testujte zdroje IPTV; zvolte, co stahovat</string>
     <string name="settings_addons_title">Doplňky (Stremio)</string>
     <string name="settings_addons_subtitle">Přehrávejte z doplňků Stremio, které si sami nastavíte</string>
     <string name="addons_note">Doplněk Stremio přidáte vložením URL adresy jeho manifestu. OpenTV neobsahuje žádné výchozí doplňky — přinesete si vlastní. Pokud je doplněk napojen na debrid službu, nastavte si debrid klíč na webu daného doplňku a vložte personalizovanou URL adresu, kterou vám poskytne; váš klíč zůstává tam, nikdy ne v OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Skrývejte nebo označujte jednotlivé kanály jako oblíbené</string>
     <string name="settings_webmanager_title">Spravovat z telefonu nebo notebooku</string>
     <string name="settings_webmanager_subtitle">Organizujte kanály v prohlížeči pomocí klávesnice a myši</string>
-    <string name="settings_display_title">Zobrazení a přehrávání</string>
-    <string name="settings_display_subtitle">Motiv, titulky, náhled živého vysílání v průvodci</string>
     <string name="settings_recording_title">Nahrávání</string>
     <string name="settings_recording_subtitle">Kam se ukládají nahrávky — do tohoto zařízení nebo na NAS</string>
     <string name="settings_parental_title">Rodičovská kontrola</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Sdílet odsud</string>
     <string name="sync_receive">Přijmout</string>
     <string name="sync_ready_to_share">Připraveno ke sdílení</string>
-    <string name="sync_on_other_device">Na druhém zařízení: Nastavení → Synchronizace → Přijmout a zadejte:</string>
+    <string name="sync_on_other_device">Na druhém zařízení: Nastavení → Synchronizace historie sledování → Přijmout a zadejte:</string>
     <string name="sync_address">Adresa</string>
     <string name="sync_code">Kód</string>
     <string name="sync_type_in_one_go">Nebo zadejte vše najednou:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Uložit klíč</string>
     <string name="settings_tmdb_saved">Klíč TMDB uložen</string>
     <string name="settings_tmdb_active">Aktivní</string>
+    <string name="settings_hub_sources">Zdroje</string>
+    <string name="settings_hub_channels">Kanály</string>
+    <string name="settings_hub_watching">Sledování</string>
+    <string name="settings_hub_system">Systém</string>
+    <string name="settings_appearance_subtitle">Styl, motiv, velikost, jazyk, seznam kanálů</string>
+    <string name="settings_playback_subtitle">Kvalita, přepínání streamu, titulky, časovač vypnutí</string>
+    <string name="settings_section_player">Přehrávač</string>
+    <string name="settings_tmdb_title">Filmy a seriály (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Váš klíč TMDB doplní chybějící plakáty a děje</string>
+    <string name="settings_logos_title">Loga</string>
+    <string name="settings_logos_subtitle">Loga kanálů a skupin: od poskytovatele nebo externí</string>
+    <string name="logos_channels_title">Loga kanálů</string>
+    <string name="logos_source_provider">Jen poskytovatel</string>
+    <string name="logos_source_provider_then_external">Poskytovatel, pak externí</string>
+    <string name="logos_source_external_then_provider">Externí, pak poskytovatel</string>
+    <string name="logos_source_note">Externí loga jsou váš balíček log, pak loga z bezplatných TV průvodců. Kanál bez loga zobrazí iniciály. Logo vybrané ručně má vždy přednost.</string>
+    <string name="logos_groups_title">Loga skupin</string>
+    <string name="logos_groups_external">Externí loga skupin</string>
+    <string name="logos_groups_external_desc">Loga stanic a vlajky vedle skupin (☰). Když je vypnuto nebo se nic nenajde, zobrazí se emoji poskytovatele.</string>
+    <string name="logo_pack_desc">Adresa souboru index.json s vašimi logy (třeba znaky týmů) pro kanály, které uvádí. Snazší nastavit ze stránky v telefonu.</string>
 </resources>

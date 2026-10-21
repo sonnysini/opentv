@@ -74,15 +74,15 @@ class AppSettings private constructor(context: Context) {
     val subtitlesEnabled: StateFlow<Boolean> = _subtitlesEnabled.asStateFlow()
 
     /**
-     * Channel logos from the matched TV guide instead of the provider's (off by default: the
-     * provider's win, the guide's only fill the gaps). See Channel.logo.
+     * Where channel logos come from: the provider's alone (the default), the provider's with the
+     * logo pack and the guides filling the gaps, or those first. See Channel.logo.
      */
-    private val _preferGuideLogos = pref { prefs.getBoolean(KEY_PREFER_GUIDE_LOGOS, false) }
-    val preferGuideLogos: StateFlow<Boolean> = _preferGuideLogos.asStateFlow()
+    private val _logoSource = pref { readLogoSource() }
+    val logoSource: StateFlow<LogoSource> = _logoSource.asStateFlow()
 
-    fun setPreferGuideLogos(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_PREFER_GUIDE_LOGOS, enabled).apply()
-        _preferGuideLogos.value = enabled
+    fun setLogoSource(source: LogoSource) {
+        prefs.edit().putString(KEY_LOGO_SOURCE, source.name).apply()
+        _logoSource.value = source
     }
 
     /** Where the user's logo pack lives (its `index.json`); blank = none. See [LogoPack]. */
@@ -227,13 +227,20 @@ class AppSettings private constructor(context: Context) {
         _stripCategorySources.value = on
     }
 
-    /** Logo, flag or emoji beside each group in the category list (see GroupBadge). */
-    private val _groupBadges = pref { prefs.getBoolean(KEY_GROUP_BADGES, true) }
-    val groupBadges: StateFlow<Boolean> = _groupBadges.asStateFlow()
+    /**
+     * Group badges from outside (broadcaster logos, flags) before the provider's emoji. Off, the
+     * badge is only ever the emoji the provider put in the name. See GroupBadge.
+     */
+    private val _externalGroupLogos = pref {
+        if (prefs.contains(KEY_GROUP_LOGOS_EXTERNAL)) prefs.getBoolean(KEY_GROUP_LOGOS_EXTERNAL, false)
+        // Before Settings › Logos the badges switch was on unless turned off: keep what was showing.
+        else prefs.getBoolean(KEY_GROUP_BADGES, false)
+    }
+    val externalGroupLogos: StateFlow<Boolean> = _externalGroupLogos.asStateFlow()
 
-    fun setGroupBadges(on: Boolean) {
-        prefs.edit().putBoolean(KEY_GROUP_BADGES, on).apply()
-        _groupBadges.value = on
+    fun setExternalGroupLogos(on: Boolean) {
+        prefs.edit().putBoolean(KEY_GROUP_LOGOS_EXTERNAL, on).apply()
+        _externalGroupLogos.value = on
     }
 
     /** The "Recent" section at the top of the live groups list. */
@@ -561,6 +568,17 @@ class AppSettings private constructor(context: Context) {
         runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "") }
             .getOrDefault(ThemeMode.SYSTEM)
 
+    private fun readLogoSource(): LogoSource {
+        prefs.getString(KEY_LOGO_SOURCE, null)?.let { saved ->
+            runCatching { return LogoSource.valueOf(saved) }
+        }
+        // Before Settings › Logos: "Logos from the guide" on, or a logo pack set (it beat the provider's),
+        // meant outside logos first. Anything else starts from the provider's alone.
+        val externalFirst = prefs.getBoolean(KEY_PREFER_GUIDE_LOGOS, false) ||
+            !prefs.getString(KEY_LOGO_PACK_URL, null).isNullOrBlank()
+        return if (externalFirst) LogoSource.EXTERNAL_THEN_PROVIDER else LogoSource.PROVIDER
+    }
+
     private fun readChannelLayout(): ChannelLayout =
         runCatching { ChannelLayout.valueOf(prefs.getString(KEY_CHANNEL_LAYOUT, null) ?: "") }
             .getOrDefault(ChannelLayout.FULLSCREEN)
@@ -862,6 +880,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_SUBTITLES = "subtitles_enabled"
         private const val KEY_PREVIEW_VIDEO = "guide_preview_video"
         private const val KEY_PREFER_GUIDE_LOGOS = "prefer_guide_logos"
+        private const val KEY_LOGO_SOURCE = "logo_source"
         private const val KEY_PREVIEW_SOUND = "guide_preview_sound"
         private const val KEY_PIN_HASH = "parental_pin_hash"
         private const val KEY_HIDDEN_CATS = "hidden_categories"
@@ -871,6 +890,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
         private const val KEY_STRIP_CATEGORY_SOURCES = "strip_category_sources"
         private const val KEY_GROUP_BADGES = "group_badges"
+        private const val KEY_GROUP_LOGOS_EXTERNAL = "group_logos_external"
         private const val KEY_SHOW_RECENT_GROUPS = "show_recent_groups"
         private const val KEY_FOREIGN_SPORT_OFF = "foreign_sport_off"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
@@ -928,9 +948,11 @@ class AppSettings private constructor(context: Context) {
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
             listOf(
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
-                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_BADGES, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
+                KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_LOGOS_EXTERNAL, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
-                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_PREFER_GUIDE_LOGOS, KEY_QUALITY_BUTTON_CYCLES,
+                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_QUALITY_BUTTON_CYCLES,
+                // Pre-0.19.1 logo switches: a restore of an older backup still migrates from them.
+                KEY_PREFER_GUIDE_LOGOS, KEY_GROUP_BADGES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
@@ -938,7 +960,7 @@ class AppSettings private constructor(context: Context) {
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
-                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL,
+                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_LOGO_SOURCE,
                 KEY_CUSTOM_LOGOS,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
