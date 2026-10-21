@@ -73,12 +73,6 @@ fun LogoSettingsScreen(onBack: () -> Unit) {
             )
         }
 
-        // The pack only matters once outside logos are in play.
-        if (source != LogoSource.PROVIDER) {
-            Spacer(Modifier.height(16.dp))
-            LogoPackRow()
-        }
-
         Spacer(Modifier.height(16.dp))
         SettingsSection(stringResource(R.string.logos_groups_title)) {
             SwitchRow(
@@ -87,6 +81,13 @@ fun LogoSettingsScreen(onBack: () -> Unit) {
                 checked = externalGroups,
                 onToggle = settings::setExternalGroupLogos,
             )
+        }
+
+        // The pack only matters once outside logos are in play. It goes last: on Fire TV a text
+        // field opens the keyboard as soon as it takes focus, so nothing should sit below it.
+        if (source != LogoSource.PROVIDER) {
+            Spacer(Modifier.height(16.dp))
+            LogoPackRow()
         }
     }
 }
