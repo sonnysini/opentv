@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.3 — 21 October 2026
+
+- **Change a channel's logo.** Hold OK on a channel › Change logo: a grid with every logo it could
+  wear — each merged source's, the guide's, the logo pack's and those of similarly named channels
+  (the red Sky Calcio for the blue HEVC feed). The pick beats everything else and survives list
+  refreshes and backups; Automatic goes back to the default.
+
 ## 0.18.2 — 21 October 2026
 
 - **Logo packs.** Point the app at an `index.json` of your own logos (team crests, say) and they

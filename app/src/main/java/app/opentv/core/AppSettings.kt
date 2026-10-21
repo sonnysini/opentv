@@ -91,7 +91,10 @@ class AppSettings private constructor(context: Context) {
 
     /** The last logo pack downloaded from [logoPackUrl], kept so logos show offline and at once. */
     private val _logoPack = pref {
-        LogoPack(readJson(KEY_LOGO_PACK) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap())
+        LogoPack(
+            readJson(KEY_LOGO_PACK) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap(),
+            readJson(KEY_CUSTOM_LOGOS) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap(),
+        )
     }
     val logoPack: StateFlow<LogoPack> = _logoPack.asStateFlow()
 
@@ -104,7 +107,16 @@ class AppSettings private constructor(context: Context) {
 
     fun setLogoPack(byKey: Map<String, String>) {
         prefs.edit().putString(KEY_LOGO_PACK, addonJson.encodeToString(byKey)).apply()
-        _logoPack.value = LogoPack(byKey)
+        _logoPack.value = LogoPack(byKey, _logoPack.value.custom)
+    }
+
+    /** Logos picked by hand for single channels: group key → URL. Null [url] goes back to automatic. */
+    fun setCustomLogo(groupKey: String, url: String?) {
+        if (groupKey.isBlank()) return
+        val current = _logoPack.value
+        val next = if (url.isNullOrBlank()) current.custom - groupKey else current.custom + (groupKey to url)
+        prefs.edit().putString(KEY_CUSTOM_LOGOS, addonJson.encodeToString(next)).apply()
+        _logoPack.value = LogoPack(current.byKey, next)
     }
 
     /** Whether the selected channel plays live inside the guide's preview pane. */
@@ -910,6 +922,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_CATEGORY_MERGES = "category_merges"
         private const val KEY_LOGO_PACK_URL = "logo_pack_url"
         private const val KEY_LOGO_PACK = "logo_pack"
+        private const val KEY_CUSTOM_LOGOS = "custom_logos"
 
         /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
@@ -926,6 +939,7 @@ class AppSettings private constructor(context: Context) {
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
                 KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL,
+                KEY_CUSTOM_LOGOS,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }

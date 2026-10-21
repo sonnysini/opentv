@@ -177,6 +177,10 @@
     <string name="live_groups_all">Tutti i gruppi</string>
     <string name="live_up_next">A seguire: %1$s</string>
     <string name="live_merge_action">Unisci a…</string>
+    <string name="logo_picker_action">Cambia logo</string>
+    <string name="logo_picker_title">Logo di %1$s</string>
+    <string name="logo_picker_empty">Nessun logo trovato per questo canale.</string>
+    <string name="logo_picker_automatic">Automatico</string>
     <string name="live_merge_banner">Unisci %1$s a… scegli il canale · INDIETRO annulla</string>
     <string name="live_merge_done">Unito a %1$s · annulla da Impostazioni › Raggruppamento canali</string>
     <string name="live_group_empty">Nessun canale in questo gruppo — torno alle categorie…</string>
