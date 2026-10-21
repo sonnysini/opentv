@@ -174,6 +174,7 @@ fun HomeScreen(
     // The channel whose OK menu (Watch / Record / Schedule) is open.
     var channelMenu by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     var logoPicker by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
+    var guidePicker by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     // Long-press › Merge with…: the row waiting for the user to pick the channel it joins.
     var mergeFrom by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     var mergeRefocus by remember { mutableStateOf<Triple<Any, Any, List<ChannelsViewModel.Row>>?>(null) }
@@ -826,6 +827,10 @@ fun HomeScreen(
                             logoPicker = menuRow
                         }
                     }
+                    RecordActionRow(stringResource(R.string.guide_picker_action)) {
+                        channelMenu = null
+                        guidePicker = menuRow
+                    }
                     RecordActionRow(stringResource(R.string.guide_open_external)) {
                         channelMenu = null
                         recordScope.launch {
@@ -903,6 +908,28 @@ fun HomeScreen(
                 logoPicker = null
             },
             onDismiss = { logoPicker = null },
+        )
+    }
+
+    guidePicker?.let { pickerRow ->
+        GuidePickerDialog(
+            row = pickerRow,
+            epg = graph.epgRepository,
+            onPick = { epgId ->
+                guidePicker = null
+                recordScope.launch {
+                    graph.epgRepository.setManualOverride(pickerRow.primary, epgId)
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            if (epgId == null) R.string.guide_picker_cleared else R.string.guide_picker_set,
+                            pickerRow.primary.shownName,
+                        ),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            onDismiss = { guidePicker = null },
         )
     }
 

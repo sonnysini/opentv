@@ -179,6 +179,16 @@
     <string name="logo_picker_title">Logo di %1$s</string>
     <string name="logo_picker_empty">Nessun logo trovato per questo canale.</string>
     <string name="logo_picker_automatic">Automatico</string>
+    <string name="guide_picker_action">Cerca guida manualmente</string>
+    <string name="guide_picker_title">Guida di %1$s</string>
+    <string name="guide_picker_search">Cerca nella guida</string>
+    <string name="guide_picker_searching">Ricerca…</string>
+    <string name="guide_picker_empty">Nessun canale trovato nella guida. Prova un altro nome.</string>
+    <string name="guide_picker_details">%1$s · %2$s · %3$d programmi</string>
+    <string name="guide_picker_nothing_now">Niente in onda adesso</string>
+    <string name="guide_picker_automatic">Automatica (togli guida manuale)</string>
+    <string name="guide_picker_set">Guida impostata per %1$s</string>
+    <string name="guide_picker_cleared">%1$s torna alla guida automatica</string>
     <string name="live_merge_banner">Unisci %1$s a… scegli il canale · INDIETRO annulla</string>
     <string name="live_merge_done">Unito a %1$s · annulla da Impostazioni › Raggruppamento canali</string>
     <string name="live_group_empty">Nessun canale in questo gruppo — torno alle categorie…</string>

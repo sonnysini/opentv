@@ -231,6 +231,10 @@ interface ChannelDao {
     @Query("UPDATE channels SET epgOverrideId = :epgId WHERE id = :id")
     suspend fun setEpgOverride(id: Long, epgId: String?)
 
+    /** A manual guide is a choice about the channel, so it goes on every copy sharing its key. */
+    @Query("UPDATE channels SET epgOverrideId = :epgId WHERE groupKey = :groupKey")
+    suspend fun setEpgOverrideForGroup(groupKey: String, epgId: String?)
+
     @Query("UPDATE channels SET logoUrl = :logoUrl WHERE id = :id")
     suspend fun setLogo(id: Long, logoUrl: String?)
 
@@ -393,6 +397,18 @@ interface EpgChannelAliasDao {
 
     @Query("DELETE FROM epg_channels WHERE feedId = :feedId")
     suspend fun deleteForFeed(feedId: Long)
+
+    /** Manual guide search: enabled feeds' channels whose name, id or key contains the text. */
+    @Query(
+        """
+        SELECT a.* FROM epg_channels a JOIN epg_feeds f ON f.id = a.feedId
+        WHERE f.enabled = 1
+          AND (a.displayName LIKE :like OR a.epgId LIKE :like OR a.normalizedKey LIKE :keyLike)
+        ORDER BY a.displayName
+        LIMIT :limit
+        """
+    )
+    suspend fun search(like: String, keyLike: String, limit: Int): List<EpgChannelAlias>
 }
 
 @Dao
@@ -435,6 +451,18 @@ interface ProgrammeDao {
 
     @Query("SELECT COUNT(*) FROM programmes WHERE feedId = :feedId")
     suspend fun countForFeed(feedId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM programmes WHERE epgChannelId = :epgId")
+    suspend fun countForChannel(epgId: String): Int
+
+    @Query(
+        """
+        SELECT * FROM programmes
+        WHERE epgChannelId = :epgId AND startUtcMillis <= :nowUtcMillis AND endUtcMillis > :nowUtcMillis
+        LIMIT 1
+        """
+    )
+    suspend fun nowOn(epgId: String, nowUtcMillis: Long): Programme?
 
     /** Distinct guide channels that actually have programmes — the match report's baseline. */
     @Query("SELECT DISTINCT epgChannelId FROM programmes")
