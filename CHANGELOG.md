@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.2 — 21 October 2026
+
+- **Logo packs.** Point the app at an `index.json` of your own logos (team crests, say) and they
+  replace the provider's and the guide's on the channels they name, team feeds such as
+  `DAZN SERIE A 3 MILAN` included. Settings › TV guide › Logo pack, or the "Logo pack" card on
+  the phone page. The app ships no logos; the pack is re-read at every launch.
+- **SVG logos** now load.
+
 ## 0.18.1 — 20 October 2026
 
 - **Drag to reorder on the phone page.** Hold the ≡ handle and drag a group or a channel where you
