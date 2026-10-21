@@ -652,6 +652,16 @@ class CatalogRepository(
 
     suspend fun setChannelHidden(id: Long, hidden: Boolean) = channelDao.setHidden(id, hidden)
 
+    /**
+     * Logos of the channels named like this one — `skycalcio1` offers every `skycalcio…` — so the
+     * Change logo picker can borrow a sibling's (the red Sky Calcio for the green HEVC feed).
+     */
+    suspend fun similarLogos(groupKey: String): List<String> {
+        val stem = groupKey.substringBefore('+').trimEnd { it.isDigit() }
+        if (stem.length < 3) return emptyList()
+        return channelDao.logosLike(stem, SIMILAR_LOGOS_LIMIT)
+    }
+
     /** Sets (or clears, on blank) a channel's manual rename. Trimmed; a blank name clears it. */
     suspend fun setChannelCustomName(id: Long, name: String?) =
         channelDao.setCustomName(id, name?.trim()?.takeIf { it.isNotBlank() })
@@ -1202,6 +1212,9 @@ class CatalogRepository(
 
     companion object {
         private const val TAG = "CatalogRepository"
+
+        /** How many sibling logos the Change logo picker offers at most. */
+        private const val SIMILAR_LOGOS_LIMIT = 48
 
         /** Ids per `IN (...)` statement, well under SQLite's bound-variable cap. */
         private const val SQL_CHUNK = 500

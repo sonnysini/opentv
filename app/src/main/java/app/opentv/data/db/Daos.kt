@@ -237,6 +237,14 @@ interface ChannelDao {
     @Query("UPDATE channels SET guideLogoUrl = :logoUrl WHERE id = :id")
     suspend fun setGuideLogo(id: Long, logoUrl: String?)
 
+    /** Provider and guide logos of channels whose group key starts with [prefix] — the Change logo picker. */
+    @Query(
+        "SELECT logoUrl FROM channels WHERE groupKey LIKE :prefix || '%' AND logoUrl != '' " +
+            "UNION SELECT guideLogoUrl FROM channels WHERE groupKey LIKE :prefix || '%' AND guideLogoUrl != '' " +
+            "LIMIT :limit",
+    )
+    suspend fun logosLike(prefix: String, limit: Int): List<String>
+
     /** The matcher's working set: id, group key, and what is already known. */
     @Query("SELECT * FROM channels")
     suspend fun allForMatching(): List<Channel>

@@ -196,6 +196,10 @@
     <string name="live_groups_all">All groups</string>
     <string name="live_up_next">Up next: %1$s</string>
     <string name="live_merge_action">Merge with…</string>
+    <string name="logo_picker_action">Change logo</string>
+    <string name="logo_picker_title">Logo for %1$s</string>
+    <string name="logo_picker_empty">No logos found for this channel.</string>
+    <string name="logo_picker_automatic">Automatic</string>
     <string name="live_merge_banner">Merge %1$s with… pick the channel · BACK cancels</string>
     <string name="live_merge_done">Merged into %1$s · undo in Settings › Channel grouping</string>
     <string name="live_group_empty">No channels in this group — back to categories…</string>

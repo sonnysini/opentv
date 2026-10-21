@@ -173,6 +173,7 @@ fun HomeScreen(
     var recordTarget by remember { mutableStateOf<Pair<ChannelsViewModel.Row, Programme>?>(null) }
     // The channel whose OK menu (Watch / Record / Schedule) is open.
     var channelMenu by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
+    var logoPicker by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     // Long-press › Merge with…: the row waiting for the user to pick the channel it joins.
     var mergeFrom by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     var mergeRefocus by remember { mutableStateOf<Triple<Any, Any, List<ChannelsViewModel.Row>>?>(null) }
@@ -819,6 +820,12 @@ fun HomeScreen(
                             mergeFrom = menuRow
                         }
                     }
+                    if (channel.groupKey.isNotEmpty()) {
+                        RecordActionRow(stringResource(R.string.logo_picker_action)) {
+                            channelMenu = null
+                            logoPicker = menuRow
+                        }
+                    }
                     RecordActionRow(stringResource(R.string.guide_open_external)) {
                         channelMenu = null
                         recordScope.launch {
@@ -885,6 +892,18 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    logoPicker?.let { pickerRow ->
+        LogoPickerDialog(
+            row = pickerRow,
+            catalog = graph.catalogRepository,
+            onPick = { url ->
+                graph.settings.setCustomLogo(pickerRow.primary.groupKey, url)
+                logoPicker = null
+            },
+            onDismiss = { logoPicker = null },
+        )
     }
 
     if (showBackgroundPrompt) {

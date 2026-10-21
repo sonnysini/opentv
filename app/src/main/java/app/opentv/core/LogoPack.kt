@@ -26,14 +26,21 @@ import okhttp3.Request
  * Names go through [ChannelNameNormalizer.groupKeyOf], so they match the way channels group;
  * paths resolve against the index URL. A DAZN team feed (`DAZN SERIE A 3 MILAN`) takes its
  * team's logo even when the list has no bare `Milan` channel to fold it into.
+ *
+ * [custom] rides along: logos picked by hand for single channels, group key → URL.
  */
-class LogoPack(val byKey: Map<String, String>) {
+class LogoPack(val byKey: Map<String, String>, val custom: Map<String, String> = emptyMap()) {
     /** Every logo URL in the pack, so the UI can tell a pack logo from a provider's. */
     val urls: Set<String> = byKey.values.toSet()
 
-    /** The pack's logo for a channel with this group key, or null. */
+    /**
+     * The logo for a channel with this group key, or null: one the user picked for that exact
+     * channel (channel menu › Change logo) first, then the pack's.
+     */
     fun logoFor(groupKey: String): String? {
-        if (byKey.isEmpty() || groupKey.isEmpty()) return null
+        if (groupKey.isEmpty()) return null
+        custom[groupKey]?.let { return it }
+        if (byKey.isEmpty()) return null
         val base = groupKey.substringBefore('+')
         return byKey[base] ?: ChannelNameNormalizer.teamOf(base)?.let(byKey::get)
     }

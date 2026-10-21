@@ -41,4 +41,13 @@ class LogoPackTest {
         assertNull(pack.logoFor(groupKeyOf("Rai 1")))
         assertNull(LogoPack.EMPTY.logoFor("milan"))
     }
+
+    @Test fun `a logo picked by hand beats the pack, for that channel only`() {
+        val red = "https://provider.example/skycalcio-red.png"
+        val picked = LogoPack(pack.byKey, mapOf("milan" to red, "skycalcio1" to red))
+        assertEquals(red, picked.logoFor("milan"))
+        assertEquals(red, picked.logoFor(groupKeyOf("Sky Calcio 1")))
+        assertEquals("https://example.org/pack/milan.svg", picked.logoFor(groupKeyOf("DAZN Serie A Milan")))
+        assertNull(picked.logoFor(groupKeyOf("Sky Calcio 2")))
+    }
 }
