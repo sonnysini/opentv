@@ -198,6 +198,16 @@
     <string name="logo_picker_title">Logo for %1$s</string>
     <string name="logo_picker_empty">No logos found for this channel.</string>
     <string name="logo_picker_automatic">Automatic</string>
+    <string name="guide_picker_action">Find guide manually</string>
+    <string name="guide_picker_title">Guide for %1$s</string>
+    <string name="guide_picker_search">Search the guide</string>
+    <string name="guide_picker_searching">Searching…</string>
+    <string name="guide_picker_empty">No guide channel found. Try another name.</string>
+    <string name="guide_picker_details">%1$s · %2$s · %3$d programmes</string>
+    <string name="guide_picker_nothing_now">Nothing on now</string>
+    <string name="guide_picker_automatic">Automatic (remove manual guide)</string>
+    <string name="guide_picker_set">Guide set for %1$s</string>
+    <string name="guide_picker_cleared">%1$s is back on the automatic guide</string>
     <string name="live_merge_banner">Merge %1$s with… pick the channel · BACK cancels</string>
     <string name="live_merge_done">Merged into %1$s · undo in Settings › Channel grouping</string>
     <string name="live_group_empty">No channels in this group — back to categories…</string>

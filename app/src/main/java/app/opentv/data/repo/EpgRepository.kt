@@ -435,6 +435,50 @@ class EpgRepository(
     suspend fun setManualOverride(channelId: Long, epgId: String?) =
         channelDao.setEpgOverride(channelId, epgId)
 
+    /** Channel menu › Find guide: the user's pick, on every copy of the channel (all its qualities). */
+    suspend fun setManualOverride(channel: Channel, epgId: String?) =
+        if (channel.groupKey.isEmpty()) channelDao.setEpgOverride(channel.id, epgId)
+        else channelDao.setEpgOverrideForGroup(channel.groupKey, epgId)
+
+    /** One guide channel found by [searchGuides]: enough to tell at a glance if it is the right one. */
+    data class GuideHit(
+        val epgId: String,
+        val name: String,
+        val feedName: String,
+        val iconUrl: String?,
+        val programmes: Int,
+        val nowTitle: String?,
+    )
+
+    /**
+     * Manual guide search over the enabled feeds' channel lists, by name, guide id or normalised
+     * key (so `sky uno+` still finds `Sky Uno +`). Guides that carry programmes come first;
+     * empty ones are listed last because a feed may simply not have been refreshed yet.
+     */
+    suspend fun searchGuides(query: String, limit: Int = 60): List<GuideHit> {
+        val text = query.trim()
+        if (text.isEmpty()) return emptyList()
+        val key = ChannelNameNormalizer.groupKeyOf(text)
+        val aliases = aliasDao.search("%$text%", if (key.isEmpty()) "\u0000" else "%$key%", limit * 2)
+        if (aliases.isEmpty()) return emptyList()
+        val feeds = feedDao.all().associate { it.id to it.name }
+        val now = System.currentTimeMillis()
+        return aliases
+            .distinctBy { it.epgId }
+            .map { a ->
+                GuideHit(
+                    epgId = a.epgId,
+                    name = a.displayName,
+                    feedName = feeds[a.feedId].orEmpty(),
+                    iconUrl = a.iconUrl,
+                    programmes = programmeDao.countForChannel(a.epgId),
+                    nowTitle = programmeDao.nowOn(a.epgId, now)?.title,
+                )
+            }
+            .sortedWith(compareByDescending<GuideHit> { it.programmes > 0 }.thenBy { it.name.length })
+            .take(limit)
+    }
+
     /**
      * Turns on the free guide for the user's region, once, on a pristine install.
      *
