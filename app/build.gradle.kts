@@ -148,6 +148,7 @@ dependencies {
     // drive via a user-granted tree URI, with no storage permission.
     implementation(libs.androidx.documentfile)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
     implementation(libs.zxing.core)
 
     // SMB/CIFS client for recording to a NAS (Synology etc.) and playing those recordings
