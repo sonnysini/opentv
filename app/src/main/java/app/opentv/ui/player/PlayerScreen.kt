@@ -11,6 +11,8 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -337,13 +339,24 @@ fun PlayerScreen(
             ?: channel.qualityLabel.ifBlank { channel.shownName }
 
     /** The Quality button: on to the channel's next feed, wrapping round, and say which one. */
-    fun cycleQuality() {
+    fun cycleQuality(notice: Boolean = true) {
         val next = StallWatch.nextAfter(variants, currentId) { it.id } ?: return
         tried = emptySet()
         stallReturnId = null
-        fallbackNotice = variantName(next)
+        if (notice) fallbackNotice = variantName(next)
         tuneTo(next)
         interaction++
+    }
+
+    // ☰ steps through the channel's sources; each press shows their list for a moment, the
+    // highlight sliding onto the new one.
+    var sourcesShown by remember { mutableStateOf(false) }
+    var sourcesPing by remember { mutableIntStateOf(0) }
+    LaunchedEffect(sourcesPing) {
+        if (sourcesPing == 0) return@LaunchedEffect
+        sourcesShown = true
+        delay(SOURCES_SHOWN_MILLIS)
+        sourcesShown = false
     }
 
     /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
@@ -673,16 +686,13 @@ fun PlayerScreen(
                         numberEntry = (numberEntry + digit).take(4)
                         reveal(); interaction++; true
                     }
-                    // ☰ (the remote's menu key) toggles the channel list of the group you're in,
-                    // from anywhere — immersive, bar up, or a picker open.
+                    // ☰ (the remote's menu key) moves on to the channel's next source, from anywhere.
                     event.key == Key.Menu -> {
-                        if (channelListVisible) {
-                            channelListVisible = false
-                        } else if (canBrowse()) {
-                            panel = Panel.NONE
-                            controlsVisible = false
-                            channelListVisible = true
-                        }
+                        channelListVisible = false
+                        panel = Panel.NONE
+                        controlsVisible = false
+                        if (variants.size > 1) cycleQuality(notice = false)
+                        sourcesPing++
                         true
                     }
                     // A picker or the channel list owns the whole d-pad while it's up.
@@ -751,6 +761,18 @@ fun PlayerScreen(
 
         if (showInfo && !inPip) {
             StreamInfoPanel(streamInfo, Modifier.align(Alignment.TopEnd).padding(32.dp))
+        }
+
+        AnimatedVisibility(
+            visible = sourcesShown && !inPip && variants.isNotEmpty(),
+            enter = fadeIn() + slideInHorizontally { it / 2 },
+            exit = fadeOut() + slideOutHorizontally { it / 2 },
+            modifier = Modifier.align(Alignment.TopEnd).padding(32.dp),
+        ) {
+            SourcesList(
+                names = variants.map { variantName(it) },
+                current = variants.indexOfFirst { it.id == currentId }.coerceAtLeast(0),
+            )
         }
 
         // The channel number as you type it, top-right, until it resolves.
@@ -1335,6 +1357,61 @@ private fun OnAirPanel(info: OnAir, clock: Long) {
 private fun clockText(utcMillis: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(utcMillis))
 
+/**
+ * The channel's sources, as ☰ shows them: a short window of the list that keeps [current] in
+ * view, with a highlight that slides from one source to the next.
+ */
+@Composable
+private fun SourcesList(names: List<String>, current: Int) {
+    val rowHeight = 36.dp
+    val visible = names.size.coerceAtMost(SOURCES_VISIBLE)
+    val first = (current - SOURCES_VISIBLE / 2).coerceIn(0, (names.size - visible).coerceAtLeast(0))
+    val scroll by animateDpAsState(rowHeight * first, label = "sourcesScroll")
+    val highlight by animateDpAsState(rowHeight * current, label = "sourcesHighlight")
+    Column(
+        Modifier
+            .width(260.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.78f))
+            .padding(vertical = 8.dp),
+    ) {
+        Text(
+            stringResource(R.string.player_sources),
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        Box(Modifier.fillMaxWidth().height(rowHeight * visible).clipToBounds()) {
+            Box(Modifier.fillMaxWidth().offset(y = -scroll)) {
+                Box(
+                    Modifier
+                        .offset(y = highlight)
+                        .fillMaxWidth()
+                        .height(rowHeight)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+                Column {
+                    names.forEachIndexed { i, name ->
+                        Box(
+                            Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (i == current) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (i == current) MaterialTheme.colorScheme.onPrimary else Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** What [this] channel airs at [millis]: from its guide window, so it keeps up while the menu is open. */
 private fun ChannelsViewModel.Row.onAt(millis: Long): Programme? =
     programmes.firstOrNull { millis >= it.startUtcMillis && millis < it.endUtcMillis }
@@ -1779,6 +1856,9 @@ private fun BarChip(
 }
 
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
+// ☰'s list of sources: how long it stays after the last press, and how many rows it shows at once.
+private const val SOURCES_SHOWN_MILLIS = 3_000L
+private const val SOURCES_VISIBLE = 9
 // The side menu: narrow enough to leave most of the picture showing.
 private val SIDE_MENU_WIDTH = 360.dp
 // How long a picked group may take to bring its channels before the menu stops waiting.
