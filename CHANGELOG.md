@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.22.0 — 21 October 2026
+
+- **A better side menu while you watch.** LEFT shows the group's channels with what is on now —
+  title, times and a progress bar — in a narrower panel. LEFT again slides the groups in, in the
+  channels' place: OK on one brings up its channels without stopping what is playing, RIGHT or
+  Back goes back. Playing from another group makes it the one channel up/down steps through, and
+  the guide opens on it when you leave the player.
+- **☰ changes source.** While watching, the menu key moves on to the channel's next source and
+  shows the list of sources top right, the highlight sliding onto the new one; it fades after a
+  few seconds. The channel list now opens with LEFT only.
+- The dot beside the current group is gone; its lighter background marks it.
+
 ## 0.21.0 — 21 October 2026
 
 - **Find a channel's guide by hand.** Hold OK on a channel › Find guide manually: a search over
