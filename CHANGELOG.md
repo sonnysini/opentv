@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.20.0 — 21 October 2026
+
+- **One place for logos.** Settings › Logos: channel logos from the provider only (the default),
+  the provider's then outside ones, or outside ones first — outside meaning your logo pack, then
+  the free TV guides'. Group logos from outside (broadcaster logos, flags) is a switch of its
+  own; off, each group shows the provider's emoji, enlarged. A logo picked by hand for a channel
+  still wins. Your old choices carry over; the phone page has the same card.
+- **Settings in sections.** Sources, Channels, Watching and System. Display & playback is split
+  into Appearance and Playback, the TMDB key has its own page, and the live/movies/series
+  switches moved to Providers.
+- Italian now says "fornitore" throughout; the sync hint names the real menu entry.
+
 ## 0.19.0 — 21 October 2026
 
 - **Everything follows your language.** Messages that were always in English — sync status,
