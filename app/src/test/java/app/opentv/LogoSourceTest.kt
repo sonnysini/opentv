@@ -17,6 +17,7 @@ class LogoSourceTest {
     private fun ch(key: String, provider: String?, guide: String?) = Channel(
         sourceId = 1, streamId = key, name = key, groupKey = key,
         categoryId = null, logoUrl = provider, guideLogoUrl = guide, epgChannelId = null,
+        number = 0, streamUrl = "",
     )
 
     private val pack = LogoPack(mapOf("milan" to "pack/milan.svg"), mapOf("rai1" to "picked/rai1.png"))
