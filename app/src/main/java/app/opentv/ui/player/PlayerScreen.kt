@@ -242,6 +242,11 @@ fun PlayerScreen(
     var sideGroups by remember { mutableStateOf(false) }
     // A group was just picked there: the channels it had until the new group's arrive.
     var awaitingRows by remember { mutableStateOf<List<ChannelsViewModel.Row>?>(null) }
+    // Where focus sits in the side menu, so focusing it can keep asking until it really lands.
+    var channelsHaveFocus by remember { mutableStateOf(false) }
+    var groupsHaveFocus by remember { mutableStateOf(false) }
+    // Bumped once a picked group's channels are in, to put focus on them.
+    var listRefocus by remember { mutableIntStateOf(0) }
     var interaction by remember { mutableIntStateOf(0) }
     // Offered once per session the first time the user records here while OpenTV isn't exempt from
     // battery optimisation, so the capture survives the screen sleeping. Never blocks recording.
@@ -603,13 +608,16 @@ fun PlayerScreen(
 
     // Focus the side menu's channels or groups as they come up (they slide in, so keep asking
     // until the row is there); hand focus back to the video catcher when the menu closes.
+    suspend fun focusSide(groups: Boolean) {
+        repeat(20) {
+            delay(60)
+            if (if (groups) groupsHaveFocus else channelsHaveFocus) return
+            runCatching { (if (groups) groupFocus else listFocus).requestFocus() }
+        }
+    }
     LaunchedEffect(channelListVisible, sideGroups) {
         if (channelListVisible) {
-            val target = if (sideGroups) groupFocus else listFocus
-            repeat(10) {
-                delay(60)
-                if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
-            }
+            focusSide(sideGroups)
         } else {
             sideGroups = false
             awaitingRows = null
@@ -625,10 +633,10 @@ fun PlayerScreen(
             delay(GROUP_LOAD_TIMEOUT_MILLIS)
         }
         awaitingRows = null
-        repeat(10) {
-            delay(60)
-            if (runCatching { listFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-        }
+        listRefocus++
+    }
+    LaunchedEffect(listRefocus) {
+        if (listRefocus > 0) focusSide(groups = false)
     }
 
     Box(
@@ -1041,6 +1049,7 @@ fun PlayerScreen(
             ) { showGroups ->
                 if (showGroups) {
                     SideGroups(
+                        modifier = Modifier.onFocusChanged { groupsHaveFocus = it.hasFocus },
                         entries = groupEntries,
                         focusRequester = groupFocus,
                         onPick = { entry ->
@@ -1058,7 +1067,12 @@ fun PlayerScreen(
                     }
                     val title = groupEntries.firstOrNull { it.selected }?.label
                         ?: stringResource(R.string.common_channels)
-                    Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .onFocusChanged { channelsHaveFocus = it.hasFocus }
+                            .padding(vertical = 16.dp),
+                    ) {
                         Text(
                             "◀  $title",
                             style = MaterialTheme.typography.titleMedium,
@@ -1423,6 +1437,7 @@ private fun ChannelListRow(
 /** The side menu's groups, in the channels' place: OK or RIGHT on the current one goes back to its channels. */
 @Composable
 private fun SideGroups(
+    modifier: Modifier,
     entries: List<LiveGroupEntry>,
     focusRequester: FocusRequester,
     onPick: (LiveGroupEntry) -> Unit,
@@ -1430,7 +1445,7 @@ private fun SideGroups(
 ) {
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedIndex - 3).coerceAtLeast(0))
-    Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(vertical = 16.dp)) {
         Text(
             stringResource(R.string.player_groups),
             style = MaterialTheme.typography.titleMedium,
