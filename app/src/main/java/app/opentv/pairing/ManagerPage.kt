@@ -186,13 +186,24 @@ object ManagerPage {
             </details>
 
             <details class="rec" id="logoCard">
-              <summary>Logo pack</summary>
+              <summary>Logos</summary>
               <div class="body">
-                <p class="hint">The address of an index.json listing your own logos (team crests, say). They replace the provider's and the guide's on the channels they name.</p>
-                <label class="field"><span>Pack address</span>
-                  <input id="logoUrl" type="url" placeholder="https://…/index.json" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-                <button class="save" id="logoSave">Save &amp; load</button>
-                <p class="hint" id="logoInfo"></p>
+                <label class="field"><span>Channel logos</span>
+                  <select id="logoSource">
+                    <option value="PROVIDER">Provider only</option>
+                    <option value="PROVIDER_THEN_EXTERNAL">Provider, then outside logos</option>
+                    <option value="EXTERNAL_THEN_PROVIDER">Outside logos, then provider</option>
+                  </select></label>
+                <p class="hint">Outside logos are your logo pack, then the free TV guides' ones. A logo picked by hand for a channel always wins.</p>
+                <label class="check"><input type="checkbox" id="logoGroups"> <span>Group logos from outside</span></label>
+                <p class="hint">Broadcaster logos and flags beside the groups. Off, or when none is found, the provider's emoji shows instead.</p>
+                <div id="logoPackBox">
+                  <label class="field"><span>Logo pack address</span>
+                    <input id="logoUrl" type="url" placeholder="https://…/index.json" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+                  <p class="hint">An index.json listing your own logos (team crests, say), for the channels it names.</p>
+                  <button class="save" id="logoSave">Save &amp; load</button>
+                  <p class="hint" id="logoInfo"></p>
+                </div>
               </div>
             </details>
 
@@ -320,9 +331,16 @@ object ManagerPage {
             "Add & load channels": "Aggiungi e carica i canali",
             "Test": "Prova",
             "Recording to NAS (SMB)": "Registrazioni su NAS (SMB)",
-            "Logo pack": "Pacchetto loghi",
-            "The address of an index.json listing your own logos (team crests, say). They replace the provider's and the guide's on the channels they name.": "L'indirizzo di un index.json con i tuoi loghi (per esempio gli stemmi delle squadre). Sostituiscono quelli del provider e della guida sui canali che nomina.",
-            "Pack address": "Indirizzo del pacchetto",
+            "Logos": "Loghi",
+            "Channel logos": "Loghi dei canali",
+            "Provider only": "Solo fornitore",
+            "Provider, then outside logos": "Fornitore, poi loghi esterni",
+            "Outside logos, then provider": "Loghi esterni, poi fornitore",
+            "Outside logos are your logo pack, then the free TV guides' ones. A logo picked by hand for a channel always wins.": "I loghi esterni sono il tuo pacchetto loghi, poi quelli delle guide TV gratuite. Il logo scelto a mano per un canale vince sempre.",
+            "Group logos from outside": "Loghi dei gruppi esterni",
+            "Broadcaster logos and flags beside the groups. Off, or when none is found, the provider's emoji shows instead.": "Loghi delle emittenti e bandiere accanto ai gruppi. Spento, o se non ne trova, resta l'emoji del fornitore.",
+            "Logo pack address": "Indirizzo del pacchetto loghi",
+            "An index.json listing your own logos (team crests, say), for the channels it names.": "Un index.json con i tuoi loghi (per esempio gli stemmi delle squadre), per i canali che nomina.",
             "Save & load": "Salva e carica",
             "{0} names in the pack": "{0} nomi nel pacchetto",
             "Could not load the pack: {0}": "Pacchetto non caricato: {0}",
@@ -927,7 +945,17 @@ object ManagerPage {
           function showLogoPack(r){
             el('logoUrl').value = r.url || '';
             el('logoInfo').textContent = r.url ? t('{0} names in the pack', r.count) : '';
+            if (r.source) el('logoSource').value = r.source;
+            el('logoGroups').checked = !!r.externalGroups;
+            el('logoPackBox').hidden = (el('logoSource').value === 'PROVIDER');
           }
+          function saveLogoChoice(body){
+            post('/logopack', body)
+              .then(function(r){ showLogoPack(r); setStatus('Saved ✓', 'ok'); })
+              .catch(function(){ setStatus(UNREACH, 'err'); });
+          }
+          el('logoSource').onchange = function(){ saveLogoChoice({ source: el('logoSource').value }); };
+          el('logoGroups').onchange = function(){ saveLogoChoice({ externalGroups: el('logoGroups').checked }); };
           async function loadLogoPack(){
             try { showLogoPack(await getJson('/logopack')); } catch (e) { /* TV not reachable yet */ }
           }

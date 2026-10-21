@@ -119,7 +119,7 @@
     <string name="player_none_available">사용 가능한 항목 없음</string>
     <string name="player_subtitles_off">끄기</string>
     <string name="settings_providers_title">공급자</string>
-    <string name="settings_providers_subtitle">IPTV 소스 추가, 제거 및 재테스트</string>
+    <string name="settings_providers_subtitle">IPTV 소스 추가, 제거, 재테스트 및 다운로드할 항목 선택</string>
     <string name="settings_addons_title">애드온(Stremio)</string>
     <string name="settings_addons_subtitle">직접 설정한 Stremio 애드온에서 재생</string>
     <string name="addons_note">매니페스트 URL을 붙여넣어 Stremio 애드온을 추가하세요. OpenTV에는 애드온이 기본 포함되어 있지 않습니다 - 직접 추가해야 합니다. 애드온이 디브리드(debrid) 기반이라면 해당 애드온의 웹사이트에서 디브리드 키를 설정한 뒤 제공되는 개인화된 URL을 붙여넣으세요. 키는 그곳에만 저장되며 OpenTV에는 저장되지 않습니다.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">개별 채널을 숨기거나 즐겨찾기에 추가</string>
     <string name="settings_webmanager_title">휴대폰이나 노트북에서 관리</string>
     <string name="settings_webmanager_subtitle">키보드와 마우스로 브라우저에서 채널을 정리하세요</string>
-    <string name="settings_display_title">화면 및 재생</string>
-    <string name="settings_display_subtitle">테마, 자막, 실시간 편성표 미리보기</string>
     <string name="settings_recording_title">녹화</string>
     <string name="settings_recording_subtitle">녹화 저장 위치 - 이 기기 또는 NAS</string>
     <string name="settings_parental_title">자녀 보호 기능</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">여기서 공유</string>
     <string name="sync_receive">받기</string>
     <string name="sync_ready_to_share">공유 준비 완료</string>
-    <string name="sync_on_other_device">다른 기기에서: 설정 → 동기화 → 받기를 선택하고 다음을 입력하세요:</string>
+    <string name="sync_on_other_device">다른 기기에서: 설정 → 시청 기록 동기화 → 받기를 선택하고 다음을 입력하세요:</string>
     <string name="sync_address">주소</string>
     <string name="sync_code">코드</string>
     <string name="sync_type_in_one_go">또는 한 번에 입력: %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">키 저장</string>
     <string name="settings_tmdb_saved">TMDB 키가 저장되었습니다</string>
     <string name="settings_tmdb_active">활성</string>
+    <string name="settings_hub_sources">소스</string>
+    <string name="settings_hub_channels">채널</string>
+    <string name="settings_hub_watching">시청</string>
+    <string name="settings_hub_system">시스템</string>
+    <string name="settings_appearance_subtitle">스타일, 테마, 크기, 언어, 채널 목록</string>
+    <string name="settings_playback_subtitle">화질, 스트림 전환, 자막, 취침 타이머</string>
+    <string name="settings_section_player">플레이어</string>
+    <string name="settings_tmdb_title">영화 및 시리즈 (TMDB)</string>
+    <string name="settings_tmdb_subtitle">TMDB 키로 누락된 포스터와 줄거리를 채웁니다</string>
+    <string name="settings_logos_title">로고</string>
+    <string name="settings_logos_subtitle">채널 및 그룹 로고: 제공업체 또는 외부</string>
+    <string name="logos_channels_title">채널 로고</string>
+    <string name="logos_source_provider">제공업체만</string>
+    <string name="logos_source_provider_then_external">제공업체, 그다음 외부</string>
+    <string name="logos_source_external_then_provider">외부, 그다음 제공업체</string>
+    <string name="logos_source_note">외부 로고는 로고 팩, 그다음 무료 TV 가이드의 로고입니다. 로고가 없는 채널은 이니셜을 표시합니다. 채널에 직접 고른 로고가 항상 우선합니다.</string>
+    <string name="logos_groups_title">그룹 로고</string>
+    <string name="logos_groups_external">외부 그룹 로고</string>
+    <string name="logos_groups_external_desc">그룹 옆에 방송사 로고와 국기 표시 (☰). 끄거나 찾지 못하면 제공업체의 이모지가 표시됩니다.</string>
+    <string name="logo_pack_desc">직접 만든 로고(예: 팀 엠블럼)를 나열한 index.json 주소로, 나열된 채널에 사용됩니다. 휴대폰 페이지에서 설정하면 더 편합니다.</string>
 </resources>

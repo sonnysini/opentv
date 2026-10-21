@@ -119,7 +119,7 @@
     <string name="player_none_available">چیزی موجود نیست</string>
     <string name="player_subtitles_off">خاموش</string>
     <string name="settings_providers_title">ارائه‌دهندگان</string>
-    <string name="settings_providers_subtitle">منابع IPTV خود را اضافه، حذف و دوباره آزمایش کنید</string>
+    <string name="settings_providers_subtitle">منابع IPTV را اضافه، حذف و دوباره آزمایش کنید؛ انتخاب کنید چه چیزی دانلود شود</string>
     <string name="settings_addons_title">افزونه‌ها (Stremio)</string>
     <string name="settings_addons_subtitle">پخش از افزونه‌های Stremio که خودتان تنظیم کرده‌اید</string>
     <string name="addons_note">با چسباندن نشانی URL مانیفست، یک افزونه Stremio اضافه کنید. OpenTV هیچ افزونه‌ای همراه ندارد — خودتان اضافه می‌کنید. اگر افزونه مبتنی بر debrid است، کلید debrid خود را در سایت همان افزونه تنظیم کنید و نشانی شخصی‌سازی‌شده‌ای که می‌دهد را بچسبانید؛ کلید شما همان‌جا می‌ماند، هرگز در OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">کانال‌های جداگانه را پنهان یا به علاقه‌مندی‌ها اضافه کنید</string>
     <string name="settings_webmanager_title">مدیریت از گوشی یا لپ‌تاپ</string>
     <string name="settings_webmanager_subtitle">کانال‌ها را در مرورگر و با صفحه‌کلید و ماوس مرتب کنید</string>
-    <string name="settings_display_title">نمایش و پخش</string>
-    <string name="settings_display_subtitle">پوسته، زیرنویس، پیش‌نمایش زنده راهنما</string>
     <string name="settings_recording_title">ضبط</string>
     <string name="settings_recording_subtitle">محل ذخیره ضبط‌ها — این دستگاه یا یک NAS</string>
     <string name="settings_parental_title">کنترل والدین</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">اشتراک‌گذاری از اینجا</string>
     <string name="sync_receive">دریافت</string>
     <string name="sync_ready_to_share">آماده اشتراک‌گذاری</string>
-    <string name="sync_on_other_device">در دستگاه دیگر: تنظیمات ← همگام‌سازی ← دریافت، و این را وارد کنید:</string>
+    <string name="sync_on_other_device">در دستگاه دیگر: تنظیمات ← همگام‌سازی تاریخچه تماشا ← دریافت، و این را وارد کنید:</string>
     <string name="sync_address">نشانی</string>
     <string name="sync_code">کد</string>
     <string name="sync_type_in_one_go">یا یک‌جا این را وارد کنید:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">ذخیره کلید</string>
     <string name="settings_tmdb_saved">کلید TMDB ذخیره شد</string>
     <string name="settings_tmdb_active">فعال</string>
+    <string name="settings_hub_sources">منابع</string>
+    <string name="settings_hub_channels">کانال‌ها</string>
+    <string name="settings_hub_watching">تماشا</string>
+    <string name="settings_hub_system">سیستم</string>
+    <string name="settings_appearance_subtitle">سبک، پوسته، اندازه، زبان، فهرست کانال‌ها</string>
+    <string name="settings_playback_subtitle">کیفیت، تعویض جریان، زیرنویس، زمان‌سنج خواب</string>
+    <string name="settings_section_player">پخش‌کننده</string>
+    <string name="settings_tmdb_title">فیلم‌ها و سریال‌ها (TMDB)</string>
+    <string name="settings_tmdb_subtitle">کلید TMDB شما پوسترها و خلاصه‌های جاافتاده را کامل می‌کند</string>
+    <string name="settings_logos_title">لوگوها</string>
+    <string name="settings_logos_subtitle">لوگوی کانال‌ها و گروه‌ها: از ارائه‌دهنده یا بیرونی</string>
+    <string name="logos_channels_title">لوگوی کانال‌ها</string>
+    <string name="logos_source_provider">فقط ارائه‌دهنده</string>
+    <string name="logos_source_provider_then_external">ارائه‌دهنده، سپس بیرونی</string>
+    <string name="logos_source_external_then_provider">بیرونی، سپس ارائه‌دهنده</string>
+    <string name="logos_source_note">لوگوهای بیرونی بسته لوگوی شما و سپس لوگوهای راهنماهای رایگان تلویزیون هستند. کانال بدون لوگو حروف اول نامش را نشان می‌دهد. لوگویی که برای یک کانال دستی انتخاب کنید همیشه مقدم است.</string>
+    <string name="logos_groups_title">لوگوی گروه‌ها</string>
+    <string name="logos_groups_external">لوگوی بیرونی گروه‌ها</string>
+    <string name="logos_groups_external_desc">لوگوی شبکه‌ها و پرچم‌ها کنار گروه‌ها (☰). اگر خاموش باشد یا چیزی پیدا نشود، ایموجی ارائه‌دهنده نمایش داده می‌شود.</string>
+    <string name="logo_pack_desc">نشانی یک index.json با لوگوهای خودتان (مثلاً نشان تیم‌ها) برای کانال‌هایی که نام می‌برد. از صفحه تلفن راحت‌تر است.</string>
 </resources>

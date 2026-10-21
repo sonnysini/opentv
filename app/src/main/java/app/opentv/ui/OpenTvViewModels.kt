@@ -1577,10 +1577,6 @@ class GroupingViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setStripSources(on: Boolean) = graph.settings.setStripCategorySources(on)
 
-    val groupBadges: StateFlow<Boolean> = graph.settings.groupBadges
-
-    fun setGroupBadges(on: Boolean) = graph.settings.setGroupBadges(on)
-
     val showRecentGroups: StateFlow<Boolean> = graph.settings.showRecentGroups
 
     fun setShowRecentGroups(on: Boolean) = graph.settings.setShowRecentGroups(on)

@@ -72,13 +72,9 @@ import app.opentv.core.findActivity
 import app.opentv.data.work.SyncWorker
 import java.text.DecimalFormat
 
-/**
- * Display & playback preferences: the app-behaviour settings, kept apart from the guide/data
- * settings so neither screen becomes a junk drawer. Everything here writes straight to
- * [AppSettings] and takes effect immediately.
- */
+/** Settings › Appearance: style, theme, size, language and how the channel list looks. */
 @Composable
-fun AppSettingsScreen(onBack: () -> Unit) {
+fun AppearanceSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
     val themeMode by settings.themeMode.collectAsState()
@@ -87,46 +83,11 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val channelLayout by settings.channelLayout.collectAsState()
     val previewVideo by settings.guidePreviewVideo.collectAsState()
     val previewSound by settings.guidePreviewSound.collectAsState()
-    val captions by settings.subtitlesEnabled.collectAsState()
-    val resumeLast by settings.resumeLastChannel.collectAsState()
     val language by settings.languageTag.collectAsState()
     var showLanguagePicker by remember { mutableStateOf(false) }
-    val liveEnabled by settings.liveEnabled.collectAsState()
-    val moviesEnabled by settings.moviesEnabled.collectAsState()
-    val seriesEnabled by settings.seriesEnabled.collectAsState()
-    val preferredQuality by settings.preferredQuality.collectAsState()
-    val qualityFallback by settings.qualityFallback.collectAsState()
-    val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
-    val stallFallback by settings.stallFallback.collectAsState()
-    val stallMillis by settings.stallFallbackMillis.collectAsState()
-    val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
-    val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
 
-    // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
-    // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
-    // if you leave this screen; a quick Toast confirms it started.
-    val refreshingMessage = stringResource(R.string.settings_content_refreshing)
-    val onRefreshContent: () -> Unit = {
-        SyncWorker.refreshNow(context)
-        Toast.makeText(context, refreshingMessage, Toast.LENGTH_SHORT).show()
-    }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_display_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        SettingsSection(stringResource(R.string.settings_appearance)) {
-            Text(stringResource(R.string.settings_style_title), style = MaterialTheme.typography.titleMedium)
+    SettingsPage(stringResource(R.string.settings_appearance), onBack) {
+        SettingsSection(stringResource(R.string.settings_style_title)) {
             ThemeOption(stringResource(R.string.settings_style_owntv), appStyle == AppSettings.AppStyle.OWNTV) {
                 settings.setAppStyle(AppSettings.AppStyle.OWNTV)
             }
@@ -170,38 +131,6 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 stringResource(R.string.settings_ui_scale_note),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        SettingsSection(stringResource(R.string.settings_section_content)) {
-            Text(
-                stringResource(R.string.settings_content_note),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(4.dp))
-            ContentToggleRow(
-                title = stringResource(R.string.nav_live_tv),
-                subtitle = stringResource(R.string.settings_content_live_subtitle),
-                checked = liveEnabled,
-                onToggle = settings::setLiveEnabled,
-                onRefresh = onRefreshContent,
-            )
-            ContentToggleRow(
-                title = stringResource(R.string.nav_movies),
-                subtitle = stringResource(R.string.settings_content_movies_subtitle),
-                checked = moviesEnabled,
-                onToggle = settings::setMoviesEnabled,
-                onRefresh = onRefreshContent,
-            )
-            ContentToggleRow(
-                title = stringResource(R.string.nav_shows),
-                subtitle = stringResource(R.string.settings_content_series_subtitle),
-                checked = seriesEnabled,
-                onToggle = settings::setSeriesEnabled,
-                onRefresh = onRefreshContent,
             )
         }
 
@@ -263,24 +192,37 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 onToggle = settings::setGuidePreviewSound,
             )
         }
+    }
 
-        Spacer(Modifier.height(16.dp))
+    if (showLanguagePicker) {
+        LanguagePickerDialog(
+            current = language,
+            onPick = { tag ->
+                showLanguagePicker = false
+                changeLanguage(context, settings, tag)
+            },
+            onDismiss = { showLanguagePicker = false },
+        )
+    }
+}
 
-        SettingsSection(stringResource(R.string.settings_section_playback)) {
-            ToggleRow(
-                title = stringResource(R.string.settings_subtitles_title),
-                subtitle = stringResource(R.string.settings_subtitles_subtitle),
-                checked = captions,
-                onToggle = settings::setSubtitlesEnabled,
-            )
-            ToggleRow(
-                title = stringResource(R.string.settings_resume_title),
-                subtitle = stringResource(R.string.settings_resume_subtitle),
-                checked = resumeLast,
-                onToggle = settings::setResumeLastChannel,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.settings_quality_title), style = MaterialTheme.typography.titleMedium)
+/** Settings › Playback: what plays first, when to switch streams, the player bar, the sleep timer. */
+@Composable
+fun PlaybackSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember { AppSettings.get(context) }
+    val captions by settings.subtitlesEnabled.collectAsState()
+    val resumeLast by settings.resumeLastChannel.collectAsState()
+    val preferredQuality by settings.preferredQuality.collectAsState()
+    val qualityFallback by settings.qualityFallback.collectAsState()
+    val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
+    val stallFallback by settings.stallFallback.collectAsState()
+    val stallMillis by settings.stallFallbackMillis.collectAsState()
+    val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
+    val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
+
+    SettingsPage(stringResource(R.string.settings_section_playback), onBack) {
+        SettingsSection(stringResource(R.string.settings_quality_title)) {
             Text(
                 stringResource(R.string.settings_quality_note),
                 style = MaterialTheme.typography.bodyMedium,
@@ -337,6 +279,23 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 checked = qualityButtonCycles,
                 onToggle = settings::setQualityButtonCycles,
             )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsSection(stringResource(R.string.settings_section_player)) {
+            ToggleRow(
+                title = stringResource(R.string.settings_subtitles_title),
+                subtitle = stringResource(R.string.settings_subtitles_subtitle),
+                checked = captions,
+                onToggle = settings::setSubtitlesEnabled,
+            )
+            ToggleRow(
+                title = stringResource(R.string.settings_resume_title),
+                subtitle = stringResource(R.string.settings_resume_subtitle),
+                checked = resumeLast,
+                onToggle = settings::setResumeLastChannel,
+            )
             Spacer(Modifier.height(8.dp))
             StepSlider(
                 label = stringResource(R.string.settings_controls_timeout, controlsTimeout),
@@ -350,22 +309,88 @@ fun AppSettingsScreen(onBack: () -> Unit) {
 
         Spacer(Modifier.height(16.dp))
 
-        TmdbKeySection(settings)
-
-        Spacer(Modifier.height(16.dp))
-
         SleepTimerSection()
     }
+}
 
-    if (showLanguagePicker) {
-        LanguagePickerDialog(
-            current = language,
-            onPick = { tag ->
-                showLanguagePicker = false
-                changeLanguage(context, settings, tag)
-            },
-            onDismiss = { showLanguagePicker = false },
+/** Settings › Movies & series (TMDB): the optional key that fills in missing artwork and plots. */
+@Composable
+fun TmdbSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember { AppSettings.get(context) }
+    SettingsPage(stringResource(R.string.settings_tmdb_title), onBack) {
+        TmdbKeySection(settings)
+    }
+}
+
+/**
+ * Settings › Providers › What to download: live, movies and series on or off, each with a refresh.
+ * Less to download makes a sync quicker.
+ */
+@Composable
+internal fun ContentSection() {
+    val context = LocalContext.current
+    val settings = remember { AppSettings.get(context) }
+    val liveEnabled by settings.liveEnabled.collectAsState()
+    val moviesEnabled by settings.moviesEnabled.collectAsState()
+    val seriesEnabled by settings.seriesEnabled.collectAsState()
+
+    // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
+    // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
+    // if you leave this screen; a quick Toast confirms it started.
+    val refreshingMessage = stringResource(R.string.settings_content_refreshing)
+    val onRefreshContent: () -> Unit = {
+        SyncWorker.refreshNow(context)
+        Toast.makeText(context, refreshingMessage, Toast.LENGTH_SHORT).show()
+    }
+
+    SettingsSection(stringResource(R.string.settings_section_content)) {
+        Text(
+            stringResource(R.string.settings_content_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Spacer(Modifier.height(4.dp))
+        ContentToggleRow(
+            title = stringResource(R.string.nav_live_tv),
+            subtitle = stringResource(R.string.settings_content_live_subtitle),
+            checked = liveEnabled,
+            onToggle = settings::setLiveEnabled,
+            onRefresh = onRefreshContent,
+        )
+        ContentToggleRow(
+            title = stringResource(R.string.nav_movies),
+            subtitle = stringResource(R.string.settings_content_movies_subtitle),
+            checked = moviesEnabled,
+            onToggle = settings::setMoviesEnabled,
+            onRefresh = onRefreshContent,
+        )
+        ContentToggleRow(
+            title = stringResource(R.string.nav_shows),
+            subtitle = stringResource(R.string.settings_content_series_subtitle),
+            checked = seriesEnabled,
+            onToggle = settings::setSeriesEnabled,
+            onRefresh = onRefreshContent,
+        )
+    }
+}
+
+/** A scrolling settings page: title and Done on top, [content] below. */
+@Composable
+internal fun SettingsPage(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp, vertical = 24.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+        }
+        Spacer(Modifier.height(20.dp))
+        content()
     }
 }
 
@@ -554,7 +579,7 @@ private fun SleepOption(label: String, selected: Boolean, onSelect: () -> Unit) 
 }
 
 @Composable
-private fun SettingsSection(title: String, content: @Composable () -> Unit) {
+internal fun SettingsSection(title: String, content: @Composable () -> Unit) {
     Text(
         title,
         style = MaterialTheme.typography.titleMedium,
@@ -572,7 +597,7 @@ private fun SettingsSection(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit) {
+internal fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -591,7 +616,7 @@ private fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit) 
  * Replaces the old −/+ buttons, which lost focus when one of them became disabled at an end.
  */
 @Composable
-private fun StepSlider(
+internal fun StepSlider(
     label: String,
     value: Int,
     min: Int,

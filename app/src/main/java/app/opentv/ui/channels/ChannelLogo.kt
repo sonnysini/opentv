@@ -22,24 +22,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.opentv.core.LogoPack
+import app.opentv.core.LogoSource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import app.opentv.data.model.Channel
 import app.opentv.data.model.logo
 import coil.compose.AsyncImage
 
-/** Settings › TV guide › "Logos from the guide": the guide's logos win over the provider's. */
-val LocalPreferGuideLogos = staticCompositionLocalOf { false }
+/** Settings › Logos: provider's logos only, or with the pack's and the guide's. */
+val LocalLogoSource = staticCompositionLocalOf { LogoSource.PROVIDER }
 
-/** The user's logo pack (team crests and the like), which beats both. See [LogoPack]. */
+/** The user's logo pack (team crests and the like) and hand-picked logos. See [LogoPack]. */
 val LocalLogoPack = staticCompositionLocalOf { LogoPack.EMPTY }
 
-/** Settings › Channel grouping › "Logos beside groups": badges in the category list. */
-val LocalGroupBadges = staticCompositionLocalOf { true }
+/** Settings › Logos › "Group logos from outside": broadcaster logos and flags beside groups. */
+val LocalExternalGroupLogos = staticCompositionLocalOf { false }
 
-/** This channel's logo under the user's choice of provider or guide logos. */
+/** This channel's logo under the user's choice in Settings › Logos. */
 @Composable
-fun Channel.shownLogo(): String? = logo(LocalPreferGuideLogos.current, LocalLogoPack.current)
+fun Channel.shownLogo(): String? = logo(LocalLogoSource.current, LocalLogoPack.current)
 
 /**
  * A channel's logo, or its initials on a tile when there is none (or it fails to load).

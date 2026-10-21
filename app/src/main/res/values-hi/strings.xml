@@ -119,7 +119,7 @@
     <string name="player_none_available">कोई उपलब्ध नहीं</string>
     <string name="player_subtitles_off">बंद</string>
     <string name="settings_providers_title">प्रदाता</string>
-    <string name="settings_providers_subtitle">अपने IPTV स्रोत जोड़ें, हटाएं और फिर से टेस्ट करें</string>
+    <string name="settings_providers_subtitle">अपने IPTV स्रोत जोड़ें, हटाएँ और दोबारा जाँचें; चुनें क्या डाउनलोड करना है</string>
     <string name="settings_addons_title">ऐड-ऑन (Stremio)</string>
     <string name="settings_addons_subtitle">आपके द्वारा सेटअप किए गए Stremio ऐड-ऑन से चलाएं</string>
     <string name="addons_note">इसका manifest URL पेस्ट करके एक Stremio ऐड-ऑन जोड़ें। OpenTV किसी के भी साथ नहीं आता — आप अपना खुद का लाते हैं। अगर ऐड-ऑन debrid-समर्थित है, तो अपनी debrid key ऐड-ऑन की अपनी साइट पर सेट करें और वह पर्सनलाइज़्ड URL पेस्ट करें जो वह देती है; आपकी key वहीं रहती है, कभी OpenTV में नहीं।</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">अलग-अलग चैनल छिपाएं या पसंदीदा बनाएं</string>
     <string name="settings_webmanager_title">फ़ोन या लैपटॉप पर प्रबंधित करें</string>
     <string name="settings_webmanager_subtitle">ब्राउज़र में, कीबोर्ड और माउस के साथ चैनल व्यवस्थित करें</string>
-    <string name="settings_display_title">डिस्प्ले &amp; प्लेबैक</string>
-    <string name="settings_display_subtitle">थीम, सबटाइटल, लाइव गाइड पूर्वावलोकन</string>
     <string name="settings_recording_title">रिकॉर्डिंग</string>
     <string name="settings_recording_subtitle">रिकॉर्डिंग्स कहां सेव होती हैं — यह बॉक्स या एक NAS</string>
     <string name="settings_parental_title">अभिभावक नियंत्रण</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">यहां से शेयर करें</string>
     <string name="sync_receive">प्राप्त करें</string>
     <string name="sync_ready_to_share">शेयर करने के लिए तैयार</string>
-    <string name="sync_on_other_device">दूसरे डिवाइस पर: सेटिंग्स → सिंक → प्राप्त करें, और दर्ज करें:</string>
+    <string name="sync_on_other_device">दूसरे डिवाइस पर: सेटिंग्स → देखने का इतिहास सिंक करें → प्राप्त करें, और दर्ज करें:</string>
     <string name="sync_address">पता</string>
     <string name="sync_code">कोड</string>
     <string name="sync_type_in_one_go">या इसे एक साथ टाइप करें:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">कुंजी सेव करें</string>
     <string name="settings_tmdb_saved">TMDB कुंजी सेव की गई</string>
     <string name="settings_tmdb_active">सक्रिय</string>
+    <string name="settings_hub_sources">स्रोत</string>
+    <string name="settings_hub_channels">चैनल</string>
+    <string name="settings_hub_watching">देखना</string>
+    <string name="settings_hub_system">सिस्टम</string>
+    <string name="settings_appearance_subtitle">स्टाइल, थीम, आकार, भाषा, चैनल सूची</string>
+    <string name="settings_playback_subtitle">गुणवत्ता, स्ट्रीम बदलना, सबटाइटल, स्लीप टाइमर</string>
+    <string name="settings_section_player">प्लेयर</string>
+    <string name="settings_tmdb_title">फ़िल्में और सीरीज़ (TMDB)</string>
+    <string name="settings_tmdb_subtitle">आपकी TMDB कुंजी छूटे पोस्टर और कहानी भर देती है</string>
+    <string name="settings_logos_title">लोगो</string>
+    <string name="settings_logos_subtitle">चैनल और समूह लोगो: प्रदाता के या बाहरी</string>
+    <string name="logos_channels_title">चैनल लोगो</string>
+    <string name="logos_source_provider">केवल प्रदाता</string>
+    <string name="logos_source_provider_then_external">पहले प्रदाता, फिर बाहरी</string>
+    <string name="logos_source_external_then_provider">पहले बाहरी, फिर प्रदाता</string>
+    <string name="logos_source_note">बाहरी लोगो आपका लोगो पैक हैं, फिर मुफ़्त टीवी गाइड के लोगो। बिना लोगो वाला चैनल अपने आद्याक्षर दिखाता है। किसी चैनल के लिए हाथ से चुना गया लोगो हमेशा प्राथमिक होता है।</string>
+    <string name="logos_groups_title">समूह लोगो</string>
+    <string name="logos_groups_external">बाहरी समूह लोगो</string>
+    <string name="logos_groups_external_desc">समूहों के पास प्रसारक लोगो और झंडे (☰)। बंद होने पर या कुछ न मिलने पर प्रदाता का इमोजी दिखता है।</string>
+    <string name="logo_pack_desc">आपके अपने लोगो (जैसे टीम के बैज) वाली index.json का पता, उसमें बताए चैनलों के लिए। फ़ोन पेज से सेट करना आसान है।</string>
 </resources>

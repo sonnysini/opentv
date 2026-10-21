@@ -119,7 +119,7 @@
     <string name="player_none_available">Недоступно</string>
     <string name="player_subtitles_off">Выкл.</string>
     <string name="settings_providers_title">Провайдеры</string>
-    <string name="settings_providers_subtitle">Добавляйте, удаляйте и проверяйте свои источники IPTV</string>
+    <string name="settings_providers_subtitle">Добавляйте, удаляйте и перепроверяйте IPTV-источники; выберите, что загружать</string>
     <string name="settings_addons_title">Дополнения (Stremio)</string>
     <string name="settings_addons_subtitle">Воспроизведение через дополнения Stremio, настроенные вами</string>
     <string name="addons_note">Добавьте дополнение Stremio, вставив ссылку на его манифест. OpenTV не поставляется с готовыми дополнениями — вы подключаете свои. Если дополнение работает через debrid-сервис, настройте свой ключ debrid на сайте самого дополнения и вставьте персональную ссылку, которую он выдаст; ключ останется там и никогда не попадёт в OpenTV.</string>
@@ -134,8 +134,6 @@
     <string name="settings_channels_subtitle">Скрывайте каналы или добавляйте их в избранное</string>
     <string name="settings_webmanager_title">Управление с телефона или ноутбука</string>
     <string name="settings_webmanager_subtitle">Упорядочивайте каналы в браузере с помощью клавиатуры и мыши</string>
-    <string name="settings_display_title">Экран и воспроизведение</string>
-    <string name="settings_display_subtitle">Тема, субтитры, предпросмотр в телегиде</string>
     <string name="settings_recording_title">Запись</string>
     <string name="settings_recording_subtitle">Куда сохраняются записи — на это устройство или NAS</string>
     <string name="settings_parental_title">Родительский контроль</string>
@@ -272,7 +270,7 @@
     <string name="sync_share_from_here">Поделиться отсюда</string>
     <string name="sync_receive">Получить</string>
     <string name="sync_ready_to_share">Готово к передаче</string>
-    <string name="sync_on_other_device">На другом устройстве: Настройки → Синхронизация → Получить, и введите:</string>
+    <string name="sync_on_other_device">На другом устройстве: Настройки → Синхронизация истории просмотра → Получить, и введите:</string>
     <string name="sync_address">Адрес</string>
     <string name="sync_code">Код</string>
     <string name="sync_type_in_one_go">Или введите сразу:  %1$s#%2$s</string>
@@ -436,4 +434,24 @@
     <string name="settings_tmdb_save">Сохранить ключ</string>
     <string name="settings_tmdb_saved">Ключ TMDB сохранён</string>
     <string name="settings_tmdb_active">Активен</string>
+    <string name="settings_hub_sources">Источники</string>
+    <string name="settings_hub_channels">Каналы</string>
+    <string name="settings_hub_watching">Просмотр</string>
+    <string name="settings_hub_system">Система</string>
+    <string name="settings_appearance_subtitle">Стиль, тема, размер, язык, список каналов</string>
+    <string name="settings_playback_subtitle">Качество, смена потока, субтитры, таймер сна</string>
+    <string name="settings_section_player">Плеер</string>
+    <string name="settings_tmdb_title">Фильмы и сериалы (TMDB)</string>
+    <string name="settings_tmdb_subtitle">Ваш ключ TMDB дополняет недостающие постеры и описания</string>
+    <string name="settings_logos_title">Логотипы</string>
+    <string name="settings_logos_subtitle">Логотипы каналов и групп: от провайдера или внешние</string>
+    <string name="logos_channels_title">Логотипы каналов</string>
+    <string name="logos_source_provider">Только провайдер</string>
+    <string name="logos_source_provider_then_external">Провайдер, затем внешние</string>
+    <string name="logos_source_external_then_provider">Внешние, затем провайдер</string>
+    <string name="logos_source_note">Внешние логотипы — это ваш пакет логотипов, затем логотипы бесплатных телегидов. Канал без логотипа показывает инициалы. Логотип, выбранный вручную, всегда главнее.</string>
+    <string name="logos_groups_title">Логотипы групп</string>
+    <string name="logos_groups_external">Внешние логотипы групп</string>
+    <string name="logos_groups_external_desc">Логотипы вещателей и флаги рядом с группами (☰). Если выключено или ничего не найдено, показывается эмодзи провайдера.</string>
+    <string name="logo_pack_desc">Адрес index.json с вашими логотипами (например, эмблемами команд) для перечисленных в нём каналов. Удобнее задать со страницы на телефоне.</string>
 </resources>

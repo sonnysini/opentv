@@ -65,14 +65,17 @@ import app.opentv.ui.ProfilesViewModel
 import app.opentv.ui.SourcesViewModel
 import app.opentv.ui.VodViewModel
 import app.opentv.ui.channels.ChannelManagerScreen
-import app.opentv.ui.channels.LocalGroupBadges
+import app.opentv.ui.channels.LocalExternalGroupLogos
 import app.opentv.ui.channels.LocalLogoPack
-import app.opentv.ui.channels.LocalPreferGuideLogos
+import app.opentv.ui.channels.LocalLogoSource
 import app.opentv.ui.channels.SearchScreen
 import app.opentv.ui.onboarding.AddSourceScreen
 import app.opentv.ui.player.PlayerScreen
 import app.opentv.ui.settings.AboutScreen
-import app.opentv.ui.settings.AppSettingsScreen
+import app.opentv.ui.settings.AppearanceSettingsScreen
+import app.opentv.ui.settings.LogoSettingsScreen
+import app.opentv.ui.settings.PlaybackSettingsScreen
+import app.opentv.ui.settings.TmdbSettingsScreen
 import app.opentv.ui.settings.CategoriesScreen
 import app.opentv.ui.settings.GroupingScreen
 import app.opentv.ui.settings.EpgSettingsScreen
@@ -113,9 +116,9 @@ class MainActivity : ComponentActivity() {
             val themeMode by settings.themeMode.collectAsState()
             val uiScale by settings.uiScalePercent.collectAsState()
             val appStyle by settings.appStyle.collectAsState()
-            val preferGuideLogos by settings.preferGuideLogos.collectAsState()
+            val logoSource by settings.logoSource.collectAsState()
             val logoPack by settings.logoPack.collectAsState()
-            val groupBadges by settings.groupBadges.collectAsState()
+            val externalGroupLogos by settings.externalGroupLogos.collectAsState()
             val darkTheme = when (themeMode) {
                 AppSettings.ThemeMode.DARK -> true
                 AppSettings.ThemeMode.LIGHT -> false
@@ -130,9 +133,9 @@ class MainActivity : ComponentActivity() {
             }
             CompositionLocalProvider(
                 LocalDensity provides scaledDensity,
-                LocalPreferGuideLogos provides preferGuideLogos,
+                LocalLogoSource provides logoSource,
                 LocalLogoPack provides logoPack,
-                LocalGroupBadges provides groupBadges,
+                LocalExternalGroupLogos provides externalGroupLogos,
             ) {
                 OpenTvTheme(darkTheme = darkTheme, style = appStyle) {
                     Surface(
@@ -217,7 +220,10 @@ object Routes {
     const val PLAYER = "player/{channelId}"
     const val SEARCH = "search"
     const val EPG_SETTINGS = "epg-settings"
-    const val APP_SETTINGS = "app-settings"
+    const val APPEARANCE = "appearance"
+    const val PLAYBACK = "playback"
+    const val TMDB = "tmdb"
+    const val LOGOS = "logos"
     const val SETTINGS_HUB = "settings"
     const val PROVIDERS = "providers"
     const val ADDONS = "addons"
@@ -443,7 +449,10 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onOpenCategories = { navController.navigate(Routes.CATEGORIES) },
                     onOpenGrouping = { navController.navigate(Routes.GROUPING) },
                     onOpenWebManager = { navController.navigate(Routes.WEB_MANAGER) },
-                    onOpenDisplay = { navController.navigate(Routes.APP_SETTINGS) },
+                    onOpenLogos = { navController.navigate(Routes.LOGOS) },
+                    onOpenTmdb = { navController.navigate(Routes.TMDB) },
+                    onOpenAppearance = { navController.navigate(Routes.APPEARANCE) },
+                    onOpenPlayback = { navController.navigate(Routes.PLAYBACK) },
                     onOpenParental = { navController.navigate(Routes.PARENTAL) },
                     onOpenSync = { navController.navigate(Routes.SYNC) },
                     onOpenRecordings = { navController.navigate(Routes.REC_SETTINGS) },
@@ -501,8 +510,20 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 EpgSettingsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.APP_SETTINGS) {
-                AppSettingsScreen(onBack = { navController.popBackStack() })
+            composable(Routes.APPEARANCE) {
+                AppearanceSettingsScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Routes.PLAYBACK) {
+                PlaybackSettingsScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Routes.TMDB) {
+                TmdbSettingsScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Routes.LOGOS) {
+                LogoSettingsScreen(onBack = { navController.popBackStack() })
             }
 
             composable(Routes.PLAYER) { entry ->

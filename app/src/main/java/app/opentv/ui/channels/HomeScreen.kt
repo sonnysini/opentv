@@ -247,11 +247,11 @@ fun HomeScreen(
     // cuts the recording and can get a single-connection account banned. So every jump to full-screen
     // live is funnelled through [requestLive]: with a recording active it asks first.
     var pendingLiveChannel by remember { mutableStateOf<Channel?>(null) }
-    val preferGuideLogos = LocalPreferGuideLogos.current
+    val logoSource = LocalLogoSource.current
     val logoPack = LocalLogoPack.current
     fun startLive(channel: Channel) {
         PlaybackQueue.items = rows.map {
-            PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logo(preferGuideLogos, logoPack), it.primary.number)
+            PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logo(logoSource, logoPack), it.primary.number)
         }
         previewController.stop()
         onPlayChannel(channel)
@@ -930,7 +930,7 @@ private suspend fun setReminder(
         Reminder(
             channelId = channel.id,
             channelName = channel.displayName,
-            logoUrl = channel.logo(graph.settings.preferGuideLogos.value, graph.settings.logoPack.value),
+            logoUrl = channel.logo(graph.settings.logoSource.value, graph.settings.logoPack.value),
             title = programme.title,
             startUtcMillis = programme.startUtcMillis,
             endUtcMillis = programme.endUtcMillis,
