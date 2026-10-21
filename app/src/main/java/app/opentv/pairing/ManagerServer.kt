@@ -11,6 +11,8 @@ import app.opentv.BuildConfig
 import app.opentv.core.AppSettings
 import app.opentv.core.SettingsBackup
 import app.opentv.core.LiveLayout
+import app.opentv.core.LogoPack
+import app.opentv.core.ServiceLocator
 import app.opentv.data.model.Channel
 import app.opentv.data.model.GroupMerge
 import app.opentv.data.model.StreamKind
@@ -253,6 +255,10 @@ class ManagerServer(
                 output.write(PairingHttp.httpResponse("200 OK", "application/json", recordingJson()))
 
             method == "POST" && path == "/recording" -> handleRecording(output, body)
+
+            method == "GET" && path == "/logopack" -> writeJson(output, LogoPackDto.serializer(), logoPackDto(null))
+
+            method == "POST" && path == "/logopack" -> handleLogoPack(output, body)
 
             method == "POST" && path == "/recording/test" -> handleRecordingTest(output, body)
 
@@ -579,6 +585,24 @@ class ManagerServer(
         writeOk(output)
     }
 
+    private fun logoPackDto(error: String?) =
+        LogoPackDto(url = settings.logoPackUrl.value, count = settings.logoPack.value.byKey.size, error = error)
+
+    /** `POST /logopack {url}` → save the logo pack address and load it now; blank removes the pack. */
+    private fun handleLogoPack(output: OutputStream, body: String) {
+        val req = runCatching { json.decodeFromString(LogoPackReq.serializer(), body) }.getOrNull()
+        if (req == null) {
+            output.write(PairingHttp.httpResponse("400 Bad Request", "text/plain", "Bad request."))
+            return
+        }
+        settings.setLogoPackUrl(req.url)
+        val error = if (req.url.isBlank()) null else runBlocking {
+            runCatching { LogoPack.refresh(settings, ServiceLocator.get(appContext).httpClient) }
+                .exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }
+        }
+        writeJson(output, LogoPackDto.serializer(), logoPackDto(error))
+    }
+
     /** `POST /recording/test {host,share,folder,user,password?}` → actually open the SMB share and
      *  report whether it worked. Blank fields fall back to what's stored, so the browser can test
      *  the saved settings without re-sending the password. Runs on this handler thread (already off
@@ -750,6 +774,10 @@ class ManagerServer(
 )
 
 @Serializable private data class TestDto(val ok: Boolean, val error: String?)
+
+@Serializable private data class LogoPackReq(val url: String = "")
+
+@Serializable private data class LogoPackDto(val url: String, val count: Int, val error: String?)
 
 @Serializable private data class SourceReq(
     val kind: String = "xtream",

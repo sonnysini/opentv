@@ -85,6 +85,28 @@ class AppSettings private constructor(context: Context) {
         _preferGuideLogos.value = enabled
     }
 
+    /** Where the user's logo pack lives (its `index.json`); blank = none. See [LogoPack]. */
+    private val _logoPackUrl = pref { prefs.getString(KEY_LOGO_PACK_URL, "").orEmpty() }
+    val logoPackUrl: StateFlow<String> = _logoPackUrl.asStateFlow()
+
+    /** The last logo pack downloaded from [logoPackUrl], kept so logos show offline and at once. */
+    private val _logoPack = pref {
+        LogoPack(readJson(KEY_LOGO_PACK) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap())
+    }
+    val logoPack: StateFlow<LogoPack> = _logoPack.asStateFlow()
+
+    fun setLogoPackUrl(url: String) {
+        val clean = url.trim()
+        prefs.edit().putString(KEY_LOGO_PACK_URL, clean).apply()
+        _logoPackUrl.value = clean
+        if (clean.isEmpty()) setLogoPack(emptyMap())
+    }
+
+    fun setLogoPack(byKey: Map<String, String>) {
+        prefs.edit().putString(KEY_LOGO_PACK, addonJson.encodeToString(byKey)).apply()
+        _logoPack.value = LogoPack(byKey)
+    }
+
     /** Whether the selected channel plays live inside the guide's preview pane. */
     private val _guidePreviewVideo = pref { prefs.getBoolean(KEY_PREVIEW_VIDEO, true) }
     val guidePreviewVideo: StateFlow<Boolean> = _guidePreviewVideo.asStateFlow()
@@ -886,6 +908,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_LIVE_GROUP_ORDER = "live_group_order"
         private const val KEY_LIVE_CHANNEL_ORDER = "live_channel_order"
         private const val KEY_CATEGORY_MERGES = "category_merges"
+        private const val KEY_LOGO_PACK_URL = "logo_pack_url"
+        private const val KEY_LOGO_PACK = "logo_pack"
 
         /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {
@@ -901,7 +925,7 @@ class AppSettings private constructor(context: Context) {
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
-                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES,
+                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }

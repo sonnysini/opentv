@@ -185,6 +185,17 @@ object ManagerPage {
               </div>
             </details>
 
+            <details class="rec" id="logoCard">
+              <summary>Logo pack</summary>
+              <div class="body">
+                <p class="hint">The address of an index.json listing your own logos (team crests, say). They replace the provider's and the guide's on the channels they name.</p>
+                <label class="field"><span>Pack address</span>
+                  <input id="logoUrl" type="url" placeholder="https://…/index.json" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+                <button class="save" id="logoSave">Save &amp; load</button>
+                <p class="hint" id="logoInfo"></p>
+              </div>
+            </details>
+
             <details class="rec" id="bakCard">
               <summary>Backup &amp; restore settings</summary>
               <div class="body">
@@ -309,6 +320,14 @@ object ManagerPage {
             "Add & load channels": "Aggiungi e carica i canali",
             "Test": "Prova",
             "Recording to NAS (SMB)": "Registrazioni su NAS (SMB)",
+            "Logo pack": "Pacchetto loghi",
+            "The address of an index.json listing your own logos (team crests, say). They replace the provider's and the guide's on the channels they name.": "L'indirizzo di un index.json con i tuoi loghi (per esempio gli stemmi delle squadre). Sostituiscono quelli del provider e della guida sui canali che nomina.",
+            "Pack address": "Indirizzo del pacchetto",
+            "Save & load": "Salva e carica",
+            "{0} names in the pack": "{0} nomi nel pacchetto",
+            "Could not load the pack: {0}": "Pacchetto non caricato: {0}",
+            "Loading…": "Caricamento…",
+            "Saved ✓": "Salvato ✓",
             "Point recordings at a network drive. Saved straight to your TV — the password stays on the TV.": "Salva le registrazioni su un disco di rete. Si imposta direttamente sulla TV e la password resta lì.",
             "Server (IP address)": "Server (indirizzo IP)",
             "Share": "Cartella condivisa",
@@ -899,6 +918,25 @@ object ManagerPage {
               .catch(function(){ setStatus(UNREACH, 'err'); });
           };
 
+          // ---- Logo pack -----------------------------------------------------------------------
+          function showLogoPack(r){
+            el('logoUrl').value = r.url || '';
+            el('logoInfo').textContent = r.url ? t('{0} names in the pack', r.count) : '';
+          }
+          async function loadLogoPack(){
+            try { showLogoPack(await getJson('/logopack')); } catch (e) { /* TV not reachable yet */ }
+          }
+          el('logoSave').onclick = function(){
+            setStatus('Loading…');
+            post('/logopack', { url: el('logoUrl').value.trim() })
+              .then(function(r){
+                showLogoPack(r);
+                if (r.error) setStatus(t('Could not load the pack: {0}', r.error), 'err');
+                else setStatus('Saved ✓', 'ok');
+              })
+              .catch(function(){ setStatus(UNREACH, 'err'); });
+          };
+
           // ---- Add a provider ----------------------------------------------------------------
           function provType(){ return el('provKind').value; }
           function syncProvFields(){
@@ -991,6 +1029,7 @@ object ManagerPage {
 
           loadGroups();
           loadRecording();
+          loadLogoPack();
         </script>
         </body>
         </html>

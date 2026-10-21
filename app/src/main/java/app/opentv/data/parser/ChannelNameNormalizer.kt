@@ -363,7 +363,7 @@ object ChannelNameNormalizer {
     }
 
     /** The team in a DAZN team-feed key (`dazn5seriebwebcesena` → `cesena`), or null. */
-    private fun teamOf(base: String): String? =
+    fun teamOf(base: String): String? =
         TEAM_FEED.matchEntire(base)?.groupValues?.get(1)?.takeIf { !it.startsWith("women") }
 
     private val BRAND_PREFIXES = listOf("sky", "discovery", "itdazn", "dazn")

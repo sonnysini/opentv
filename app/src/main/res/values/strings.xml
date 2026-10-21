@@ -311,6 +311,12 @@
     <string name="epg_updating">Updating…</string>
     <string name="epg_update_now">Update guide now</string>
     <string name="epg_prefer_logos">Logos from the guide</string>
+    <string name="logo_pack_title">Logo pack</string>
+    <string name="logo_pack_desc">The address of an index.json listing your own logos (team crests, say). They replace the provider\'s and the guide\'s on the channels they name. Easier to set from the phone page.</string>
+    <string name="logo_pack_url">Logo pack address</string>
+    <string name="logo_pack_load">Load</string>
+    <string name="logo_pack_loaded">%1$d names in the pack</string>
+    <string name="logo_pack_failed">Could not load the pack: %1$s</string>
     <string name="epg_prefer_logos_desc">Show the TV guide\'s channel logos instead of your provider\'s. Off: the guide\'s logos are only used where the provider has none.</string>
     <string name="epg_desc">Your provider\'s guide is used automatically. If it\'s empty — many are — turn on a free guide for your country and channels are matched to it by name.</string>
     <string name="epg_add_own">Add your own guide (XMLTV URL)</string>

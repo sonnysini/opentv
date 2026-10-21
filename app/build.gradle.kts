@@ -14,8 +14,8 @@ android {
         applicationId = "app.opentv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 58
-        versionName = "0.18.1"
+        versionCode = 59
+        versionName = "0.18.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -148,6 +148,7 @@ dependencies {
     // drive via a user-granted tree URI, with no storage permission.
     implementation(libs.androidx.documentfile)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
     implementation(libs.zxing.core)
 
     // SMB/CIFS client for recording to a NAS (Synology etc.) and playing those recordings

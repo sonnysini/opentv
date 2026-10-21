@@ -5,6 +5,7 @@
  */
 package app.opentv.data.model
 
+import app.opentv.core.LogoPack
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
@@ -228,8 +229,12 @@ object TimeShift {
 /** What the UI should show for a channel: the user's rename if set, else the cleaned display name. */
 val Channel.shownName: String get() = customName?.takeIf { it.isNotBlank() } ?: displayName
 
-/** The logo to show: the provider's, else the guide's — or the other way round when [preferGuide]. */
-fun Channel.logo(preferGuide: Boolean): String? {
+/**
+ * The logo to show: the user's logo pack first, then the provider's, else the guide's — the last
+ * two the other way round when [preferGuide].
+ */
+fun Channel.logo(preferGuide: Boolean, pack: LogoPack = LogoPack.EMPTY): String? {
+    pack.logoFor(groupKey)?.let { return it }
     val provider = logoUrl?.takeIf { it.isNotBlank() }
     return if (preferGuide) guideLogoUrl ?: provider else provider ?: guideLogoUrl
 }

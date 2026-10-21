@@ -8,6 +8,7 @@ package app.opentv.ui.channels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import app.opentv.core.LogoPack
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import app.opentv.data.model.Channel
@@ -27,12 +31,15 @@ import coil.compose.AsyncImage
 /** Settings › TV guide › "Logos from the guide": the guide's logos win over the provider's. */
 val LocalPreferGuideLogos = staticCompositionLocalOf { false }
 
+/** The user's logo pack (team crests and the like), which beats both. See [LogoPack]. */
+val LocalLogoPack = staticCompositionLocalOf { LogoPack.EMPTY }
+
 /** Settings › Channel grouping › "Logos beside groups": badges in the category list. */
 val LocalGroupBadges = staticCompositionLocalOf { true }
 
 /** This channel's logo under the user's choice of provider or guide logos. */
 @Composable
-fun Channel.shownLogo(): String? = logo(LocalPreferGuideLogos.current)
+fun Channel.shownLogo(): String? = logo(LocalPreferGuideLogos.current, LocalLogoPack.current)
 
 /**
  * A channel's logo, or its initials on a tile when there is none (or it fails to load).
@@ -55,6 +62,17 @@ fun ChannelLogo(logoUrl: String?, name: String, modifier: Modifier = Modifier) {
                 overflow = TextOverflow.Clip,
             )
         }
+    } else if (logoUrl in LocalLogoPack.current.urls) {
+        // Pack logos are crests, often dark on transparent (Juventus, Inter): a light tile keeps
+        // them readable on a dark screen, and gives every team the same frame.
+        Box(modifier.background(PACK_TILE).padding(3.dp), contentAlignment = Alignment.Center) {
+            AsyncImage(
+                model = logoUrl,
+                contentDescription = null,
+                onError = { failed = true },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     } else {
         AsyncImage(
             model = logoUrl,
@@ -64,6 +82,8 @@ fun ChannelLogo(logoUrl: String?, name: String, modifier: Modifier = Modifier) {
         )
     }
 }
+
+private val PACK_TILE = Color(0xFFF1F1F1)
 
 /** `Rai 1` → "R1", `Sky Cinema Uno +2` → "SC", `Focus` → "FO". */
 internal fun channelInitials(name: String): String {

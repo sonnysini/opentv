@@ -8,11 +8,13 @@ package app.opentv
 import android.app.Application
 import android.content.Context
 import app.opentv.core.LocaleUtils
+import app.opentv.core.LogoPack
 import app.opentv.core.ServiceLocator
 import app.opentv.data.repo.CatalogRepository
 import app.opentv.data.work.SyncWorker
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.decode.SvgDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +52,8 @@ class OpenTvApp : Application(), ImageLoaderFactory {
             }
             .crossfade(false)
             .allowRgb565(true)
+            // Logo packs are usually SVG crests.
+            .components { add(SvgDecoder.Factory()) }
             .build()
 
     // So notifications and any app-context resources use the chosen language too, not just the UI.
@@ -87,6 +91,12 @@ class OpenTvApp : Application(), ImageLoaderFactory {
                     app.opentv.reminders.ReminderScheduler.set(this@OpenTvApp, it.id, it.startUtcMillis)
                 }
             }
+        }
+
+        // The logo pack is tiny and can change on the server at any time: re-read it every launch.
+        // On failure the copy from last time stays in use.
+        if (graph.settings.logoPackUrl.value.isNotEmpty()) {
+            appScope.launch { runCatching { LogoPack.refresh(graph.settings, graph.httpClient) } }
         }
 
         // Free, server-less "cloud" sync through the user's own NAS, if they've opted in. Writes
