@@ -24,7 +24,7 @@ object AppText {
     @Volatile private var cached: Pair<String, Context>? = null
 
     fun init(context: Context) {
-        app = context.applicationContext
+        app = context.applicationContext ?: context
     }
 
     private fun context(): Context? {

@@ -64,6 +64,7 @@ class OpenTvApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        AppText.init(this)
         val graph = ServiceLocator.get(this)
         SyncWorker.schedule(this)
 
