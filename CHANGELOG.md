@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.19.0 — 21 October 2026
+
+- **Everything follows your language.** Messages that were always in English — sync status,
+  playback and provider errors, the update dialog, TV-to-TV sharing — now come in the app's
+  language, and Italian covers every screen.
+- **The phone setup page speaks the phone's language.** The page behind the QR code on first start
+  used to be English only; now it follows the language the phone is set to.
+
 ## 0.18.3 — 21 October 2026
 
 - **Change a channel's logo.** Hold OK on a channel › Change logo: a grid with every logo it could

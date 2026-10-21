@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Serves this device's watch-history bundle to another OpenTV on the same wifi.
@@ -55,7 +57,7 @@ class SyncServer(private val scope: CoroutineScope) {
     fun start(bundleJson: String) {
         if (running) return
         val host = lanAddress() ?: run {
-            _state.value = State.Failed("This device isn't on a network, so it can't share.")
+            _state.value = State.Failed(AppText.get(R.string.share_no_network))
             return
         }
         val random = SecureRandom()
@@ -67,7 +69,7 @@ class SyncServer(private val scope: CoroutineScope) {
             ServerSocket(0)
         } catch (e: Exception) {
             Log.w(TAG, "Could not open a socket", e)
-            _state.value = State.Failed("Could not start sharing on this device.")
+            _state.value = State.Failed(AppText.get(R.string.share_start_failed))
             return
         }
         serverSocket = socket
@@ -90,7 +92,7 @@ class SyncServer(private val scope: CoroutineScope) {
             delay(TimeUnit.MINUTES.toMillis(TIMEOUT_MINUTES))
             if (running) {
                 stop()
-                _state.value = State.Failed("Sharing timed out. Start again when you're ready.")
+                _state.value = State.Failed(AppText.get(R.string.share_timeout))
             }
         }
     }
@@ -133,7 +135,7 @@ class SyncServer(private val scope: CoroutineScope) {
             if (wrongAttempts >= MAX_ATTEMPTS) {
                 output.write(PairingHttp.httpResponse("403 Forbidden", "text/plain", "Too many attempts."))
                 stop()
-                _state.value = State.Failed("Too many incorrect codes. Sharing cancelled.")
+                _state.value = State.Failed(AppText.get(R.string.share_too_many))
                 return
             }
             output.write(PairingHttp.httpResponse("401 Unauthorized", "text/plain", "Wrong code."))

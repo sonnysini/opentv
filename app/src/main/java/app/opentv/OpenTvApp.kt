@@ -9,6 +9,7 @@ import android.app.Application
 import android.content.Context
 import app.opentv.core.LocaleUtils
 import app.opentv.core.LogoPack
+import app.opentv.core.AppText
 import app.opentv.core.ServiceLocator
 import app.opentv.data.repo.CatalogRepository
 import app.opentv.data.work.SyncWorker
@@ -63,6 +64,7 @@ class OpenTvApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        AppText.init(this)
         val graph = ServiceLocator.get(this)
         SyncWorker.schedule(this)
 

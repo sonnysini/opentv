@@ -24,6 +24,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * A client for the Stalker / Ministra portal protocol (the "MAG box" middleware many panels speak).
@@ -125,7 +127,7 @@ class StalkerApi(
         val now = System.currentTimeMillis()
         if (!force) sessions[source.id]?.let { if (it.expiresAt > now) return it }
         val mac = source.macAddress?.trim().orEmpty()
-        if (mac.isEmpty()) throw StalkerException("This portal needs a MAC address (e.g. 00:1A:79:xx:xx:xx).")
+        if (mac.isEmpty()) throw StalkerException(AppText.get(R.string.stk_need_mac))
         var lastError: Throwable? = null
         for (endpoint in endpoints(source)) {
             val hs = runCatching { handshake(source, endpoint) }
@@ -140,7 +142,7 @@ class StalkerApi(
             }
         }
         throw StalkerException(
-            "The portal didn't accept this MAC address, or the URL is wrong.",
+            AppText.get(R.string.stk_mac_rejected),
             lastError,
         )
     }

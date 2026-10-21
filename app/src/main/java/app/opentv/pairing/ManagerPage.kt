@@ -421,7 +421,12 @@ object ManagerPage {
             "{0} new merges": "{0} unioni nuove",
             "{0} guide feeds": "{0} guide TV",
             "Done — {0}. The TV is regrouping channels.": "Fatto: {0}. La TV sta raggruppando i canali.",
-            "The language changes next time OpenTV starts.": "La lingua cambia al prossimo avvio di OpenTV."
+            "The language changes next time OpenTV starts.": "La lingua cambia al prossimo avvio di OpenTV.",
+            "Nothing selected to import.": "Niente da importare selezionato.",
+            "Fill in the required fields for this provider type.": "Compila i campi obbligatori per questo tipo di fornitore.",
+            "Could not save the source.": "Non sono riuscito a salvare il fornitore.",
+            "Test failed.": "Prova non riuscita.",
+            "Connection failed": "Connessione non riuscita"
           };
           var ITALIAN = (navigator.language || '').toLowerCase().indexOf('it') === 0;
           function t(s){

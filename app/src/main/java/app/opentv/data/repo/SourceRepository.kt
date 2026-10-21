@@ -13,6 +13,8 @@ import app.opentv.data.remote.XtreamApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import app.opentv.core.AppText
+import app.opentv.R
 
 class SourceRepository(
     private val dao: SourceDao,
@@ -43,18 +45,18 @@ class SourceRepository(
                         source.copy(url = normaliseUrl(source.url, source.kind)),
                     )
                     buildString {
-                        append("Connected")
-                        info.username?.let { append(" as $it") }
-                        info.maxConnections?.let { append(" · $it connection(s)") }
+                        append(AppText.get(R.string.src_connected))
+                        info.username?.let { append(AppText.get(R.string.src_connected_as, it)) }
+                        info.maxConnections?.let { append(AppText.get(R.string.src_connections, it)) }
                         info.expiryMillis?.let {
-                            append(" · expires ${java.text.DateFormat.getDateInstance().format(java.util.Date(it))}")
+                            append(AppText.get(R.string.src_expires, java.text.DateFormat.getDateInstance().format(java.util.Date(it))))
                         }
                     }
                 }
-                SourceKind.M3U -> "Playlist address looks valid. It will be checked on first sync."
+                SourceKind.M3U -> AppText.get(R.string.src_m3u_ok)
                 SourceKind.STALKER -> {
                     stalkerApi.handshakeTest(source.copy(url = normaliseUrl(source.url, source.kind)))
-                    "Portal accepted the MAC address. Loading channels…"
+                    AppText.get(R.string.src_stalker_ok)
                 }
             }
         }

@@ -47,6 +47,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import app.opentv.core.AppText
+import app.opentv.R
 
 /**
  * Keeps one channel per distinct quality signature, preserving order (so "best first" is
@@ -744,7 +746,7 @@ class CatalogRepository(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Catalogue sync failed for source ${source.id}", e)
-            SyncResult.Failed(e.message ?: "The catalogue could not be downloaded.", e)
+            SyncResult.Failed(e.message ?: AppText.get(R.string.cat_download_failed), e)
         }
     }
 
@@ -797,7 +799,7 @@ class CatalogRepository(
         val channels = api.liveStreams(source)
         if (channels.isEmpty()) {
             return SyncResult.Failed(
-                "The server returned no channels. The account may have no package assigned.",
+                AppText.get(R.string.cat_no_channels_xtream),
                 null,
             )
         }
@@ -841,7 +843,7 @@ class CatalogRepository(
         val channels = stalkerApi.liveChannels(source)
         if (channels.isEmpty()) {
             return SyncResult.Failed(
-                "The portal returned no channels. The MAC may not be authorised, or its package is empty.",
+                AppText.get(R.string.cat_no_channels_stalker),
                 null,
             )
         }
@@ -925,16 +927,16 @@ class CatalogRepository(
 
         val parsed = http.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                return SyncResult.Failed("Playlist download failed (HTTP ${response.code}).", null)
+                return SyncResult.Failed(AppText.get(R.string.cat_playlist_http, response.code), null)
             }
             val stream = response.body?.byteStream()
-                ?: return SyncResult.Failed("The playlist was empty.", null)
+                ?: return SyncResult.Failed(AppText.get(R.string.cat_playlist_empty), null)
             M3uParser.parse(stream, source.id)
         }
 
         if (parsed.channels.isEmpty()) {
             return SyncResult.Failed(
-                "No channels found in that playlist. Check the URL points at an M3U file.",
+                AppText.get(R.string.cat_playlist_no_channels),
                 null,
             )
         }
