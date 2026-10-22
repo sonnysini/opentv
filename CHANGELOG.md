@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.22.2 — 22 October 2026
+
+- Favourites are set from the channel menu: hold OK on a channel and pick Add to favourites (or
+  Remove from favourites). The star on the row now only shows the state.
+- After closing a dialog opened from a channel (find guide, merge…), OK plays the channel again
+  instead of favouriting it.
+
 ## 0.22.1 — 22 October 2026
 
 - The full-screen live list opens on the group you last watched again; at start-up it could fall

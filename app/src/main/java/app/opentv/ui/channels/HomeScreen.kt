@@ -354,7 +354,6 @@ fun HomeScreen(
                     Toast.makeText(context, context.getString(R.string.live_merge_done, row.primary.shownName), Toast.LENGTH_LONG).show()
                 }
             },
-            onToggleFavourite = { viewModel.toggleFavourite(it) },
             onLongPress = { if (mergeFrom == null) channelMenu = it },
             mergingName = mergeFrom?.primary?.shownName,
             onCancelMerge = { mergeFrom = null },
@@ -814,6 +813,12 @@ fun HomeScreen(
                     RecordActionRow(stringResource(R.string.guide_watch)) {
                         channelMenu = null
                         requestLive(channel)
+                    }
+                    RecordActionRow(
+                        stringResource(if (channel.favourite) R.string.live_favourite_remove else R.string.live_favourite_add),
+                    ) {
+                        channelMenu = null
+                        viewModel.toggleFavourite(menuRow)
                     }
                     if (fullscreen && channel.groupKey.isNotEmpty()) {
                         RecordActionRow(stringResource(R.string.live_merge_action)) {
