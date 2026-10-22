@@ -35,7 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -102,7 +101,6 @@ fun FullscreenLive(
     onSelectFavourites: () -> Unit,
     onFocusRow: (ChannelsViewModel.Row) -> Unit,
     onPlay: (ChannelsViewModel.Row) -> Unit,
-    onToggleFavourite: (ChannelsViewModel.Row) -> Unit,
     // Long-press OK on a channel: the host's channel menu.
     onLongPress: (ChannelsViewModel.Row) -> Unit,
     // While the user picks the channel to merge [mergingName] into, BACK calls this instead.
@@ -270,7 +268,6 @@ fun FullscreenLive(
                     nowMillis = nowMillis,
                     onFocusRow = onFocusRow,
                     onPlay = onPlay,
-                    onToggleFavourite = onToggleFavourite,
                     onLongPress = onLongPress,
                     onLeft = { groupsOpen = true },
                     emptyContent = emptyContent,
@@ -385,7 +382,6 @@ private fun ChannelsPane(
     nowMillis: Long,
     onFocusRow: (ChannelsViewModel.Row) -> Unit,
     onPlay: (ChannelsViewModel.Row) -> Unit,
-    onToggleFavourite: (ChannelsViewModel.Row) -> Unit,
     onLongPress: (ChannelsViewModel.Row) -> Unit,
     onLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
@@ -435,7 +431,6 @@ private fun ChannelsPane(
                         modifier = requester,
                         onFocus = { onFocusRow(row) },
                         onPlay = { onPlay(row) },
-                        onToggleFavourite = { onToggleFavourite(row) },
                         onLongPress = { onLongPress(row) },
                         onLeft = onLeft,
                     )
@@ -605,7 +600,6 @@ private fun FullscreenChannelRow(
     modifier: Modifier,
     onFocus: () -> Unit,
     onPlay: () -> Unit,
-    onToggleFavourite: () -> Unit,
     onLongPress: () -> Unit,
     onLeft: () -> Unit,
 ) {
@@ -678,7 +672,9 @@ private fun FullscreenChannelRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        IconButton(onClick = onToggleFavourite, modifier = Modifier.size(44.dp)) {
+        // Only shows the state: a focusable star inside the row is where focus lands when a dialog
+        // closes, so OK would favourite instead of play. Favourites are set from the channel menu.
+        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = if (row.primary.favourite) Icons.Filled.Star else Icons.Outlined.StarOutline,
                 contentDescription = if (row.primary.favourite) stringResource(R.string.common_remove_favourite)
