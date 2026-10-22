@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.0 — 22 October 2026
+
+- **Open in another player.** A new button at the end of the player's bar hands the channel to
+  another video app (Vimu, VLC, Kodi…), asking which one each time. OpenTV stops its own stream
+  first so the provider's connection is free, and coming back lands on the guide, on that channel.
+
 ## 0.23.1 — 22 October 2026
 
 - **Live channels start faster and stop freezing after the first frame.** Playback no longer sits
