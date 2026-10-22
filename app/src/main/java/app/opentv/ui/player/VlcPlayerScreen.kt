@@ -74,7 +74,7 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
     val graph = remember { ServiceLocator.get(context) }
     val scope = rememberCoroutineScope()
 
-    val libVlc = remember { LibVLC(context.applicationContext, arrayListOf("--no-stats", "--network-caching=1500")) }
+    val libVlc = remember { LibVLC(context.applicationContext, arrayListOf("--no-stats", "--network-caching=1000")) }
     val player = remember { MediaPlayer(libVlc) }
 
     var listedId by remember { mutableStateOf(channelId) }
@@ -109,6 +109,8 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
 
     suspend fun tune(channel: Channel) {
         name = channel.shownName
+        // Drop the old channel's last frame straight away instead of leaving it frozen on screen.
+        player.stop()
         failed = false
         buffering = true
         banner++
@@ -119,6 +121,9 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
         val media = Media(libVlc, Uri.parse(url)).apply {
             setHWDecoderEnabled(true, false)
             addOption(":http-user-agent=" + (source?.userAgent ?: "OpenTV/0.1 (Android)"))
+            // Start a full segment back from the live edge (this provider cuts 10 s segments), so
+            // the first one is already complete on the server rather than still being written.
+            addOption(":adaptive-livedelay=30000")
         }
         player.media = media
         media.release()
