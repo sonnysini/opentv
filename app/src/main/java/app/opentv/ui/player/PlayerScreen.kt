@@ -333,6 +333,7 @@ fun PlayerScreen(
                     title = channel.shownName,
                     userAgent = source?.userAgent ?: "OpenTV/0.1 (Android)",
                     isLive = true,
+                    liveOffsetMillis = settings.liveOffsetSeconds.value.takeIf { it > 0 }?.times(1_000L),
                 ),
                 debounce = false,
             )

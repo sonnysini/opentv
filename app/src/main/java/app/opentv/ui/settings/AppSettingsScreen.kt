@@ -220,6 +220,7 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val stallFallback by settings.stallFallback.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
     val hiccupLimit by settings.hiccupLimit.collectAsState()
+    val liveOffset by settings.liveOffsetSeconds.collectAsState()
     val manualSourceMode by settings.manualSourceMode.collectAsState()
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
@@ -292,6 +293,24 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                     onChange = settings::setHiccupLimit,
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.settings_live_offset_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            StepSlider(
+                label = if (liveOffset == 0) {
+                    stringResource(R.string.settings_live_offset_auto)
+                } else {
+                    stringResource(R.string.settings_live_offset, liveOffset)
+                },
+                value = liveOffset,
+                min = 0,
+                max = AppSettings.MAX_LIVE_OFFSET_SECONDS,
+                step = AppSettings.LIVE_OFFSET_STEP_SECONDS,
+                onChange = settings::setLiveOffsetSeconds,
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 stringResource(R.string.settings_manual_source_title),
