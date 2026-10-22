@@ -83,6 +83,11 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
     var failed by remember { mutableStateOf(false) }
     var banner by remember { mutableIntStateOf(0) }
     var bannerVisible by remember { mutableStateOf(false) }
+    // Opens refused before the first frame. The provider counts connections per client, and the
+    // main player's one is still held for a few seconds after it closes, so the first open right
+    // after watching there is often turned away (HTTP 404). Same stream, retried a few times.
+    var refusals by remember { mutableIntStateOf(0) }
+    var started by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val window = context.findActivity()?.window
@@ -91,8 +96,17 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
         player.setEventListener { e ->
             when (e.type) {
                 MediaPlayer.Event.Buffering -> buffering = e.buffering < 100f
-                MediaPlayer.Event.Playing, MediaPlayer.Event.Vout -> failed = false
-                MediaPlayer.Event.EncounteredError -> { failed = true; buffering = false }
+                MediaPlayer.Event.Playing, MediaPlayer.Event.Vout -> { failed = false; started = true }
+                MediaPlayer.Event.EncounteredError -> if (!started && refusals < OPEN_RETRIES) {
+                    refusals++
+                    scope.launch {
+                        delay(OPEN_RETRY_MILLIS)
+                        player.play()
+                    }
+                } else {
+                    failed = true
+                    buffering = false
+                }
                 MediaPlayer.Event.EndReached -> { failed = true; buffering = false }
             }
         }
@@ -113,14 +127,19 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
         player.stop()
         failed = false
         buffering = true
+        started = false
+        refusals = 0
         banner++
         val variants = graph.catalogRepository.variants(channel)
         val pick = QualityPreference.order(variants, graph.settings.preferredQuality.value).firstOrNull() ?: channel
         val source = graph.sourceRepository.byId(pick.sourceId)
         val url = graph.catalogRepository.resolvePlaybackUrl(pick, source)
+        val ua = source?.userAgent ?: "OpenTV/0.1 (Android)"
+        // Same User-Agent as the main player, so the provider sees one client, not two.
+        libVlc.setUserAgent(ua, ua)
         val media = Media(libVlc, Uri.parse(url)).apply {
             setHWDecoderEnabled(true, false)
-            addOption(":http-user-agent=" + (source?.userAgent ?: "OpenTV/0.1 (Android)"))
+            addOption(":http-user-agent=$ua")
             // Start a full segment back from the live edge (this provider cuts 10 s segments), so
             // the first one is already complete on the server rather than still being written.
             addOption(":adaptive-livedelay=30000")
@@ -216,3 +235,5 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
 }
 
 private const val BANNER_MILLIS = 3_000L
+private const val OPEN_RETRIES = 5
+private const val OPEN_RETRY_MILLIS = 2_000L
