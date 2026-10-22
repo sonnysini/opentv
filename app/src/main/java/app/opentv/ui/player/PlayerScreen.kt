@@ -351,13 +351,14 @@ fun PlayerScreen(
         }
     }
 
-    // Back from the other player: pick the channel up again where we left it.
+    // Back from the other player: land on the guide, on the same channel, rather than reopening
+    // the stream on our own while the other app may still be holding the account's one connection.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && handedOff) {
                 handedOff = false
-                variants.firstOrNull { it.id == currentId }?.let(::tuneTo)
+                onBack()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
