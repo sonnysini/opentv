@@ -67,6 +67,10 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -216,6 +220,11 @@ fun PlayerScreen(
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var tried by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var started by remember { mutableStateOf(false) }
+    // The stream on screen, so it can be handed to another player app.
+    var playingUrl by remember { mutableStateOf<String?>(null) }
+    var playingUa by remember { mutableStateOf<String?>(null) }
+    // Set while another player app has the stream; ours stays stopped until we're back in front.
+    var handedOff by remember { mutableStateOf(false) }
     var attempt by remember { mutableIntStateOf(0) }
     var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // Every variant of the channel failed or timed out: say so instead of spinning forever.
@@ -327,6 +336,8 @@ fun PlayerScreen(
             val source = graph.sourceRepository.byId(channel.sourceId)
             // Xtream/M3U carry a ready URL; a Stalker channel's URL is minted here from its cmd.
             val url = graph.catalogRepository.resolvePlaybackUrl(channel, source)
+            playingUrl = url
+            playingUa = source?.userAgent
             controller.play(
                 PlayerController.Request(
                     url = url,
@@ -338,6 +349,20 @@ fun PlayerScreen(
                 debounce = false,
             )
         }
+    }
+
+    // Back from the other player: land on the guide, on the same channel, rather than reopening
+    // the stream on our own while the other app may still be holding the account's one connection.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && handedOff) {
+                handedOff = false
+                onBack()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     /** A variant's name for the switch notice and the picker: `FHD 2 · B`, numbered among its kind. */
@@ -387,7 +412,7 @@ fun PlayerScreen(
 
     /** The current variant didn't start: move on to the next untried quality, if there is one. */
     fun fallBack() {
-        if (started || unavailable || holdingPick()) return
+        if (started || unavailable || handedOff || holdingPick()) return
         val next = if (settings.qualityFallback.value) tryOrder.firstOrNull { it.id !in tried } else null
         val back = stallReturnId?.let { id -> variants.firstOrNull { it.id == id } }
         if (next == null && back != null) {
@@ -1082,6 +1107,20 @@ fun PlayerScreen(
                                 Spacer(Modifier.width(10.dp))
                                 BarChip(Icons.Filled.PictureInPictureAlt, stringResource(R.string.player_pop_out), false) {
                                     (context.findActivity() as? app.opentv.MainActivity)?.enterPipNow()
+                                    interaction++
+                                }
+                            }
+                            playingUrl?.let { url ->
+                                Spacer(Modifier.width(10.dp))
+                                val chooserTitle = stringResource(R.string.player_open_external)
+                                BarChip(Icons.Filled.OpenInNew, chooserTitle, false) {
+                                    // The provider allows one stream per account: let go of ours first,
+                                    // and keep the chooser from shrinking us into picture-in-picture.
+                                    app.opentv.core.PipState.isPlaying = false
+                                    paused = true
+                                    controller.stop()
+                                    handedOff = true
+                                    openInExternalPlayer(context, url, playingUa, chooserTitle)
                                     interaction++
                                 }
                             }
@@ -1817,6 +1856,33 @@ private fun OptionRow(
         if (selected) {
             Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.common_selected), tint = fg)
         }
+    }
+}
+
+/**
+ * Hands the stream to another installed player (VLC, Kodi, Vimu…), asking which one every time.
+ * The User-Agent rides along as the extras VLC and Vimu read; Kodi ignores it.
+ */
+private fun openInExternalPlayer(context: android.content.Context, url: String, userAgent: String?, title: String) {
+    val view = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+        setDataAndType(android.net.Uri.parse(url), "video/*")
+        if (userAgent != null) {
+            putExtra("http-user-agent", userAgent)
+            putExtra("User-Agent", userAgent)
+            putExtra("headers", arrayOf("User-Agent", userAgent))
+        }
+    }
+    val chooser = android.content.Intent.createChooser(view, title)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Fire OS lists a placeholder gallery that can't play anything.
+        .putExtra(
+            android.content.Intent.EXTRA_EXCLUDE_COMPONENTS,
+            arrayOf(android.content.ComponentName("com.amazon.dummy.gallery", "com.amazon.dummy.gallery.DummyGalleryActivity")),
+        )
+    try {
+        context.startActivity(chooser)
+    } catch (_: android.content.ActivityNotFoundException) {
+        android.widget.Toast.makeText(context, R.string.player_no_external, android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
