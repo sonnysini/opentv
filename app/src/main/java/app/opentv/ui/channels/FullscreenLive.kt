@@ -307,14 +307,28 @@ private fun GroupsList(
     )
     // The pick behind the focused group, run after a pause unless focus moves on first.
     var focusedKey by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(focusedKey, open) {
+    // At start-up the categories arrive after the list is drawn: until the remembered group is
+    // among the entries, focus sits on the first one (Favourites) only because nothing else is
+    // there yet, so following it would throw the remembered group away.
+    val hasSelection = entries.any { it.selected }
+    LaunchedEffect(focusedKey, open, hasSelection) {
         val entry = entries.firstOrNull { it.key == focusedKey } ?: return@LaunchedEffect
-        if (!open || entry.selected) return@LaunchedEffect
+        if (!open || entry.selected || !hasSelection) return@LaunchedEffect
         delay(GROUP_FOLLOW_DELAY_MILLIS)
         entry.pick()
     }
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
-    FocusedList(count = entries.size, startIndex = selectedIndex, active = open, activeIndex = selectedIndex) { index, requester ->
+    // Once the remembered group shows up, move focus onto it (once — later picks follow focus).
+    var landed by remember { mutableStateOf(false) }
+    FocusedList(
+        count = entries.size,
+        startIndex = selectedIndex,
+        active = open,
+        activeIndex = selectedIndex,
+        jumpTo = selectedIndex.takeIf { open && hasSelection && !landed },
+        jumpVersion = hasSelection,
+        onJumped = { if (hasSelection) landed = true },
+    ) { index, requester ->
         val entry = entries[index]
         Column {
             entry.section?.let { GroupsHeader(it, open) }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.22.1 — 22 October 2026
+
+- The full-screen live list opens on the group you last watched again; at start-up it could fall
+  back to Favourites before the groups had loaded.
+- The player's list of sources no longer goes blank past the ninth source.
+
 ## 0.22.0 — 21 October 2026
 
 - **A better side menu while you watch.** LEFT shows the group's channels with what is on now —
