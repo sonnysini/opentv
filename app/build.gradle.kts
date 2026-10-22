@@ -17,6 +17,9 @@ android {
         versionCode = 68
         versionName = "0.23.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // libVLC ships ~40 MB of native code per ABI. Every Fire TV runs 32-bit ARM code, so
+        // the release carries only that; debug adds x86_64 for the emulator.
+        ndk { abiFilters += "armeabi-v7a" }
     }
 
     signingConfigs {
@@ -68,6 +71,7 @@ android {
                 }
         }
         debug {
+            ndk { abiFilters += "x86_64" }
             applicationIdSuffix = ".debug"
             isMinifyEnabled = false
         }
@@ -89,6 +93,8 @@ android {
     }
 
     packaging {
+        // Compress native libs in the APK (libVLC would otherwise add ~40 MB stored).
+        jniLibs { useLegacyPackaging = true }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -127,6 +133,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.media3.exoplayer)
+    implementation(libs.libvlc)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
     implementation(libs.media3.exoplayer.rtsp)

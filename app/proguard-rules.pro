@@ -56,3 +56,6 @@
 -dontwarn org.slf4j.**
 -dontwarn org.ietf.jgss.**
 -dontwarn javax.security.**
+
+# libVLC is driven from native code through JNI callbacks.
+-keep class org.videolan.libvlc.** { *; }

@@ -118,6 +118,7 @@ fun HomeScreen(
     hasSources: Boolean,
     isSyncing: Boolean,
     onPlayChannel: (Channel) -> Unit,
+    onPlayChannelVlc: (Channel) -> Unit = {},
     onAddSource: () -> Unit,
     onRefresh: () -> Unit,
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit = { _, _, _, _ -> },
@@ -250,12 +251,12 @@ fun HomeScreen(
     var pendingLiveChannel by remember { mutableStateOf<Channel?>(null) }
     val logoSource = LocalLogoSource.current
     val logoPack = LocalLogoPack.current
-    fun startLive(channel: Channel) {
+    fun startLive(channel: Channel, vlc: Boolean = false) {
         PlaybackQueue.items = rows.map {
             PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logo(logoSource, logoPack), it.primary.number)
         }
         previewController.stop()
-        onPlayChannel(channel)
+        if (vlc) onPlayChannelVlc(channel) else onPlayChannel(channel)
     }
     fun requestLive(channel: Channel) {
         if (activeRecordings.isNotEmpty()) pendingLiveChannel = channel else startLive(channel)
@@ -813,6 +814,10 @@ fun HomeScreen(
                     RecordActionRow(stringResource(R.string.guide_watch)) {
                         channelMenu = null
                         requestLive(channel)
+                    }
+                    RecordActionRow(stringResource(R.string.guide_watch_vlc)) {
+                        channelMenu = null
+                        startLive(channel, vlc = true)
                     }
                     RecordActionRow(
                         stringResource(if (channel.favourite) R.string.live_favourite_remove else R.string.live_favourite_add),

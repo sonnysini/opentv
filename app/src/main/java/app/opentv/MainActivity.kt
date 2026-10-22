@@ -72,6 +72,7 @@ import app.opentv.ui.channels.SearchScreen
 import app.opentv.ui.onboarding.AddSourceScreen
 import app.opentv.ui.ChannelsViewModel
 import app.opentv.ui.player.PlayerScreen
+import app.opentv.ui.player.VlcPlayerScreen
 import app.opentv.ui.settings.AboutScreen
 import app.opentv.ui.settings.AppearanceSettingsScreen
 import app.opentv.ui.settings.LogoSettingsScreen
@@ -219,6 +220,7 @@ object Routes {
     const val HOME = "home"
     const val ADD_SOURCE = "add-source"
     const val PLAYER = "player/{channelId}"
+    const val VLC_PLAYER = "vlc/{channelId}"
     const val SEARCH = "search"
     const val EPG_SETTINGS = "epg-settings"
     const val APPEARANCE = "appearance"
@@ -250,6 +252,7 @@ object Routes {
     const val VOD_PLAYER = "vod?key={key}&url={url}&title={title}&ua={ua}"
 
     fun player(channelId: Long) = "player/$channelId"
+    fun vlcPlayer(channelId: Long) = "vlc/$channelId"
     fun seriesDetail(seriesId: Long) = "series/$seriesId"
     fun movieDetail(movieId: Long) = "movie/$movieId"
     fun editSource(sourceId: Long) = "edit-source/$sourceId"
@@ -366,6 +369,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     hasSources = sourcesUi.sources.isNotEmpty(),
                     isSyncing = sourcesUi.syncing,
                     onPlayChannel = { channel -> navController.navigate(Routes.player(channel.id)) },
+                    onPlayChannelVlc = { channel -> navController.navigate(Routes.vlcPlayer(channel.id)) },
                     onOpenMovie = { movie ->
                         navController.navigate(Routes.movieDetail(movie.id))
                     },
@@ -539,6 +543,13 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 PlayerScreen(
                     channelId = channelId,
                     channels = channelsViewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+
+            composable(Routes.VLC_PLAYER) { entry ->
+                VlcPlayerScreen(
+                    channelId = entry.arguments?.getString("channelId")?.toLongOrNull(),
                     onBack = { navController.popBackStack() },
                 )
             }
