@@ -124,6 +124,8 @@
     <string name="player_aspect">Aspect</string>
     <string name="player_record">Record</string>
     <string name="player_pop_out">Pop out</string>
+    <string name="player_open_external">Open in another player</string>
+    <string name="player_no_external">No other video player installed</string>
     <string name="player_last">Last</string>
     <string name="player_groups">Groups</string>
     <string name="player_sources">Sources</string>

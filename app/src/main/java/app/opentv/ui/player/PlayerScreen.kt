@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -216,6 +217,9 @@ fun PlayerScreen(
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var tried by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var started by remember { mutableStateOf(false) }
+    // The stream on screen, so it can be handed to another player app.
+    var playingUrl by remember { mutableStateOf<String?>(null) }
+    var playingUa by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
     var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // Every variant of the channel failed or timed out: say so instead of spinning forever.
@@ -327,6 +331,8 @@ fun PlayerScreen(
             val source = graph.sourceRepository.byId(channel.sourceId)
             // Xtream/M3U carry a ready URL; a Stalker channel's URL is minted here from its cmd.
             val url = graph.catalogRepository.resolvePlaybackUrl(channel, source)
+            playingUrl = url
+            playingUa = source?.userAgent
             controller.play(
                 PlayerController.Request(
                     url = url,
@@ -1085,6 +1091,14 @@ fun PlayerScreen(
                                     interaction++
                                 }
                             }
+                            playingUrl?.let { url ->
+                                Spacer(Modifier.width(10.dp))
+                                val chooserTitle = stringResource(R.string.player_open_external)
+                                BarChip(Icons.Filled.OpenInNew, chooserTitle, false) {
+                                    openInExternalPlayer(context, url, playingUa, chooserTitle)
+                                    interaction++
+                                }
+                            }
                         }
                     }
                 }
@@ -1817,6 +1831,28 @@ private fun OptionRow(
         if (selected) {
             Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.common_selected), tint = fg)
         }
+    }
+}
+
+/**
+ * Hands the stream to another installed player (VLC, Kodi, Vimu…), asking which one every time.
+ * The User-Agent rides along as the extras VLC and Vimu read; Kodi ignores it.
+ */
+private fun openInExternalPlayer(context: android.content.Context, url: String, userAgent: String?, title: String) {
+    val view = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+        setDataAndType(android.net.Uri.parse(url), "video/*")
+        if (userAgent != null) {
+            putExtra("http-user-agent", userAgent)
+            putExtra("User-Agent", userAgent)
+            putExtra("headers", arrayOf("User-Agent", userAgent))
+        }
+    }
+    val chooser = android.content.Intent.createChooser(view, title)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(chooser)
+    } catch (_: android.content.ActivityNotFoundException) {
+        android.widget.Toast.makeText(context, R.string.player_no_external, android.widget.Toast.LENGTH_LONG).show()
     }
 }
 

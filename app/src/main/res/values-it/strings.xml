@@ -110,6 +110,8 @@
     <string name="player_aspect">Formato</string>
     <string name="player_record">Registra</string>
     <string name="player_pop_out">Finestra mobile</string>
+    <string name="player_open_external">Apri in un altro player</string>
+    <string name="player_no_external">Nessun altro player video installato</string>
     <string name="player_last">Ultimo</string>
     <string name="player_groups">Gruppi</string>
     <string name="player_sources">Fonti</string>
