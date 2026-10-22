@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23.1 — 22 October 2026
+
+- **Live channels start faster and stop freezing after the first frame.** Playback no longer sits
+  just 10 s behind live, where it began on the segment the provider was still writing and waited
+  for it at real-time speed. The delay is now automatic (about 30 s with 10 s segments).
+  Settings › Playback › Delay behind live sets it by hand, from 5 to 60 s.
+
 ## 0.23.0 — 22 October 2026
 
 - **A source you pick stays picked.** After changing source with ☰, the Quality button or its
