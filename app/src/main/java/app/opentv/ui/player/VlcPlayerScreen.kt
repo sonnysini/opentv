@@ -53,6 +53,7 @@ import app.opentv.core.findActivity
 import app.opentv.data.model.Channel
 import app.opentv.data.model.shownName
 import app.opentv.player.PlaybackQueue
+import app.opentv.player.QualityNames
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.videolan.libvlc.LibVLC
@@ -63,9 +64,11 @@ import org.videolan.libvlc.util.VLCVideoLayout
 /**
  * The plain VLC player: a second way to watch a live channel, opened from the channel menu.
  *
- * Deliberately bare — it plays the channel's preferred quality and that's it: no fallback to
- * other qualities, no stall watching, no panels. Up/down zaps through the same list the guide
- * handed over, Back returns to the guide. The main player is untouched.
+ * Deliberately bare: no stall watching, no panels. It starts on the channel's preferred quality
+ * and, when a stream won't open or shows no picture in time, moves on to the next one, so a dead
+ * feed is never mistaken for VLC not working; the banner names the stream in use. Up/down zaps
+ * through the same list the guide handed over, Back returns to the guide. The main player is
+ * untouched.
  */
 @Composable
 fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
@@ -88,6 +91,58 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
     // after watching there is often turned away (HTTP 404). Same stream, retried a few times.
     var refusals by remember { mutableIntStateOf(0) }
     var started by remember { mutableStateOf(false) }
+    // The channel's streams in the order to try them, the one on screen, and a switch notice.
+    var variants by remember { mutableStateOf(emptyList<Channel>()) }
+    var tryOrder by remember { mutableStateOf(emptyList<Channel>()) }
+    var current by remember { mutableStateOf<Channel?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableIntStateOf(0) }
+
+    fun variantName(channel: Channel): String =
+        QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
+            ?: channel.qualityLabel.ifBlank { channel.shownName }
+
+    fun playVariant(variant: Channel) {
+        current = variant
+        failed = false
+        buffering = true
+        started = false
+        refusals = 0
+        attempt++
+        player.stop()
+        scope.launch {
+            val source = graph.sourceRepository.byId(variant.sourceId)
+            val url = graph.catalogRepository.resolvePlaybackUrl(variant, source)
+            val ua = source?.userAgent ?: "OpenTV/0.1 (Android)"
+            // Same User-Agent as the main player, so the provider sees one client, not two.
+            libVlc.setUserAgent(ua, ua)
+            val media = Media(libVlc, Uri.parse(url)).apply {
+                setHWDecoderEnabled(true, false)
+                addOption(":http-user-agent=$ua")
+                // Start a full segment back from the live edge (this provider cuts 10 s segments),
+                // so the first one is already complete on the server rather than still being written.
+                addOption(":adaptive-livedelay=30000")
+            }
+            player.media = media
+            media.release()
+            player.play()
+        }
+    }
+
+    /** The stream on screen didn't start: on to the next one, or give up when none are left. */
+    fun fallBack() {
+        val failedOne = current ?: return
+        val next = tryOrder.dropWhile { it.id != failedOne.id }.drop(1).firstOrNull()
+        if (next == null) {
+            player.stop()
+            failed = true
+            buffering = false
+            return
+        }
+        notice = context.getString(R.string.player_quality_fallback, variantName(failedOne), variantName(next))
+        banner++
+        playVariant(next)
+    }
 
     DisposableEffect(Unit) {
         val window = context.findActivity()?.window
@@ -103,11 +158,14 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
                         delay(OPEN_RETRY_MILLIS)
                         player.play()
                     }
+                } else if (!started) {
+                    fallBack()
                 } else {
                     failed = true
                     buffering = false
                 }
-                MediaPlayer.Event.EndReached -> { failed = true; buffering = false }
+                // A live stream never ends; one that does is the provider's "not available" clip.
+                MediaPlayer.Event.EndReached -> if (!started) fallBack() else { failed = true; buffering = false }
             }
         }
         onDispose {
@@ -123,30 +181,21 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
 
     suspend fun tune(channel: Channel) {
         name = channel.shownName
+        notice = null
         // Drop the old channel's last frame straight away instead of leaving it frozen on screen.
         player.stop()
-        failed = false
-        buffering = true
-        started = false
-        refusals = 0
+        variants = graph.catalogRepository.variants(channel)
+        tryOrder = QualityPreference.order(variants, graph.settings.preferredQuality.value).ifEmpty { listOf(channel) }
         banner++
-        val variants = graph.catalogRepository.variants(channel)
-        val pick = QualityPreference.order(variants, graph.settings.preferredQuality.value).firstOrNull() ?: channel
-        val source = graph.sourceRepository.byId(pick.sourceId)
-        val url = graph.catalogRepository.resolvePlaybackUrl(pick, source)
-        val ua = source?.userAgent ?: "OpenTV/0.1 (Android)"
-        // Same User-Agent as the main player, so the provider sees one client, not two.
-        libVlc.setUserAgent(ua, ua)
-        val media = Media(libVlc, Uri.parse(url)).apply {
-            setHWDecoderEnabled(true, false)
-            addOption(":http-user-agent=$ua")
-            // Start a full segment back from the live edge (this provider cuts 10 s segments), so
-            // the first one is already complete on the server rather than still being written.
-            addOption(":adaptive-livedelay=30000")
-        }
-        player.media = media
-        media.release()
-        player.play()
+        playVariant(tryOrder.first())
+    }
+
+    // No picture in time on this stream: treat it as dead and move on. VLC takes a few seconds
+    // longer to open a stream than the main player, hence the generous wait.
+    LaunchedEffect(attempt) {
+        if (attempt == 0) return@LaunchedEffect
+        delay(START_TIMEOUT_MILLIS)
+        if (!started && !failed) fallBack()
     }
 
     LaunchedEffect(listedId) {
@@ -222,7 +271,8 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
             modifier = Modifier.align(Alignment.TopStart).padding(32.dp),
         ) {
             Text(
-                "$name · VLC",
+                listOfNotNull(name, current?.takeIf { variants.size > 1 }?.let { variantName(it) }, "VLC").joinToString(" · ") +
+                    (notice?.let { "\n$it" } ?: ""),
                 color = Color.White,
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier
@@ -235,5 +285,6 @@ fun VlcPlayerScreen(channelId: Long?, onBack: () -> Unit) {
 }
 
 private const val BANNER_MILLIS = 3_000L
-private const val OPEN_RETRIES = 5
+private const val OPEN_RETRIES = 2
+private const val START_TIMEOUT_MILLIS = 12_000L
 private const val OPEN_RETRY_MILLIS = 2_000L
