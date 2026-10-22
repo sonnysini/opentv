@@ -68,6 +68,9 @@ import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -220,6 +223,8 @@ fun PlayerScreen(
     // The stream on screen, so it can be handed to another player app.
     var playingUrl by remember { mutableStateOf<String?>(null) }
     var playingUa by remember { mutableStateOf<String?>(null) }
+    // Set while another player app has the stream; ours stays stopped until we're back in front.
+    var handedOff by remember { mutableStateOf(false) }
     var attempt by remember { mutableIntStateOf(0) }
     var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // Every variant of the channel failed or timed out: say so instead of spinning forever.
@@ -346,6 +351,19 @@ fun PlayerScreen(
         }
     }
 
+    // Back from the other player: pick the channel up again where we left it.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && handedOff) {
+                handedOff = false
+                variants.firstOrNull { it.id == currentId }?.let(::tuneTo)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     /** A variant's name for the switch notice and the picker: `FHD 2 · B`, numbered among its kind. */
     fun variantName(channel: Channel): String =
         QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
@@ -393,7 +411,7 @@ fun PlayerScreen(
 
     /** The current variant didn't start: move on to the next untried quality, if there is one. */
     fun fallBack() {
-        if (started || unavailable || holdingPick()) return
+        if (started || unavailable || handedOff || holdingPick()) return
         val next = if (settings.qualityFallback.value) tryOrder.firstOrNull { it.id !in tried } else null
         val back = stallReturnId?.let { id -> variants.firstOrNull { it.id == id } }
         if (next == null && back != null) {
@@ -1095,6 +1113,12 @@ fun PlayerScreen(
                                 Spacer(Modifier.width(10.dp))
                                 val chooserTitle = stringResource(R.string.player_open_external)
                                 BarChip(Icons.Filled.OpenInNew, chooserTitle, false) {
+                                    // The provider allows one stream per account: let go of ours first,
+                                    // and keep the chooser from shrinking us into picture-in-picture.
+                                    app.opentv.core.PipState.isPlaying = false
+                                    paused = true
+                                    controller.stop()
+                                    handedOff = true
                                     openInExternalPlayer(context, url, playingUa, chooserTitle)
                                     interaction++
                                 }
@@ -1849,6 +1873,11 @@ private fun openInExternalPlayer(context: android.content.Context, url: String, 
     }
     val chooser = android.content.Intent.createChooser(view, title)
         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Fire OS lists a placeholder gallery that can't play anything.
+        .putExtra(
+            android.content.Intent.EXTRA_EXCLUDE_COMPONENTS,
+            arrayOf(android.content.ComponentName("com.amazon.dummy.gallery", "com.amazon.dummy.gallery.DummyGalleryActivity")),
+        )
     try {
         context.startActivity(chooser)
     } catch (_: android.content.ActivityNotFoundException) {
