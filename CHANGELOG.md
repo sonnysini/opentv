@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.23.0 — 22 October 2026
+
+- **A source you pick stays picked.** After changing source with ☰, the Quality button or its
+  list, the player gives it the time it needs to start and rides out a single freeze instead of
+  moving on by itself. Settings › Playback › Source picked by hand: stay on it, switch only if it
+  keeps stuttering (default), or treat it like any other. Changing channel goes back to automatic.
+- **Switch stream if it stutters.** While watching, a stream that keeps pausing for a moment —
+  4 times in a minute by default, adjustable from 2 to 10 or off — moves to the channel's next
+  stream, with a notice saying so.
+- Every automatic switch now shows the list of sources top right, the highlight sliding onto the
+  new one.
+
 ## 0.22.2 — 22 October 2026
 
 - Favourites are set from the channel menu: hold OK on a channel and pick Add to favourites (or

@@ -510,6 +510,15 @@
     <string name="settings_controls_timeout">Barra del player sparisce dopo: %1$d s</string>
     <string name="settings_stall_timeout">Bloccato da: %1$s s</string>
     <string name="player_stall_fallback">%1$s bloccato → %2$s</string>
+    <string name="player_stutter_fallback">%1$s scatta → %2$s</string>
+    <string name="settings_hiccup_title">Cambia flusso se scatta spesso</string>
+    <string name="settings_hiccup_subtitle">Durante la visione, se l\'immagine si ferma spesso per un attimo, passa al flusso successivo del canale.</string>
+    <string name="settings_hiccup_limit">Scatti in un minuto: %1$d</string>
+    <string name="settings_manual_source_title">Fonte scelta a mano</string>
+    <string name="settings_manual_source_note">Quando cambi fonte tu, con ☰ o col tasto Qualità:</string>
+    <string name="settings_manual_source_stay">Resta lì</string>
+    <string name="settings_manual_source_stutter">Cambia solo se scatta spesso</string>
+    <string name="settings_manual_source_auto">Come in automatico</string>
     <string name="player_info">Info</string>
     <string name="player_minutes_left">−%1$d min</string>
     <string name="stream_info_title">Info flusso</string>

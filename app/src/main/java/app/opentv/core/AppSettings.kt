@@ -397,6 +397,34 @@ class AppSettings private constructor(context: Context) {
         _stallFallback.value = enabled
     }
 
+    /**
+     * While watching, this many short stutters within a minute move to the channel's next variant
+     * (see [app.opentv.player.HiccupWatch]). 0 is off.
+     */
+    private val _hiccupLimit = pref {
+        prefs.getInt(KEY_HICCUP_LIMIT, DEFAULT_HICCUP_LIMIT).coerceIn(0, MAX_HICCUP_LIMIT)
+    }
+    val hiccupLimit: StateFlow<Int> = _hiccupLimit.asStateFlow()
+
+    fun setHiccupLimit(count: Int) {
+        val n = count.coerceIn(0, MAX_HICCUP_LIMIT)
+        prefs.edit().putInt(KEY_HICCUP_LIMIT, n).apply()
+        _hiccupLimit.value = n
+    }
+
+    /** Which automatic switches still apply to a source the viewer picked by hand. */
+    private val _manualSourceMode = pref {
+        prefs.getString(KEY_MANUAL_SOURCE_MODE, null)
+            ?.let { saved -> runCatching { ManualSourceMode.valueOf(saved) }.getOrNull() }
+            ?: ManualSourceMode.STUTTER_ONLY
+    }
+    val manualSourceMode: StateFlow<ManualSourceMode> = _manualSourceMode.asStateFlow()
+
+    fun setManualSourceMode(mode: ManualSourceMode) {
+        prefs.edit().putString(KEY_MANUAL_SOURCE_MODE, mode.name).apply()
+        _manualSourceMode.value = mode
+    }
+
     /** Player Quality button: OK steps to the next feed (hold for the list); off, OK opens the list. */
     private val _qualityButtonCycles = pref { prefs.getBoolean(KEY_QUALITY_BUTTON_CYCLES, true) }
     val qualityButtonCycles: StateFlow<Boolean> = _qualityButtonCycles.asStateFlow()
@@ -932,6 +960,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
         private const val KEY_STALL_FALLBACK = "stall_fallback"
         private const val KEY_QUALITY_BUTTON_CYCLES = "quality_button_cycles"
+        private const val KEY_HICCUP_LIMIT = "hiccup_limit"
+        private const val KEY_MANUAL_SOURCE_MODE = "manual_source_mode"
         private const val KEY_STALL_FALLBACK_SECONDS = "stall_fallback_seconds"
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
@@ -956,12 +986,12 @@ class AppSettings private constructor(context: Context) {
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
-                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE, KEY_CONTROLS_TIMEOUT,
+                KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE, KEY_CONTROLS_TIMEOUT, KEY_HICCUP_LIMIT,
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
                 KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_LOGO_SOURCE,
-                KEY_CUSTOM_LOGOS,
+                KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }
@@ -987,6 +1017,8 @@ class AppSettings private constructor(context: Context) {
         const val FALLBACK_STEP_MILLIS = 500
         private const val DEFAULT_FALLBACK_SECONDS = 4
         private const val DEFAULT_STALL_SECONDS = 3
+        const val DEFAULT_HICCUP_LIMIT = 4
+        const val MAX_HICCUP_LIMIT = 10
 
         @Volatile private var instance: AppSettings? = null
 
@@ -996,3 +1028,10 @@ class AppSettings private constructor(context: Context) {
             }
     }
 }
+
+/**
+ * A source picked by hand (Quality button, its list, or ☰) and the automatic switches:
+ * [STAY] none at all; [STUTTER_ONLY] gives it all the time it needs to start and rides out a
+ * single freeze, but still leaves if it keeps stuttering; [AUTO] treats it like any other.
+ */
+enum class ManualSourceMode { STAY, STUTTER_ONLY, AUTO }
