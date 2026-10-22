@@ -412,6 +412,21 @@ class AppSettings private constructor(context: Context) {
         _hiccupLimit.value = n
     }
 
+    /**
+     * Seconds behind the live edge for live streams; 0 leaves it to the player (three HLS segments
+     * back, ~30 s with 10 s segments). Lower is closer to live but risks freezes on slow panels.
+     */
+    private val _liveOffsetSeconds = pref {
+        prefs.getInt(KEY_LIVE_OFFSET_SECONDS, 0).coerceIn(0, MAX_LIVE_OFFSET_SECONDS)
+    }
+    val liveOffsetSeconds: StateFlow<Int> = _liveOffsetSeconds.asStateFlow()
+
+    fun setLiveOffsetSeconds(seconds: Int) {
+        val n = seconds.coerceIn(0, MAX_LIVE_OFFSET_SECONDS)
+        prefs.edit().putInt(KEY_LIVE_OFFSET_SECONDS, n).apply()
+        _liveOffsetSeconds.value = n
+    }
+
     /** Which automatic switches still apply to a source the viewer picked by hand. */
     private val _manualSourceMode = pref {
         prefs.getString(KEY_MANUAL_SOURCE_MODE, null)
@@ -961,6 +976,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_STALL_FALLBACK = "stall_fallback"
         private const val KEY_QUALITY_BUTTON_CYCLES = "quality_button_cycles"
         private const val KEY_HICCUP_LIMIT = "hiccup_limit"
+        private const val KEY_LIVE_OFFSET_SECONDS = "live_offset_seconds"
         private const val KEY_MANUAL_SOURCE_MODE = "manual_source_mode"
         private const val KEY_STALL_FALLBACK_SECONDS = "stall_fallback_seconds"
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
@@ -987,6 +1003,7 @@ class AppSettings private constructor(context: Context) {
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
                 KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE, KEY_CONTROLS_TIMEOUT, KEY_HICCUP_LIMIT,
+                KEY_LIVE_OFFSET_SECONDS,
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
@@ -1019,6 +1036,8 @@ class AppSettings private constructor(context: Context) {
         private const val DEFAULT_STALL_SECONDS = 3
         const val DEFAULT_HICCUP_LIMIT = 4
         const val MAX_HICCUP_LIMIT = 10
+        const val MAX_LIVE_OFFSET_SECONDS = 60
+        const val LIVE_OFFSET_STEP_SECONDS = 5
 
         @Volatile private var instance: AppSettings? = null
 

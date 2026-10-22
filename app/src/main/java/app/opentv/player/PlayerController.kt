@@ -112,6 +112,12 @@ class PlayerController(
         /** Live streams are never resumed; VOD is. */
         val startPositionMillis: Long = 0L,
         val isLive: Boolean = true,
+        /**
+         * How far behind the live edge to sit, or null for the player's own pick (three segments
+         * back on HLS). Too close and playback starts on the segment the panel is still writing,
+         * which trickles in at 1x: the buffer never fills and the picture freezes.
+         */
+        val liveOffsetMillis: Long? = null,
     )
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -317,10 +323,11 @@ class PlayerController(
                 .setUri(request.url)
                 .apply {
                     // Only meaningful for live streams; setting it on VOD skews seeking.
-                    if (request.isLive) {
+                    val offset = request.liveOffsetMillis
+                    if (request.isLive && offset != null) {
                         setLiveConfiguration(
                             MediaItem.LiveConfiguration.Builder()
-                                .setTargetOffsetMs(LIVE_TARGET_OFFSET_MILLIS)
+                                .setTargetOffsetMs(offset)
                                 .build(),
                         )
                     }
@@ -515,7 +522,5 @@ class PlayerController(
         const val PREVIEW_BUFFER_FOR_PLAYBACK_MILLIS = 1_000
         const val PREVIEW_BUFFER_AFTER_REBUFFER_MILLIS = 1_500
         const val PREVIEW_SWITCH_DEBOUNCE_MILLIS = 700L
-
-        const val LIVE_TARGET_OFFSET_MILLIS = 10_000L
     }
 }
