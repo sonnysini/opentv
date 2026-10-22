@@ -118,6 +118,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.opentv.R
+import app.opentv.core.ManualSourceMode
 import app.opentv.core.QualityPreference
 import app.opentv.core.ServiceLocator
 import app.opentv.core.SleepTimer
@@ -126,6 +127,7 @@ import app.opentv.core.requestIgnoreBatteryOptimizations
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
+import app.opentv.player.HiccupWatch
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
 import app.opentv.player.StallWatch
@@ -221,6 +223,9 @@ fun PlayerScreen(
     // The variant that was playing before a stall switch: if every other one then fails to start,
     // go back to it rather than give up — it was working a moment ago.
     var stallReturnId by remember { mutableStateOf<Long?>(null) }
+    // The playing variant was picked by hand: Settings › Playback decides which automatic switches
+    // still apply to it. Cleared by a channel change or an automatic switch.
+    var manualPick by remember { mutableStateOf(false) }
     // The channel we were on before this one — powers the "Last channel" recall in the list.
     var previousChannel by remember { mutableStateOf<Channel?>(null) }
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
@@ -344,6 +349,7 @@ fun PlayerScreen(
         val next = StallWatch.nextAfter(variants, currentId) { it.id } ?: return
         tried = emptySet()
         stallReturnId = null
+        manualPick = true
         if (notice) fallbackNotice = variantName(next)
         tuneTo(next)
         interaction++
@@ -371,12 +377,16 @@ fun PlayerScreen(
         tryOrder = if (known == null) preferred else listOf(known) + (preferred - known)
         tried = emptySet()
         stallReturnId = null
+        manualPick = false
         tuneTo(tryOrder.firstOrNull() ?: channel)
     }
 
+    /** Whether the automatic switches leave the playing variant alone: picked by hand, and set to. */
+    fun holdingPick(): Boolean = manualPick && settings.manualSourceMode.value != ManualSourceMode.AUTO
+
     /** The current variant didn't start: move on to the next untried quality, if there is one. */
     fun fallBack() {
-        if (started || unavailable) return
+        if (started || unavailable || holdingPick()) return
         val next = if (settings.qualityFallback.value) tryOrder.firstOrNull { it.id !in tried } else null
         val back = stallReturnId?.let { id -> variants.firstOrNull { it.id == id } }
         if (next == null && back != null) {
@@ -391,11 +401,16 @@ fun PlayerScreen(
         }
         val failed = tryOrder.firstOrNull { it.id == currentId } ?: variants.firstOrNull { it.id == currentId } ?: next
         fallbackNotice = context.getString(R.string.player_quality_fallback, variantName(failed), variantName(next))
+        manualPick = false
         tuneTo(next)
+        sourcesPing++
     }
 
-    /** A playing stream stopped moving: on to the next variant, wrapping round, or retry the only one. */
-    fun stallSwitch() {
+    /**
+     * A playing stream stopped moving, or keeps stuttering ([notice] says which): on to the next
+     * variant, wrapping round, or retry the only one.
+     */
+    fun stallSwitch(notice: Int = R.string.player_stall_fallback) {
         val next = StallWatch.nextAfter(tryOrder.ifEmpty { variants }, currentId) { it.id }
         if (next == null) {
             controller.retry()
@@ -404,14 +419,16 @@ fun PlayerScreen(
         }
         val stalled = variants.firstOrNull { it.id == currentId }
         fallbackNotice = context.getString(
-            R.string.player_stall_fallback,
+            notice,
             stalled?.let { variantName(it) }.orEmpty(),
             variantName(next),
         )
         // The frozen feed sits out the start-up fallback this time round; it comes back in rotation later.
         tried = setOfNotNull(currentId)
         stallReturnId = currentId
+        manualPick = false
         tuneTo(next)
+        sourcesPing++
     }
 
     fun playChannelId(id: Long) {
@@ -468,7 +485,17 @@ fun PlayerScreen(
                     val id = currentId
                     if (listed != null && id != null) WorkingVariants.remember(listed, id)
                 }
-                is PlayerController.State.Error -> fallBack()
+                is PlayerController.State.Error ->
+                    if (holdingPick() && !started) {
+                        // A hand-picked source that errors gets another go rather than being left.
+                        val id = currentId
+                        scope.launch {
+                            delay(MANUAL_RETRY_MILLIS)
+                            if (currentId == id && !started && holdingPick()) controller.retry()
+                        }
+                    } else {
+                        fallBack()
+                    }
                 else -> Unit
             }
         }
@@ -488,16 +515,31 @@ fun PlayerScreen(
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeoutSeconds by settings.controlsTimeoutSeconds.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
-    LaunchedEffect(started, paused, stallFallback, stallMillis, currentId, watchEpoch) {
-        if (!started || paused || !stallFallback) return@LaunchedEffect
-        val watch = StallWatch(stallMillis.toLong())
+    // ...and one that keeps stuttering, too briefly each time for the freeze wait, does the same.
+    val hiccupLimit by settings.hiccupLimit.collectAsState()
+    val manualSourceMode by settings.manualSourceMode.collectAsState()
+    LaunchedEffect(started, paused, stallFallback, stallMillis, hiccupLimit, manualPick, manualSourceMode, currentId, watchEpoch) {
+        if (!started || paused) return@LaunchedEffect
+        val held = manualPick && manualSourceMode != ManualSourceMode.AUTO
+        val watch = if (stallFallback && !held) StallWatch(stallMillis.toLong()) else null
+        val hiccups = if (hiccupLimit > 0 && !(manualPick && manualSourceMode == ManualSourceMode.STAY)) {
+            HiccupWatch(hiccupLimit)
+        } else {
+            null
+        }
+        if (watch == null && hiccups == null) return@LaunchedEffect
         while (true) {
             delay(StallWatch.SAMPLE_MILLIS)
             // Paused from outside the bar (lifecycle, PiP): not a stall.
-            if (!controller.player.playWhenReady) { watch.reset(); continue }
+            if (!controller.player.playWhenReady) { watch?.reset(); hiccups?.reset(); continue }
             val p = controller.progress()
-            if (watch.sample(SystemClock.elapsedRealtime(), p.positionMillis, p.renderedFrames, p.hasVideo)) {
+            val now = SystemClock.elapsedRealtime()
+            if (watch?.sample(now, p.positionMillis, p.renderedFrames, p.hasVideo) == true) {
                 stallSwitch()
+                return@LaunchedEffect
+            }
+            if (hiccups?.sample(now, p.positionMillis, p.renderedFrames, p.hasVideo) == true) {
+                stallSwitch(R.string.player_stutter_fallback)
                 return@LaunchedEffect
             }
         }
@@ -903,7 +945,7 @@ fun PlayerScreen(
                         currentId = currentId,
                         resizeMode = resizeMode,
                         onResize = { resizeMode = it; settings.setPlayerResizeMode(it) },
-                        onTune = { tried = emptySet(); tuneTo(it) },
+                        onTune = { tried = emptySet(); manualPick = true; tuneTo(it) },
                         variantName = { variantName(it) },
                         firstFocus = panelFocus,
                         onDone = { panel = Panel.NONE; interaction++ },
@@ -1873,6 +1915,7 @@ private val SIDE_MENU_WIDTH = 360.dp
 private const val GROUP_LOAD_TIMEOUT_MILLIS = 5_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
+private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
 private val LOGO_SIZE = 128.dp
 

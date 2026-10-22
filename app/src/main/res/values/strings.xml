@@ -577,6 +577,15 @@
     <string name="settings_controls_timeout">Player bar hides after: %1$d s</string>
     <string name="settings_stall_timeout">Frozen for: %1$s s</string>
     <string name="player_stall_fallback">%1$s froze → %2$s</string>
+    <string name="player_stutter_fallback">%1$s keeps stuttering → %2$s</string>
+    <string name="settings_hiccup_title">Switch stream if it stutters</string>
+    <string name="settings_hiccup_subtitle">While watching, if the picture keeps pausing for a moment, move to the channel\'s next stream.</string>
+    <string name="settings_hiccup_limit">Stutters in a minute: %1$d</string>
+    <string name="settings_manual_source_title">Source picked by hand</string>
+    <string name="settings_manual_source_note">When you change source yourself, with ☰ or the Quality button:</string>
+    <string name="settings_manual_source_stay">Stay on it</string>
+    <string name="settings_manual_source_stutter">Switch only if it keeps stuttering</string>
+    <string name="settings_manual_source_auto">Same as automatic</string>
     <string name="player_info">Info</string>
     <string name="player_minutes_left">−%1$d min</string>
     <string name="stream_info_title">Stream info</string>

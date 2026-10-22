@@ -66,6 +66,7 @@ import android.content.Context
 import android.widget.Toast
 import app.opentv.R
 import app.opentv.core.AppSettings
+import app.opentv.core.ManualSourceMode
 import app.opentv.core.PreferredQuality
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
@@ -218,6 +219,8 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
     val stallFallback by settings.stallFallback.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
+    val hiccupLimit by settings.hiccupLimit.collectAsState()
+    val manualSourceMode by settings.manualSourceMode.collectAsState()
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
 
@@ -271,6 +274,40 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                     step = AppSettings.FALLBACK_STEP_MILLIS,
                     onChange = settings::setStallFallbackMillis,
                 )
+            }
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = stringResource(R.string.settings_hiccup_title),
+                subtitle = stringResource(R.string.settings_hiccup_subtitle),
+                checked = hiccupLimit > 0,
+                onToggle = { on -> settings.setHiccupLimit(if (on) AppSettings.DEFAULT_HICCUP_LIMIT else 0) },
+            )
+            if (hiccupLimit > 0) {
+                StepSlider(
+                    label = stringResource(R.string.settings_hiccup_limit, hiccupLimit),
+                    value = hiccupLimit,
+                    min = MIN_HICCUP_LIMIT,
+                    max = AppSettings.MAX_HICCUP_LIMIT,
+                    step = 1,
+                    onChange = settings::setHiccupLimit,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.settings_manual_source_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.settings_manual_source_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            listOf(
+                ManualSourceMode.STAY to R.string.settings_manual_source_stay,
+                ManualSourceMode.STUTTER_ONLY to R.string.settings_manual_source_stutter,
+                ManualSourceMode.AUTO to R.string.settings_manual_source_auto,
+            ).forEach { (mode, label) ->
+                ThemeOption(stringResource(label), manualSourceMode == mode) { settings.setManualSourceMode(mode) }
             }
             Spacer(Modifier.height(8.dp))
             ToggleRow(
@@ -746,3 +783,6 @@ private fun ContentToggleRow(
         Switch(checked = checked, onCheckedChange = onToggle)
     }
 }
+
+/** Fewer stutters than this in a minute is just a live stream being a live stream. */
+private const val MIN_HICCUP_LIMIT = 2
