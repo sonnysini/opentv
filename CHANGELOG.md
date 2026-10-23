@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.26.0 — 23 October 2026
+
+- **Preferred sources.** Settings › Playback › Preferred sources lists every restream source in
+  the live categories: select the ones to try first, in order. A channel starts on the first
+  listed source it has, before any quality rule; the other sources follow as fallback.
+- **The source picked by hand is remembered.** A feed picked with the Quality button or its list
+  becomes that channel's first try from then on, even after a restart. If it does not play, the
+  usual fallback takes over and it is tried first again next time. On by default
+  (Settings › Playback › Remember the source picked for each channel), with a button to reset
+  every pick.
+
 ## 0.25.0 — 23 October 2026
 
 - **The live list opens straight away.** OpenTV remembers the last list it showed and opens on it,
