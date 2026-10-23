@@ -437,7 +437,6 @@ fun PlayerScreen(
         fallbackNotice = context.getString(R.string.player_quality_fallback, variantName(failed), variantName(next))
         manualPick = false
         tuneTo(next)
-        sourcesPing++
     }
 
     /**
@@ -462,7 +461,6 @@ fun PlayerScreen(
         stallReturnId = currentId
         manualPick = false
         tuneTo(next)
-        sourcesPing++
     }
 
     fun playChannelId(id: Long) {
