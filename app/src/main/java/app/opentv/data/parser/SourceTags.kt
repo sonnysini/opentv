@@ -24,5 +24,5 @@ object SourceTags {
     val CATEGORY = listOf("stel-dvs", "hermes", "stellina", "skynet\\+?", "kali", "kaly", "dvs", "sat")
 
     /** Spellings that title case gets wrong, by lowercase tag. */
-    val LABELS = mapOf("skynet" to "SkyNet", "skynet+" to "SkyNet")
+    val LABELS = mapOf("skynet" to "SkyNet", "skynet+" to "SkyNet", "stel-dvs" to "Stel-DVS")
 }
