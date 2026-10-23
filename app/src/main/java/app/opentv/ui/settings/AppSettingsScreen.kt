@@ -5,21 +5,14 @@
  */
 package app.opentv.ui.settings
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,10 +28,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,22 +52,32 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import android.content.Context
-import android.widget.Toast
 import app.opentv.R
 import app.opentv.core.AppSettings
 import app.opentv.core.ManualSourceMode
 import app.opentv.core.PreferredQuality
+import app.opentv.core.ServiceLocator
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
+import app.opentv.data.model.StreamKind
+import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.work.SyncWorker
 import java.text.DecimalFormat
+import kotlinx.coroutines.flow.map
 
 /** Settings › Appearance: style, theme, size, language and how the channel list looks. */
 @Composable
@@ -225,6 +231,8 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
     val matchFrameRate by settings.matchFrameRate.collectAsState()
+    val rememberPicks by settings.rememberPicks.collectAsState()
+    val pickedCount = settings.pickedVariants.collectAsState().value.size
 
     SettingsPage(stringResource(R.string.settings_section_playback), onBack) {
         SettingsSection(stringResource(R.string.settings_quality_title)) {
@@ -237,6 +245,7 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                 val label = if (quality == PreferredQuality.BEST) stringResource(R.string.settings_quality_best) else quality.name
                 ThemeOption(label, preferredQuality == quality) { settings.setPreferredQuality(quality) }
             }
+            PreferredSourcesPicker(settings)
             Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = stringResource(R.string.settings_quality_fallback_title),
@@ -335,6 +344,18 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                 ManualSourceMode.AUTO to R.string.settings_manual_source_auto,
             ).forEach { (mode, label) ->
                 ThemeOption(stringResource(label), manualSourceMode == mode) { settings.setManualSourceMode(mode) }
+            }
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = stringResource(R.string.settings_remember_picks_title),
+                subtitle = stringResource(R.string.settings_remember_picks_subtitle),
+                checked = rememberPicks,
+                onToggle = settings::setRememberPicks,
+            )
+            if (pickedCount > 0) {
+                OutlinedButton(onClick = settings::clearPickedVariants) {
+                    Text(stringResource(R.string.settings_remember_picks_reset, pickedCount))
+                }
             }
             Spacer(Modifier.height(8.dp))
             ToggleRow(
@@ -672,6 +693,55 @@ internal fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit)
         RadioButton(selected = selected, onClick = onSelect)
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/**
+ * Settings › Playback › preferred sources: every restream source the live categories carry, OK to
+ * add one to the end of the preferred list or take it off. The number is its place in the order.
+ */
+@Composable
+private fun PreferredSourcesPicker(settings: AppSettings) {
+    val context = LocalContext.current
+    val preferred by settings.preferredSources.collectAsState()
+    val known by remember {
+        ServiceLocator.get(context).catalogRepository.observeAllCategories(StreamKind.LIVE).map { categories ->
+            categories.mapNotNull { CategoryFamily.of(it.name).source }
+                .distinctBy { it.lowercase() }
+                .sortedBy { it.lowercase() }
+        }
+    }.collectAsState(initial = emptyList())
+    // A preferred source the current list no longer has stays visible, so it can be taken off.
+    val gone = preferred.filter { p -> known.none { it.equals(p, ignoreCase = true) } }
+    val sources = known + gone
+    if (sources.isEmpty()) return
+    Spacer(Modifier.height(8.dp))
+    Text(stringResource(R.string.settings_sources_title), style = MaterialTheme.typography.titleMedium)
+    Text(
+        stringResource(R.string.settings_sources_note),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    sources.forEach { source ->
+        val place = preferred.indexOfFirst { it.equals(source, ignoreCase = true) }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .toggleable(value = place >= 0) { on ->
+                    settings.setPreferredSources(
+                        if (on) preferred + source else preferred.filterNot { it.equals(source, ignoreCase = true) },
+                    )
+                }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = place >= 0, onCheckedChange = null)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (place >= 0) "${place + 1}. $source" else source,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 }
 
