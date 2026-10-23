@@ -310,9 +310,12 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      */
     val nonEmptyCategoryGroups: StateFlow<List<CategoryGroup>> by lazy {
         withSnapshot(
-            combine(visibleCategoryGroups, groupCounts) { groups, counts ->
-                groups.filter { (counts[it.key] ?: 0) > 0 }
-            }.flowOn(Dispatchers.Default),
+            combine(visibleCategoryGroups, groupCounts) { groups, counts -> groups to counts }
+                // Before the counts are in every group looks empty: wait rather than replace the
+                // snapshot's groups with nothing.
+                .filter { (_, counts) -> counts.isNotEmpty() }
+                .map { (groups, counts) -> groups.filter { (counts[it.key] ?: 0) > 0 } }
+                .flowOn(Dispatchers.Default),
         ) { it.nonEmptyGroups }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), startSnapshot?.nonEmptyGroups.orEmpty())
     }

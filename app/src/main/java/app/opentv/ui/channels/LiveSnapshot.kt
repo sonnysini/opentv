@@ -80,10 +80,12 @@ object LiveSnapshotStore {
     fun preload(context: Context) {
         val file = File(context.filesDir, FILE)
         scope.launch {
+            val started = System.currentTimeMillis()
             val snapshot = runCatching {
                 if (!file.exists()) null
                 else json.decodeFromString<LiveSnapshot>(file.readText()).takeIf { it.version == LiveSnapshot.VERSION }
             }.onFailure { Log.w(TAG, "Unreadable snapshot, ignoring", it) }.getOrNull()
+            Log.i(TAG, "Read in ${System.currentTimeMillis() - started} ms: ${snapshot?.rows?.size ?: "no"} rows")
             if (current == null) current = snapshot
             loaded.complete(snapshot)
         }
