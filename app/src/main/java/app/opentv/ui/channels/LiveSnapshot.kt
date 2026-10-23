@@ -27,7 +27,8 @@ import java.io.File
  */
 @Serializable
 data class LiveSnapshot(
-    val version: Int = VERSION,
+    /** Always [VERSION] when written; no default, so it is in the file even with defaults left out. */
+    val version: Int,
     val category: String?,
     val favourites: Boolean,
     val categoryGroups: List<ChannelsViewModel.CategoryGroup>,
@@ -40,7 +41,22 @@ data class LiveSnapshot(
         val primary: Channel,
         val variants: List<Channel>,
         val programmes: List<Programme>,
-    )
+    ) {
+        companion object {
+            /**
+             * [row] with only what the list shows before the real rows arrive: the programme on
+             * now and the next ones for a few hours, without descriptions. Twelve hours of guide
+             * with descriptions made the file several times bigger and slower to read back.
+             */
+            fun of(row: ChannelsViewModel.Row, nowMillis: Long) = SnapshotRow(
+                primary = row.primary,
+                variants = row.variants,
+                programmes = row.programmes
+                    .filter { it.endUtcMillis > nowMillis && it.startUtcMillis < nowMillis + KEEP_AHEAD_MILLIS }
+                    .map { it.copy(description = null) },
+            )
+        }
+    }
 
     /** The rows as the list wants them, with "now" and "next" worked out again for [nowMillis]. */
     fun rowsAt(nowMillis: Long): List<ChannelsViewModel.Row> = rows.map { r ->
@@ -57,6 +73,9 @@ data class LiveSnapshot(
     companion object {
         /** Bump when the shape changes: an old file is then ignored rather than misread. */
         const val VERSION = 1
+
+        /** How far ahead of now [SnapshotRow.of] keeps programmes. */
+        private const val KEEP_AHEAD_MILLIS = 4 * 60 * 60 * 1000L
     }
 }
 
@@ -66,7 +85,7 @@ object LiveSnapshotStore {
     /** Rows re-emit in bursts while a guide sync lands; write once things settle. */
     private const val SAVE_DELAY_MILLIS = 3_000L
 
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val loaded = CompletableDeferred<LiveSnapshot?>()
     private var saveJob: Job? = null

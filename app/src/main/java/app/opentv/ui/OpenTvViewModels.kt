@@ -503,6 +503,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         LiveSnapshotStore.save(
             getApplication(),
             LiveSnapshot(
+                version = LiveSnapshot.VERSION,
                 category = key.category,
                 favourites = key.favs,
                 categoryGroups = groups,
@@ -510,7 +511,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                 groupCounts = groupCounts.value,
                 // "All" on a big provider is tens of thousands of rows: keep the groups, skip those.
                 rows = if (rows.size > SNAPSHOT_MAX_ROWS) emptyList()
-                else rows.map { LiveSnapshot.SnapshotRow(it.primary, it.variants, it.programmes) },
+                else rows.map { LiveSnapshot.SnapshotRow.of(it, System.currentTimeMillis()) },
             ),
         )
     }
