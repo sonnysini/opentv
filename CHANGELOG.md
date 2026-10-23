@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.25.0 — 23 October 2026
+
+- **The live list opens straight away.** OpenTV remembers the last list it showed and opens on it,
+  on launch and when coming back after Exit, then swaps in the fresh one once it is built. It no
+  longer flashes "All channels" before the group you were on.
+- **The screen follows the channel's frame rate.** A 25/50 fps channel switches the TV to 50 Hz
+  (any mode at the same resolution whose refresh is a whole multiple), and back on leaving the
+  player. On by default: Settings › Playback › Match the channel's frame rate. On Fire TV
+  it needs the system's match-frame-rate setting turned on.
+- Back from an external player no longer closes OpenTV.
+
 ## 0.24.0 — 22 October 2026
 
 - **Open in another player.** A new button at the end of the player's bar hands the channel to
