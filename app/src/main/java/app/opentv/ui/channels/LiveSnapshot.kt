@@ -52,7 +52,9 @@ data class LiveSnapshot(
                 primary = row.primary,
                 variants = row.variants,
                 programmes = row.programmes
-                    .filter { it.endUtcMillis > nowMillis && it.startUtcMillis < nowMillis + KEEP_AHEAD_MILLIS }
+                    .filter { it.endUtcMillis > nowMillis }
+                    // The first two always stay, so "next" is there even after a long programme.
+                    .filterIndexed { i, p -> i < 2 || p.startUtcMillis < nowMillis + KEEP_AHEAD_MILLIS }
                     .map { it.copy(description = null) },
             )
         }
