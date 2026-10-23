@@ -364,6 +364,22 @@ class AppSettings private constructor(context: Context) {
         _preferredQuality.value = quality
     }
 
+    /**
+     * Restream sources to try first, best first (`Src A`, `Src B`): a channel starts on a variant
+     * from the first listed source it has, before any quality rule. Sources left out keep the
+     * plain quality order after the listed ones. See [QualityPreference.order].
+     */
+    private val _preferredSources = pref {
+        prefs.getString(KEY_PREFERRED_SOURCES, "").orEmpty().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+    }
+    val preferredSources: StateFlow<List<String>> = _preferredSources.asStateFlow()
+
+    fun setPreferredSources(sources: List<String>) {
+        val clean = sources.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+        prefs.edit().putString(KEY_PREFERRED_SOURCES, clean.joinToString("\n")).apply()
+        _preferredSources.value = clean
+    }
+
     /** When a variant errors or shows no picture within [qualityFallbackMillis], try the next one. */
     private val _qualityFallback = pref { prefs.getBoolean(KEY_QUALITY_FALLBACK, true) }
     val qualityFallback: StateFlow<Boolean> = _qualityFallback.asStateFlow()
@@ -979,6 +995,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_REC_AUTOSWITCH = "rec_auto_switch"
         private const val KEY_LIVE_PAUSE = "live_pause_enabled"
         private const val KEY_PREFERRED_QUALITY = "preferred_quality"
+        private const val KEY_PREFERRED_SOURCES = "preferred_sources"
         private const val KEY_QUALITY_FALLBACK = "quality_fallback"
         private const val KEY_MATCH_FRAME_RATE = "match_frame_rate"
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
@@ -1018,7 +1035,7 @@ class AppSettings private constructor(context: Context) {
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
                 KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_LOGO_SOURCE,
-                KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE,
+                KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE, KEY_PREFERRED_SOURCES,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }

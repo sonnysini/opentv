@@ -58,4 +58,30 @@ class QualityPreferenceTest {
         assertThat(labels(PreferredQuality.FHD, listOf(plain, uhd, sd)))
             .containsExactly("SD", "", "4K").inOrder()
     }
+
+    @Test
+    fun preferredSourcesGoFirstInTheirOrder() {
+        val aHevc = ch(10, 320, "HEVC · Alpha")
+        val aFhd = ch(11, 300, "FHD · Alpha")
+        val bFhd = ch(12, 300, "FHD · Beta")
+        val cHevc = ch(13, 320, "HEVC · Gamma")
+        val list = listOf(aHevc, aFhd, bFhd, cHevc)
+        val order = QualityPreference.order(list, PreferredQuality.FHD, listOf("beta", "Alpha"))
+            .map { it.qualityLabel }
+        // Beta, then Alpha (quality order inside it), then the unlisted Gamma.
+        assertThat(order).containsExactly("FHD · Beta", "HEVC · Alpha", "FHD · Alpha", "HEVC · Gamma").inOrder()
+    }
+
+    @Test
+    fun noPreferredSourcesKeepsTheQualityOrder() {
+        assertThat(QualityPreference.order(all, PreferredQuality.FHD, emptyList()))
+            .isEqualTo(QualityPreference.order(all, PreferredQuality.FHD))
+    }
+
+    @Test
+    fun sourceOfReadsTheLastPart() {
+        assertThat(QualityPreference.sourceOf("FHD · Alpha")).isEqualTo("Alpha")
+        assertThat(QualityPreference.sourceOf("Alpha")).isEqualTo("Alpha")
+        assertThat(QualityPreference.sourceOf("")).isNull()
+    }
 }

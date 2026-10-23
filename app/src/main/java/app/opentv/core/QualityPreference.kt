@@ -17,6 +17,10 @@ import app.opentv.data.parser.ChannelNameNormalizer
  * resolutions last — the user picked a quality to cap bandwidth or to dodge a heavy feed, so a
  * bigger stream is the last resort. A codec
  * choice (RAW/HEVC) tries the matching feeds first, then everything else best-first.
+ *
+ * Preferred restream sources come before all of that: labels say little about what a feed really
+ * is (an "HEVC" may be 720p H.264), while one source can be reliably smoother than another, so
+ * the user's source order wins and the quality rule only orders variants inside each source.
  */
 enum class PreferredQuality(internal val rank: Int?, internal val token: Regex?) {
     BEST(null, null),
@@ -29,8 +33,29 @@ enum class PreferredQuality(internal val rank: Int?, internal val token: Regex?)
 
 object QualityPreference {
 
-    /** [variants] in the order they should be tried: the first plays, the rest are the fallback. */
-    fun order(variants: List<Channel>, preference: PreferredQuality): List<Channel> {
+    /**
+     * [variants] in the order they should be tried: the first plays, the rest are the fallback.
+     * [preferredSources] go first in their order; variants from other sources follow.
+     */
+    fun order(
+        variants: List<Channel>,
+        preference: PreferredQuality,
+        preferredSources: List<String> = emptyList(),
+    ): List<Channel> {
+        val byQuality = orderByQuality(variants, preference)
+        if (preferredSources.isEmpty()) return byQuality
+        val rankOf = preferredSources.withIndex().associate { (i, name) -> name.lowercase() to i }
+        return byQuality.sortedBy { rankOf[sourceOf(it.qualityLabel)?.lowercase()] ?: Int.MAX_VALUE }
+    }
+
+    /** The restream source in a variant label: `FHD · Src` → `Src`; a label without a quality is
+     * the source itself (`Src`), so a lone `FHD` simply matches no source. */
+    fun sourceOf(label: String): String? =
+        label.substringAfterLast(SOURCE_SEPARATOR).trim().ifEmpty { null }
+
+    private const val SOURCE_SEPARATOR = " · "
+
+    private fun orderByQuality(variants: List<Channel>, preference: PreferredQuality): List<Channel> {
         // qualityRank already orders HEVC > RAW > plain inside a resolution tier.
         val best = variants.sortedByDescending { it.qualityRank }
         val rank = preference.rank

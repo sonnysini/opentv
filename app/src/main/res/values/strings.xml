@@ -565,6 +565,8 @@
     <!-- Preferred channel quality + automatic fallback -->
     <string name="settings_quality_title">Default quality</string>
     <string name="settings_quality_note">Which version of a channel plays first when it comes in several qualities. If it is missing, the next lower one is used.</string>
+    <string name="settings_sources_title">Preferred sources</string>
+    <string name="settings_sources_note">Sources to try first, before the quality: select them in order. A channel starts on the first source it has; the others follow as fallback.</string>
     <string name="settings_quality_best">Best available</string>
     <string name="settings_quality_fallback_title">Automatic quality fallback</string>
     <string name="settings_quality_fallback_subtitle">If a channel fails or shows no picture in time, switch to the next quality down.</string>

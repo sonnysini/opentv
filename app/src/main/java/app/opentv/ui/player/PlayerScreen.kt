@@ -402,7 +402,9 @@ fun PlayerScreen(
         listedId = channel.id
         listedChannel = channel
         variants = graph.catalogRepository.variants(channel)
-        val preferred = QualityPreference.order(variants, settings.preferredQuality.value)
+        val preferred = QualityPreference.order(
+            variants, settings.preferredQuality.value, settings.preferredSources.value,
+        )
         // The variant that worked last time this session goes first; the rest stay as fallback.
         val known = WorkingVariants.forChannel(channel)?.let { id -> preferred.firstOrNull { it.id == id } }
         tryOrder = if (known == null) preferred else listOf(known) + (preferred - known)
