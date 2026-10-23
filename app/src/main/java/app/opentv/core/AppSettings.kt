@@ -465,6 +465,37 @@ class AppSettings private constructor(context: Context) {
         _manualSourceMode.value = mode
     }
 
+    /** Start each channel on the feed last picked by hand for it, before the preferred order. */
+    private val _rememberPicks = pref { prefs.getBoolean(KEY_REMEMBER_PICKS, true) }
+    val rememberPicks: StateFlow<Boolean> = _rememberPicks.asStateFlow()
+
+    fun setRememberPicks(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_REMEMBER_PICKS, enabled).apply()
+        _rememberPicks.value = enabled
+    }
+
+    /**
+     * Feeds picked by hand: logical channel key → the provider stream id of the picked variant.
+     * Only a hand pick writes here; automatic switches leave it alone. See [rememberPicks].
+     */
+    private val _pickedVariants = pref {
+        readJson(KEY_PICKED_VARIANTS) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap()
+    }
+    val pickedVariants: StateFlow<Map<String, String>> = _pickedVariants.asStateFlow()
+
+    fun setPickedVariant(channelKey: String, streamId: String) {
+        if (channelKey.isBlank() || streamId.isBlank()) return
+        if (_pickedVariants.value[channelKey] == streamId) return
+        val next = _pickedVariants.value + (channelKey to streamId)
+        prefs.edit().putString(KEY_PICKED_VARIANTS, addonJson.encodeToString(next)).apply()
+        _pickedVariants.value = next
+    }
+
+    fun clearPickedVariants() {
+        prefs.edit().remove(KEY_PICKED_VARIANTS).apply()
+        _pickedVariants.value = emptyMap()
+    }
+
     /** Player Quality button: OK steps to the next feed (hold for the list); off, OK opens the list. */
     private val _qualityButtonCycles = pref { prefs.getBoolean(KEY_QUALITY_BUTTON_CYCLES, true) }
     val qualityButtonCycles: StateFlow<Boolean> = _qualityButtonCycles.asStateFlow()
@@ -1005,6 +1036,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_HICCUP_LIMIT = "hiccup_limit"
         private const val KEY_LIVE_OFFSET_SECONDS = "live_offset_seconds"
         private const val KEY_MANUAL_SOURCE_MODE = "manual_source_mode"
+        private const val KEY_REMEMBER_PICKS = "remember_picks"
+        private const val KEY_PICKED_VARIANTS = "picked_variants"
         private const val KEY_STALL_FALLBACK_SECONDS = "stall_fallback_seconds"
         private const val KEY_STALL_FALLBACK_MILLIS = "stall_fallback_millis"
         private const val KEY_UI_SCALE_V1 = "ui_scale_percent"
@@ -1024,6 +1057,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_LOGOS_EXTERNAL, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
                 KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_QUALITY_BUTTON_CYCLES, KEY_MATCH_FRAME_RATE,
+                KEY_REMEMBER_PICKS,
                 // The old logo switches: a restore of an older backup still migrates from them.
                 KEY_PREFER_GUIDE_LOGOS, KEY_GROUP_BADGES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }
@@ -1035,7 +1069,7 @@ class AppSettings private constructor(context: Context) {
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
                 KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_LOGO_SOURCE,
-                KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE, KEY_PREFERRED_SOURCES,
+                KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE, KEY_PREFERRED_SOURCES, KEY_PICKED_VARIANTS,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }

@@ -595,6 +595,9 @@
     <string name="settings_manual_source_stay">Stay on it</string>
     <string name="settings_manual_source_stutter">Switch only if it keeps stuttering</string>
     <string name="settings_manual_source_auto">Same as automatic</string>
+    <string name="settings_remember_picks_title">Remember the source picked for each channel</string>
+    <string name="settings_remember_picks_subtitle">The channel starts on the source you last picked by hand. If it fails, the usual fallback takes over, and next time it is tried first again.</string>
+    <string name="settings_remember_picks_reset">Reset picks (%1$d)</string>
     <string name="player_info">Info</string>
     <string name="player_minutes_left">−%1$d min</string>
     <string name="stream_info_title">Stream info</string>

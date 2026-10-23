@@ -375,14 +375,22 @@ fun PlayerScreen(
         QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
             ?: channel.qualityLabel.ifBlank { channel.shownName }
 
-    /** The Quality button: on to the channel's next feed, wrapping round, and say which one. */
-    fun cycleQuality(notice: Boolean = true) {
-        val next = StallWatch.nextAfter(variants, currentId) { it.id } ?: return
+    /** Plays [variant] as picked by hand, and keeps it as this channel's first try from now on. */
+    fun pickByHand(variant: Channel) {
         tried = emptySet()
         stallReturnId = null
         manualPick = true
+        if (settings.rememberPicks.value) {
+            listedChannel?.let { settings.setPickedVariant(pickKey(it), variant.streamId) }
+        }
+        tuneTo(variant)
+    }
+
+    /** The Quality button: on to the channel's next feed, wrapping round, and say which one. */
+    fun cycleQuality(notice: Boolean = true) {
+        val next = StallWatch.nextAfter(variants, currentId) { it.id } ?: return
         if (notice) fallbackNotice = variantName(next)
-        tuneTo(next)
+        pickByHand(next)
         interaction++
     }
 
@@ -405,9 +413,16 @@ fun PlayerScreen(
         val preferred = QualityPreference.order(
             variants, settings.preferredQuality.value, settings.preferredSources.value,
         )
-        // The variant that worked last time this session goes first; the rest stay as fallback.
+        // The feed picked by hand goes first, even if it failed last time; then the one that worked
+        // last time this session; the rest stay as fallback in the preferred order.
+        val picked = if (settings.rememberPicks.value) {
+            settings.pickedVariants.value[pickKey(channel)]?.let { sid -> preferred.firstOrNull { it.streamId == sid } }
+        } else {
+            null
+        }
         val known = WorkingVariants.forChannel(channel)?.let { id -> preferred.firstOrNull { it.id == id } }
-        tryOrder = if (known == null) preferred else listOf(known) + (preferred - known)
+        val first = listOfNotNull(picked, known).distinct()
+        tryOrder = first + (preferred - first.toSet())
         tried = emptySet()
         stallReturnId = null
         manualPick = false
@@ -1003,7 +1018,7 @@ fun PlayerScreen(
                         currentId = currentId,
                         resizeMode = resizeMode,
                         onResize = { resizeMode = it; settings.setPlayerResizeMode(it) },
-                        onTune = { tried = emptySet(); manualPick = true; tuneTo(it) },
+                        onTune = { pickByHand(it) },
                         variantName = { variantName(it) },
                         firstFocus = panelFocus,
                         onDone = { panel = Panel.NONE; interaction++ },
@@ -1471,6 +1486,9 @@ private fun OnAirPanel(info: OnAir, clock: Long) {
 
 private fun clockText(utcMillis: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(utcMillis))
+
+/** Where a hand-picked feed is remembered: the logical channel, so any copy of it in the list matches. */
+private fun pickKey(channel: Channel): String = channel.groupKey.ifEmpty { "stream:${channel.streamId}" }
 
 /**
  * The channel's sources, as ☰ shows them: a short window of the list that keeps [current] in

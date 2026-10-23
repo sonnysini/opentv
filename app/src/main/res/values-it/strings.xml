@@ -528,6 +528,9 @@
     <string name="settings_manual_source_stay">Resta lì</string>
     <string name="settings_manual_source_stutter">Cambia solo se scatta spesso</string>
     <string name="settings_manual_source_auto">Come in automatico</string>
+    <string name="settings_remember_picks_title">Ricorda la fonte scelta per canale</string>
+    <string name="settings_remember_picks_subtitle">Il canale parte dalla fonte che hai scelto a mano l\'ultima volta. Se non va, parte il fallback solito e la volta dopo si riprova comunque da lì.</string>
+    <string name="settings_remember_picks_reset">Azzera scelte (%1$d)</string>
     <string name="player_info">Info</string>
     <string name="player_minutes_left">−%1$d min</string>
     <string name="stream_info_title">Info flusso</string>

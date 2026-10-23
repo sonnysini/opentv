@@ -231,6 +231,8 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
     val matchFrameRate by settings.matchFrameRate.collectAsState()
+    val rememberPicks by settings.rememberPicks.collectAsState()
+    val pickedCount = settings.pickedVariants.collectAsState().value.size
 
     SettingsPage(stringResource(R.string.settings_section_playback), onBack) {
         SettingsSection(stringResource(R.string.settings_quality_title)) {
@@ -342,6 +344,18 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                 ManualSourceMode.AUTO to R.string.settings_manual_source_auto,
             ).forEach { (mode, label) ->
                 ThemeOption(stringResource(label), manualSourceMode == mode) { settings.setManualSourceMode(mode) }
+            }
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = stringResource(R.string.settings_remember_picks_title),
+                subtitle = stringResource(R.string.settings_remember_picks_subtitle),
+                checked = rememberPicks,
+                onToggle = settings::setRememberPicks,
+            )
+            if (pickedCount > 0) {
+                OutlinedButton(onClick = settings::clearPickedVariants) {
+                    Text(stringResource(R.string.settings_remember_picks_reset, pickedCount))
+                }
             }
             Spacer(Modifier.height(8.dp))
             ToggleRow(
