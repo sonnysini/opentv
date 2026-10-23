@@ -11,6 +11,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * The domain models double as Room entities.
@@ -108,6 +109,7 @@ data class Category(
         Index(value = ["favourite"]),
     ],
 )
+@Serializable // also cached on disk by LiveSnapshot
 data class Channel(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceId: Long,
@@ -303,6 +305,7 @@ data class EpgChannelAlias(
         Index(value = ["epgChannelId"]),
     ],
 )
+@Serializable // also cached on disk by LiveSnapshot
 data class Programme(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     /** The [EpgFeed] this came from. */

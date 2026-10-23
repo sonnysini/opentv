@@ -53,7 +53,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.shareIn
+import app.opentv.ui.channels.LiveSnapshot
+import app.opentv.ui.channels.LiveSnapshotStore
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.debounce
@@ -238,6 +244,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * filter across every underlying id at once. This is the on-device version of what
      * Viewella did on a server it had to pay for.
      */
+    @kotlinx.serialization.Serializable
     data class CategoryGroup(
         val key: String,
         val label: String,
@@ -251,7 +258,25 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     /** The user's group merges and group order (set from the phone page). */
     private val userLayout = combine(settings.categoryMerges, settings.liveGroupOrder) { merges, order -> merges to order }
 
-    val categoryGroups: StateFlow<List<CategoryGroup>> =
+    /**
+     * What the list showed last time (see [LiveSnapshot]), when it is already in memory: the
+     * screen then opens on it with no empty frame. Otherwise it is read from disk and shown the
+     * moment it arrives — in both cases only until the real data is built.
+     */
+    private val startSnapshot: LiveSnapshot? = LiveSnapshotStore.current
+
+    /** [real], led by [pick] from the snapshot for as long as [real] has not produced anything. */
+    private fun <T> withSnapshot(real: Flow<T>, pick: (LiveSnapshot) -> T?): Flow<T> = channelFlow {
+        var realSeen = false
+        val early = launch {
+            val value = LiveSnapshotStore.await()?.let(pick) ?: return@launch
+            if (!realSeen) send(value)
+        }
+        real.collect { realSeen = true; early.cancel(); send(it) }
+    }
+
+    /** The groups as the database has them — no snapshot; [rows] waits on these. */
+    private val foldedCategories: Flow<List<CategoryGroup>> =
         combine(
             graph.catalogRepository.observeCategories(StreamKind.LIVE),
             selectedSource,
@@ -263,7 +288,11 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             // on their own (cardiodoc's "keep sources separate"); null folds across every provider.
             val scoped = if (sourceId == null) raw else raw.filter { it.sourceId == sourceId }
             foldCategories(scoped, merge, strip, layout.first, layout.second)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+    val categoryGroups: StateFlow<List<CategoryGroup>> =
+        withSnapshot(foldedCategories) { it.categoryGroups }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), startSnapshot?.categoryGroups.orEmpty())
 
     /**
      * The category ids to hide from the guide *right now*: the ids behind every group the user
@@ -280,9 +309,15 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * (event-only feeds like NBA/NHL Pass are empty between events and would open onto nothing).
      */
     val nonEmptyCategoryGroups: StateFlow<List<CategoryGroup>> by lazy {
-        combine(visibleCategoryGroups, groupCounts) { groups, counts ->
-            groups.filter { (counts[it.key] ?: 0) > 0 }
-        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        withSnapshot(
+            combine(visibleCategoryGroups, groupCounts) { groups, counts -> groups to counts }
+                // Before the counts are in every group looks empty: wait rather than replace the
+                // snapshot's groups with nothing.
+                .filter { (_, counts) -> counts.isNotEmpty() }
+                .map { (groups, counts) -> groups.filter { (counts[it.key] ?: 0) > 0 } }
+                .flowOn(Dispatchers.Default),
+        ) { it.nonEmptyGroups }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), startSnapshot?.nonEmptyGroups.orEmpty())
     }
 
     /**
@@ -291,7 +326,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * [LAST_GROUP_FAVOURITES].
      */
     val groupCounts: StateFlow<Map<String, Int>> by lazy {
-        combine(
+        withSnapshot(combine(
             visibleCategoryGroups,
             graph.catalogRepository.observeCategoryChannelKeys(),
             graph.catalogRepository.observeFavouriteChannels(),
@@ -309,7 +344,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             counts[LAST_GROUP_ALL] = all.size
             counts[LAST_GROUP_FAVOURITES] = favourites.filter { !it.hidden }.distinctBy { it.groupKey.ifEmpty { it.id.toString() } }.size
             counts
-        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+        }.flowOn(Dispatchers.Default)) { it.groupCounts }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), startSnapshot?.groupCounts.orEmpty())
     }
 
     /** The live groups last watched from, newest first — see [markGroupWatched]. */
@@ -331,7 +367,13 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     val visibleCategoryGroups: StateFlow<List<CategoryGroup>> =
         combine(categoryGroups, settings.hiddenCategories, settings.hiddenUnlocked) { groups, hidden, unlocked ->
             if (unlocked) groups else groups.filter { g -> g.memberKeys.none { it in hidden } }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5_000),
+            startSnapshot?.categoryGroups.orEmpty().let { groups ->
+                val hidden = settings.hiddenCategories.value
+                if (settings.hiddenUnlocked.value) groups else groups.filter { g -> g.memberKeys.none { it in hidden } }
+            },
+        )
 
     /**
      * One row on screen = one *logical* channel.
@@ -392,6 +434,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private data class RowsKey(
+        /** The selected entry as the list remembers it (any member key of the group), for the snapshot. */
+        val category: String?,
         /** The selected group's key, for its saved channel order; null outside a group. */
         val groupKey: String?,
         val categoryIds: List<String>?,
@@ -412,7 +456,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * re-emits on its own when an EPG sync lands new programmes.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val programmeIndex: StateFlow<Map<String, List<Programme>>> =
+    private val programmeIndex: StateFlow<Map<String, List<Programme>>?> =
         // windowStartMillis is a StateFlow, which already conflates equal values — an explicit
         // distinctUntilChanged() on it is a no-op (and a build error under our warnings-as-errors).
         windowStartMillis
@@ -421,31 +465,65 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                 // three hours ago; buildRows trims every row back to the window.
                 graph.epgRepository
                     .observeWindow(windowStart - SHIFT_LOOKBACK_MILLIS, windowStart + GUIDE_LOOKAHEAD_MILLIS)
-                    .map { programmes ->
+                    .map<_, Map<String, List<Programme>>?> { programmes ->
                         programmes.groupBy { it.epgChannelId }
                             .mapValues { (_, list) -> EpgRepository.onePerChannel(list) }
                     }
             }
             .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+            // null until the window has been read once — see [rows], which keeps the snapshot
+            // on screen rather than swap it for rows with no guide.
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * True once the guide has been built at least once. After that an empty [rows] means the group
      * really has no channels, not that it is still loading — the full-screen list uses it to stop
      * spinning and send the user back to the categories.
      */
-    val rowsLoaded = MutableStateFlow(false)
+    val rowsLoaded = MutableStateFlow(snapshotRowsFor(startSnapshot) != null)
 
     /** Guards the start-up loading bar so it shows once, on the first build, not on every tap. */
     @Volatile
-    private var guideBuilt = false
+    private var guideBuilt = rowsLoaded.value
+
+    /** The snapshot's rows when they are for the entry selected right now, else null. */
+    private fun snapshotRowsFor(snapshot: LiveSnapshot?): List<Row>? = snapshot
+        ?.takeIf {
+            it.rows.isNotEmpty() && it.category == selectedCategory.value && it.favourites == favouritesOnly.value &&
+                query.value.isBlank() && selectedSource.value == null
+        }
+        ?.rowsAt(System.currentTimeMillis())
+
+    /** Remember what the list shows now, for the next return to it (see [LiveSnapshot]). */
+    private fun saveSnapshot(key: RowsKey, rows: List<Row>) {
+        // Never with adult groups unlocked: the next launch would open with them on show.
+        if (key.query.isNotBlank() || settings.hiddenUnlocked.value) return
+        val groups = categoryGroups.value
+        if (groups.isEmpty()) return
+        LiveSnapshotStore.save(
+            getApplication(),
+            LiveSnapshot(
+                version = LiveSnapshot.VERSION,
+                category = key.category,
+                favourites = key.favs,
+                categoryGroups = groups,
+                nonEmptyGroups = nonEmptyCategoryGroups.value,
+                groupCounts = groupCounts.value,
+                // "All" on a big provider is tens of thousands of rows: keep the groups, skip those.
+                rows = if (rows.size > SNAPSHOT_MAX_ROWS) emptyList()
+                else rows.map { LiveSnapshot.SnapshotRow.of(it, System.currentTimeMillis()) },
+            ),
+        )
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val rows: StateFlow<List<Row>> =
-        combine(selectedCategory, favouritesOnly, query, categoryGroups, hiddenCategoryIds) {
+    val rows: StateFlow<List<Row>> = withSnapshot(
+        // The groups straight from the database, not [categoryGroups]: before they load, a
+        // remembered group would resolve to nothing and build "All" for a moment instead.
+        combine(selectedCategory, favouritesOnly, query, foldedCategories, hiddenCategoryIds) {
                 category, favs, q, groups, hidden ->
             val group = category?.let { key -> groups.firstOrNull { key in it.memberKeys } }
-            RowsKey(group?.key, group?.ids, favs, q, hidden)
+            RowsKey(category, group?.key, group?.ids, favs, q, hidden)
         }
             .combine(selectedSource) { key, source -> key to source }
             .flatMapLatest { (key, source) ->
@@ -479,23 +557,30 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                     // the one-time heavy load, and leaking it per-category read as a stuck "100%".
                     val firstBuild = !guideBuilt
                     if (firstBuild) StatusBus.set(sizeMessage(visible.size), 0f)
-                    val built = buildRows(visible, byEpgChannel, now, reportProgress = firstBuild)
+                    val built = buildRows(visible, byEpgChannel.orEmpty(), now, reportProgress = firstBuild)
                     // The order the user set for this group from the phone page, if any.
                     val order = if (key.favs || key.query.isNotBlank()) null else key.groupKey?.let(channelOrder::get)
-                    if (order == null) built else LiveLayout.ordered(built, order) { listOf(it.orderKey) }
+                    val rows = if (order == null) built else LiveLayout.ordered(built, order) { listOf(it.orderKey) }
+                    rows to (byEpgChannel != null)
                 }
+                    // Rows built before the guide is read would replace the snapshot's full rows
+                    // with blank ones for a few seconds: hold them back when there is a snapshot.
+                    .filter { (_, withGuide) -> withGuide || snapshotRowsFor(LiveSnapshotStore.current) == null }
+                    .onEach { (rows, withGuide) -> if (withGuide && source == null) saveSnapshot(key, rows) }
+                    .map { it.first }
             }
             // Grouping thousands of channels against a 12-hour, all-feeds programme window is heavy
             // enough to freeze the UI for a big provider — a category tap that took minutes. Run the
             // whole pipeline off the main thread so the list just appears when it's ready.
-            .flowOn(Dispatchers.Default)
+            .flowOn(Dispatchers.Default),
+    ) { snapshotRowsFor(it) }
             // Once the first guide is on screen, clear the start-up bar — and never show it for a
             // plain category switch again.
             .onEach {
                 if (!guideBuilt) { guideBuilt = true; StatusBus.set(null) }
                 rowsLoaded.value = true
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), snapshotRowsFor(startSnapshot).orEmpty())
 
     private fun buildRows(
         channels: List<Channel>,
@@ -541,7 +626,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
 
             // Feed the progress bar as rows come together — this is the slow part on a big
             // provider, so it's what the percentage should actually track.
-            if (reportProgress) {
+            if (reportProgress && !guideBuilt) {
                 built++
                 if (built % 400 == 0 || built == total) {
                     StatusBus.setProgress(built.toFloat() / total)
@@ -825,6 +910,9 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         private const val HALF_HOUR_MILLIS = 30 * 60 * 1000L
         /** How a saved channel order names a row: its grouping key, or `#id` for an ungrouped channel. */
         fun rowOrderKey(channel: Channel): String = channel.groupKey.ifEmpty { "#" + channel.id }
+
+        /** Above this many rows (the "All" list) the snapshot keeps only the groups. */
+        private const val SNAPSHOT_MAX_ROWS = 1_500
 
         const val LAST_GROUP_ALL = "all"
         const val LAST_GROUP_FAVOURITES = "fav"
