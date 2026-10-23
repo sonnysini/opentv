@@ -66,6 +66,8 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         super.onCreate()
         AppText.init(this)
         val graph = ServiceLocator.get(this)
+        // First thing: the live list opens on the copy saved last time while the real one builds.
+        app.opentv.ui.channels.LiveSnapshotStore.preload(this)
         SyncWorker.schedule(this)
 
         // When the normaliser has moved on since the catalogue was last processed, re-clean
