@@ -582,6 +582,8 @@
     <string name="player_stutter_fallback">%1$s keeps stuttering → %2$s</string>
     <string name="settings_hiccup_title">Switch stream if it stutters</string>
     <string name="settings_hiccup_subtitle">While watching, if the picture keeps pausing for a moment, move to the channel\'s next stream.</string>
+    <string name="settings_match_frame_rate_title">Match the channel\'s frame rate</string>
+    <string name="settings_match_frame_rate_subtitle">Switch the TV to 50 Hz for Italian channels (24/60 Hz for others) so motion is smooth. The screen goes dark for a second when it switches.</string>
     <string name="settings_live_offset_note">Delay behind live: further back starts faster and freezes less, closer is nearer to live.</string>
     <string name="settings_live_offset_auto">Delay behind live: automatic (about 30 s)</string>
     <string name="settings_live_offset">Delay behind live: %1$d s</string>

@@ -310,6 +310,9 @@ class PlayerController(
         // reaches the player, so we never stack prepares.
         switchJob?.cancel()
         current = request
+        lastFramePtsUs = C.TIME_UNSET
+        frameStepsUs.clear()
+        player.setVideoFrameMetadataListener(frameListener)
 
         switchJob = scope.launch {
             if (debounce) delay(switchDebounceMillis)
@@ -358,6 +361,27 @@ class PlayerController(
             renderedFrames = counters?.renderedOutputBufferCount?.toLong() ?: 0L,
             hasVideo = player.videoFormat != null && counters != null,
         )
+    }
+
+    // The gaps between frame timestamps, for matching the screen's refresh rate: the stream's own
+    // clock, where frames drawn per second fall short whenever a slow box can't keep up.
+    @Volatile private var lastFramePtsUs = C.TIME_UNSET
+    private val frameStepsUs = java.util.concurrent.ConcurrentLinkedDeque<Long>()
+    private val frameListener = androidx.media3.exoplayer.video.VideoFrameMetadataListener { ptsUs, _, _, _ ->
+        val last = lastFramePtsUs
+        lastFramePtsUs = ptsUs
+        val step = ptsUs - last
+        if (last != C.TIME_UNSET && step in MIN_FRAME_STEP_US..MAX_FRAME_STEP_US) {
+            frameStepsUs.addLast(step)
+            while (frameStepsUs.size > FRAME_STEPS_KEPT) frameStepsUs.pollFirst()
+        }
+    }
+
+    /** Frames per second by the stream's timestamps (median gap), 0 until enough frames went by. */
+    fun contentFrameRate(): Float {
+        val steps = frameStepsUs.toList()
+        if (steps.size < FRAME_STEPS_NEEDED) return 0f
+        return 1_000_000f / steps.sorted()[steps.size / 2]
     }
 
     /** Raw facts about the stream on screen, sampled for the info badges and panel. */
@@ -475,6 +499,10 @@ class PlayerController(
     }
 
     private companion object {
+        private const val MIN_FRAME_STEP_US = 5_000L
+        private const val MAX_FRAME_STEP_US = 100_000L
+        private const val FRAME_STEPS_KEPT = 60
+        private const val FRAME_STEPS_NEEDED = 25
         const val DEFAULT_USER_AGENT = "OpenTV/0.1 (Android)"
 
         /** ExoPlayer's "do not retry" sentinel. */

@@ -515,6 +515,8 @@
     <string name="player_stutter_fallback">%1$s scatta → %2$s</string>
     <string name="settings_hiccup_title">Cambia flusso se scatta spesso</string>
     <string name="settings_hiccup_subtitle">Durante la visione, se l\'immagine si ferma spesso per un attimo, passa al flusso successivo del canale.</string>
+    <string name="settings_match_frame_rate_title">Adatta la frequenza al canale</string>
+    <string name="settings_match_frame_rate_subtitle">Porta la TV a 50 Hz per i canali italiani (24/60 Hz per gli altri), così i movimenti sono fluidi. Al cambio lo schermo diventa nero per un secondo.</string>
     <string name="settings_live_offset_note">Ritardo dalla diretta: più indietro parte prima e si blocca meno, più vicino è più in tempo reale.</string>
     <string name="settings_live_offset_auto">Ritardo dalla diretta: automatico (circa 30 s)</string>
     <string name="settings_live_offset">Ritardo dalla diretta: %1$d s</string>

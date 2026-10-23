@@ -124,6 +124,7 @@ import androidx.media3.ui.PlayerView
 import app.opentv.R
 import app.opentv.core.ManualSourceMode
 import app.opentv.core.QualityPreference
+import app.opentv.core.RefreshRate
 import app.opentv.core.ServiceLocator
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
@@ -353,12 +354,16 @@ fun PlayerScreen(
 
     // Back from the other player: land on the guide, on the same channel, rather than reopening
     // the stream on our own while the other app may still be holding the account's one connection.
+    // Leaving is done after the resume has been handed out: popping the back stack from inside the
+    // lifecycle callback trips the navigation library mid-iteration and crashes the app.
+    var backFromExternal by remember { mutableStateOf(false) }
+    LaunchedEffect(backFromExternal) { if (backFromExternal) onBack() }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && handedOff) {
                 handedOff = false
-                onBack()
+                backFromExternal = true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -616,6 +621,31 @@ fun PlayerScreen(
             streamInfo = meter.sample(SystemClock.elapsedRealtime(), controller.stats())
             delay(STREAM_INFO_SAMPLE_MILLIS)
         }
+    }
+
+    // Refresh-rate matching, as Kodi and Vimu do: once the stream's frame rate is known, move the
+    // screen to a mode that shows every frame evenly (25 fps on 59.94 Hz judders, on 50 Hz it doesn't).
+    // Zapping between channels of the same rate keeps the mode; leaving the player hands it back.
+    val matchFrameRate by settings.matchFrameRate.collectAsState()
+    LaunchedEffect(currentId, matchFrameRate) {
+        val window = context.findActivity()?.window ?: return@LaunchedEffect
+        if (!matchFrameRate) {
+            setPreferredDisplayMode(window, 0)
+            return@LaunchedEffect
+        }
+        val fps = awaitFrameRate(controller) ?: return@LaunchedEffect
+        val display = window.decorView.display ?: return@LaunchedEffect
+        val modes = display.supportedModes.map { RefreshRate.Mode(it.modeId, it.physicalWidth, it.physicalHeight, it.refreshRate) }
+        val current = modes.firstOrNull { it.id == display.mode.modeId } ?: return@LaunchedEffect
+        val target = RefreshRate.pick(modes, current, fps)
+        android.util.Log.i("OpenTV", "refresh rate: ${fps}fps at ${current.hz}Hz, modes=${modes.map { it.hz }}")
+        target ?: return@LaunchedEffect
+        android.util.Log.i("OpenTV", "refresh rate: ${fps}fps, ${current.hz}Hz -> ${target.hz}Hz (mode ${target.id})")
+        setPreferredDisplayMode(window, target.id)
+    }
+    DisposableEffect(Unit) {
+        val window = context.findActivity()?.window
+        onDispose { window?.let { setPreferredDisplayMode(it, 0) } }
     }
 
     // Sleep timer: when the armed deadline passes, stop and leave the player. Re-arming from
@@ -1859,6 +1889,25 @@ private fun OptionRow(
     }
 }
 
+/** 0 lets the system choose again. */
+private fun setPreferredDisplayMode(window: android.view.Window, modeId: Int) {
+    if (window.attributes.preferredDisplayModeId == modeId) return
+    window.attributes = window.attributes.apply { preferredDisplayModeId = modeId }
+}
+
+/**
+ * The playing stream's frame rate: what the stream declares, else read from the frames' timestamps
+ * once a second or so of picture went by. Null when there's no picture within ~15 s.
+ */
+private suspend fun awaitFrameRate(controller: PlayerController): Float? {
+    repeat(60) {
+        controller.stats().video?.frameRate?.takeIf { it > 0f }?.let { return StreamInfo.snapFrameRate(it) }
+        controller.contentFrameRate().takeIf { it > 0f }?.let { return StreamInfo.snapFrameRate(it) }
+        delay(250)
+    }
+    return null
+}
+
 /**
  * Hands the stream to another installed player (VLC, Kodi, Vimu…), asking which one every time.
  * The User-Agent rides along as the extras VLC and Vimu read; Kodi ignores it.
@@ -1872,15 +1921,18 @@ private fun openInExternalPlayer(context: android.content.Context, url: String, 
             putExtra("headers", arrayOf("User-Agent", userAgent))
         }
     }
+    // Started from our own task (no NEW_TASK), so Back in the other player comes home to us instead
+    // of to the launcher.
+    val activity = context.findActivity()
     val chooser = android.content.Intent.createChooser(view, title)
-        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        .apply { if (activity == null) addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
         // Fire OS lists a placeholder gallery that can't play anything.
         .putExtra(
             android.content.Intent.EXTRA_EXCLUDE_COMPONENTS,
             arrayOf(android.content.ComponentName("com.amazon.dummy.gallery", "com.amazon.dummy.gallery.DummyGalleryActivity")),
         )
     try {
-        context.startActivity(chooser)
+        (activity ?: context).startActivity(chooser)
     } catch (_: android.content.ActivityNotFoundException) {
         android.widget.Toast.makeText(context, R.string.player_no_external, android.widget.Toast.LENGTH_LONG).show()
     }
