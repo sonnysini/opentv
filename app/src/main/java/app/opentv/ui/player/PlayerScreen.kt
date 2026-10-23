@@ -391,15 +391,8 @@ fun PlayerScreen(
         interaction++
     }
 
-    // The Quality picker as ☰ opens it goes away by itself once the remote is left alone.
+    // The Quality picker as ☰ opens it: it goes away by itself, like the bar (see below).
     var menuPicker by remember { mutableStateOf(false) }
-    LaunchedEffect(menuPicker, panel, interaction) {
-        if (panel != Panel.QUALITY) { menuPicker = false; return@LaunchedEffect }
-        if (!menuPicker) return@LaunchedEffect
-        delay(MENU_PICKER_MILLIS)
-        panel = Panel.NONE
-        controlsVisible = false
-    }
 
     /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
     suspend fun startChannel(channel: Channel) {
@@ -689,6 +682,16 @@ fun PlayerScreen(
             delay(controlsTimeoutSeconds * 1_000L)
             controlsVisible = false
         }
+    }
+
+    // The Quality picker opened by ☰ goes away by itself once the remote is left alone, after the
+    // same wait as the bar.
+    LaunchedEffect(menuPicker, panel, interaction, controlsTimeoutSeconds) {
+        if (panel != Panel.QUALITY) { menuPicker = false; return@LaunchedEffect }
+        if (!menuPicker) return@LaunchedEffect
+        delay(controlsTimeoutSeconds * 1_000L)
+        panel = Panel.NONE
+        controlsVisible = false
     }
 
     // Focus: a picker's first row (Quality: the source on air, following it as ☰ moves on) when one
@@ -1972,7 +1975,6 @@ private fun BarChip(
 }
 
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
-private const val MENU_PICKER_MILLIS = 3_000L
 // The side menu: narrow enough to leave most of the picture showing.
 private val SIDE_MENU_WIDTH = 360.dp
 // How long a picked group may take to bring its channels before the menu stops waiting.
