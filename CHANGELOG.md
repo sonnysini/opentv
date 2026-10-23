@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.2 — 23 October 2026
+
+- **☰ moves on to the next source again, in the Quality list.** Each press of the remote's menu key
+  switches straight to the channel's next source and shows it highlighted in the player's Quality
+  list; press ☰ again for the next one, or use up/down and OK to pick one. Left alone, the list
+  goes away after the same time as the player bar (Settings).
+
 ## 0.26.1 — 23 October 2026
 
 - **☰ in the player opens the Quality list.** The remote's menu key brings up the player's own
