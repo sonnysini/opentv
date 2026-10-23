@@ -412,6 +412,15 @@ class AppSettings private constructor(context: Context) {
         _hiccupLimit.value = n
     }
 
+    /** Switch the screen to the channel's refresh rate (25/50 fps → 50 Hz) while a stream plays. */
+    private val _matchFrameRate = pref { prefs.getBoolean(KEY_MATCH_FRAME_RATE, true) }
+    val matchFrameRate: StateFlow<Boolean> = _matchFrameRate.asStateFlow()
+
+    fun setMatchFrameRate(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_MATCH_FRAME_RATE, enabled).apply()
+        _matchFrameRate.value = enabled
+    }
+
     /**
      * Seconds behind the live edge for live streams; 0 leaves it to the player (three HLS segments
      * back, ~30 s with 10 s segments). Lower is closer to live but risks freezes on slow panels.
@@ -971,6 +980,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_LIVE_PAUSE = "live_pause_enabled"
         private const val KEY_PREFERRED_QUALITY = "preferred_quality"
         private const val KEY_QUALITY_FALLBACK = "quality_fallback"
+        private const val KEY_MATCH_FRAME_RATE = "match_frame_rate"
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
         private const val KEY_STALL_FALLBACK = "stall_fallback"
@@ -996,7 +1006,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
                 KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_LOGOS_EXTERNAL, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
-                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_QUALITY_BUTTON_CYCLES,
+                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_QUALITY_BUTTON_CYCLES, KEY_MATCH_FRAME_RATE,
                 // The old logo switches: a restore of an older backup still migrates from them.
                 KEY_PREFER_GUIDE_LOGOS, KEY_GROUP_BADGES,
             ).forEach { put(it, SettingsBackup.Kind.BOOL) }

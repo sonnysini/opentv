@@ -224,6 +224,7 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val manualSourceMode by settings.manualSourceMode.collectAsState()
     val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
+    val matchFrameRate by settings.matchFrameRate.collectAsState()
 
     SettingsPage(stringResource(R.string.settings_section_playback), onBack) {
         SettingsSection(stringResource(R.string.settings_quality_title)) {
@@ -293,6 +294,13 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                     onChange = settings::setHiccupLimit,
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = stringResource(R.string.settings_match_frame_rate_title),
+                subtitle = stringResource(R.string.settings_match_frame_rate_subtitle),
+                checked = matchFrameRate,
+                onToggle = settings::setMatchFrameRate,
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 stringResource(R.string.settings_live_offset_note),
