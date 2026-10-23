@@ -128,7 +128,6 @@
     <string name="player_no_external">No other video player installed</string>
     <string name="player_last">Last</string>
     <string name="player_groups">Groups</string>
-    <string name="player_sources">Sources</string>
     <string name="live_favourite_add">Add to favourites</string>
     <string name="live_favourite_remove">Remove from favourites</string>
     <string name="player_quality_standard">Standard</string>

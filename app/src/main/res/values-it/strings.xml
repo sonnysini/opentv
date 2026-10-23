@@ -114,7 +114,6 @@
     <string name="player_no_external">Nessun altro player video installato</string>
     <string name="player_last">Ultimo</string>
     <string name="player_groups">Gruppi</string>
-    <string name="player_sources">Fonti</string>
     <string name="live_favourite_add">Aggiungi ai preferiti</string>
     <string name="live_favourite_remove">Togli dai preferiti</string>
     <string name="player_quality_standard">Standard</string>

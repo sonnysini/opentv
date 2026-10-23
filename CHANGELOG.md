@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.26.1 — 23 October 2026
+
+- **☰ in the player opens the Quality list.** The remote's menu key brings up the player's own
+  Quality picker; press it again to close it. The sources list that popped up top-right is gone,
+  also on automatic source switches (the notice at the top still says which source took over).
+
 ## 0.26.0 — 23 October 2026
 
 - **Preferred sources.** Settings › Playback › Preferred sources lists every restream source in
