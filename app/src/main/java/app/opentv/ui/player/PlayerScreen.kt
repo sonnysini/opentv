@@ -354,12 +354,16 @@ fun PlayerScreen(
 
     // Back from the other player: land on the guide, on the same channel, rather than reopening
     // the stream on our own while the other app may still be holding the account's one connection.
+    // Leaving is done after the resume has been handed out: popping the back stack from inside the
+    // lifecycle callback trips the navigation library mid-iteration and crashes the app.
+    var backFromExternal by remember { mutableStateOf(false) }
+    LaunchedEffect(backFromExternal) { if (backFromExternal) onBack() }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && handedOff) {
                 handedOff = false
-                onBack()
+                backFromExternal = true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -633,7 +637,9 @@ fun PlayerScreen(
         val display = window.decorView.display ?: return@LaunchedEffect
         val modes = display.supportedModes.map { RefreshRate.Mode(it.modeId, it.physicalWidth, it.physicalHeight, it.refreshRate) }
         val current = modes.firstOrNull { it.id == display.mode.modeId } ?: return@LaunchedEffect
-        val target = RefreshRate.pick(modes, current, fps) ?: return@LaunchedEffect
+        val target = RefreshRate.pick(modes, current, fps)
+        android.util.Log.i("OpenTV", "refresh rate: ${fps}fps at ${current.hz}Hz, modes=${modes.map { it.hz }}")
+        target ?: return@LaunchedEffect
         android.util.Log.i("OpenTV", "refresh rate: ${fps}fps, ${current.hz}Hz -> ${target.hz}Hz (mode ${target.id})")
         setPreferredDisplayMode(window, target.id)
     }
@@ -1890,28 +1896,13 @@ private fun setPreferredDisplayMode(window: android.view.Window, modeId: Int) {
 }
 
 /**
- * The playing stream's frame rate: what the stream declares, else counted from the frames drawn
- * over a few seconds once the picture is running. Null when there's no picture within ~12 s.
+ * The playing stream's frame rate: what the stream declares, else read from the frames' timestamps
+ * once a second or so of picture went by. Null when there's no picture within ~15 s.
  */
 private suspend fun awaitFrameRate(controller: PlayerController): Float? {
-    var startAt = 0L
-    var startFrames = 0L
-    repeat(48) {
-        val stats = controller.stats()
-        stats.video?.frameRate?.takeIf { it > 0f }?.let { return StreamInfo.snapFrameRate(it) }
-        val now = SystemClock.elapsedRealtime()
-        if (stats.renderedFrames > 0) {
-            // Skip the first second: frames come in a burst while the buffer starts.
-            if (startAt == 0L) {
-                startAt = now + 1_000L
-            } else if (startFrames == 0L && now >= startAt) {
-                startAt = now
-                startFrames = stats.renderedFrames
-            } else if (startFrames > 0L && now - startAt >= 3_000L) {
-                val fps = (stats.renderedFrames - startFrames) * 1000f / (now - startAt)
-                return StreamInfo.snapFrameRate(fps).takeIf { it > 0f }
-            }
-        }
+    repeat(60) {
+        controller.stats().video?.frameRate?.takeIf { it > 0f }?.let { return StreamInfo.snapFrameRate(it) }
+        controller.contentFrameRate().takeIf { it > 0f }?.let { return StreamInfo.snapFrameRate(it) }
         delay(250)
     }
     return null
