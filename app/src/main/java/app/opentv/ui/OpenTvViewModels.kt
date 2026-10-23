@@ -56,6 +56,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
 import app.opentv.ui.channels.LiveSnapshot
 import app.opentv.ui.channels.LiveSnapshotStore
@@ -452,7 +453,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      * re-emits on its own when an EPG sync lands new programmes.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val programmeIndex: StateFlow<Map<String, List<Programme>>> =
+    private val programmeIndex: StateFlow<Map<String, List<Programme>>?> =
         // windowStartMillis is a StateFlow, which already conflates equal values — an explicit
         // distinctUntilChanged() on it is a no-op (and a build error under our warnings-as-errors).
         windowStartMillis
@@ -461,13 +462,15 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                 // three hours ago; buildRows trims every row back to the window.
                 graph.epgRepository
                     .observeWindow(windowStart - SHIFT_LOOKBACK_MILLIS, windowStart + GUIDE_LOOKAHEAD_MILLIS)
-                    .map { programmes ->
+                    .map<_, Map<String, List<Programme>>?> { programmes ->
                         programmes.groupBy { it.epgChannelId }
                             .mapValues { (_, list) -> EpgRepository.onePerChannel(list) }
                     }
             }
             .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+            // null until the window has been read once — see [rows], which keeps the snapshot
+            // on screen rather than swap it for rows with no guide.
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * True once the guide has been built at least once. After that an empty [rows] means the group
@@ -550,11 +553,17 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                     // the one-time heavy load, and leaking it per-category read as a stuck "100%".
                     val firstBuild = !guideBuilt
                     if (firstBuild) StatusBus.set(sizeMessage(visible.size), 0f)
-                    val built = buildRows(visible, byEpgChannel, now, reportProgress = firstBuild)
+                    val built = buildRows(visible, byEpgChannel.orEmpty(), now, reportProgress = firstBuild)
                     // The order the user set for this group from the phone page, if any.
                     val order = if (key.favs || key.query.isNotBlank()) null else key.groupKey?.let(channelOrder::get)
-                    if (order == null) built else LiveLayout.ordered(built, order) { listOf(it.orderKey) }
-                }.onEach { if (source == null) saveSnapshot(key, it) }
+                    val rows = if (order == null) built else LiveLayout.ordered(built, order) { listOf(it.orderKey) }
+                    rows to (byEpgChannel != null)
+                }
+                    // Rows built before the guide is read would replace the snapshot's full rows
+                    // with blank ones for a few seconds: hold them back when there is a snapshot.
+                    .filter { (_, withGuide) -> withGuide || snapshotRowsFor(LiveSnapshotStore.current) == null }
+                    .onEach { (rows, withGuide) -> if (withGuide && source == null) saveSnapshot(key, rows) }
+                    .map { it.first }
             }
             // Grouping thousands of channels against a 12-hour, all-feeds programme window is heavy
             // enough to freeze the UI for a big provider — a category tap that took minutes. Run the
