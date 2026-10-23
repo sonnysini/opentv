@@ -391,6 +391,16 @@ fun PlayerScreen(
         interaction++
     }
 
+    // The Quality picker as ☰ opens it goes away by itself once the remote is left alone.
+    var menuPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(menuPicker, panel, interaction) {
+        if (panel != Panel.QUALITY) { menuPicker = false; return@LaunchedEffect }
+        if (!menuPicker) return@LaunchedEffect
+        delay(MENU_PICKER_MILLIS)
+        panel = Panel.NONE
+        controlsVisible = false
+    }
+
     /** Plays a logical channel from its preferred quality, with a fresh fallback chain. */
     suspend fun startChannel(channel: Channel) {
         listedId = channel.id
@@ -681,9 +691,10 @@ fun PlayerScreen(
         }
     }
 
-    // Focus: a picker's first row when one is open, otherwise the bar, otherwise the full-screen
-    // catcher (so the next remote press brings the bar back).
-    LaunchedEffect(controlsVisible, panel) {
+    // Focus: a picker's first row (Quality: the source on air, following it as ☰ moves on) when one
+    // is open, otherwise the bar, otherwise the full-screen catcher (so the next remote press brings
+    // the bar back).
+    LaunchedEffect(controlsVisible, panel, currentId.takeIf { panel == Panel.QUALITY }) {
         if (controlsVisible) {
             delay(40)
             runCatching { if (panel != Panel.NONE) panelFocus.requestFocus() else barFocus.requestFocus() }
@@ -786,14 +797,15 @@ fun PlayerScreen(
                         numberEntry = (numberEntry + digit).take(4)
                         reveal(); interaction++; true
                     }
-                    // ☰ (the remote's menu key) opens the Quality picker, from anywhere; again closes it.
+                    // ☰ (the remote's menu key) moves on to the channel's next source, from anywhere, and
+                    // shows it in the Quality picker: ☰ again for the next one, or up/down + OK to pick.
                     event.key == Key.Menu -> {
                         channelListVisible = false
-                        if (panel == Panel.QUALITY) {
-                            panel = Panel.NONE
-                        } else if (variants.size > 1) {
+                        if (variants.size > 1) {
+                            cycleQuality(notice = false)
                             panel = Panel.QUALITY
                             controlsVisible = true
+                            menuPicker = true
                         }
                         interaction++
                         true
@@ -1720,12 +1732,14 @@ private fun OptionPanel(
             if (options.isEmpty()) {
                 Text(stringResource(R.string.player_none_available), color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
             }
+            // Quality lands on the source on air, so ☰ and up/down carry on from there.
+            val focusIndex = if (panel == Panel.QUALITY) options.indexOfFirst { it.selected }.coerceAtLeast(0) else 0
             options.forEachIndexed { index, option ->
                 OptionRow(
                     label = option.label,
                     selected = option.selected,
                     onClick = option.onClick,
-                    focusRequester = if (index == 0) firstFocus else null,
+                    focusRequester = if (index == focusIndex) firstFocus else null,
                 )
             }
         }
@@ -1958,6 +1972,7 @@ private fun BarChip(
 }
 
 private const val EPG_RETRY_MILLIS = 5 * 60_000L
+private const val MENU_PICKER_MILLIS = 3_000L
 // The side menu: narrow enough to leave most of the picture showing.
 private val SIDE_MENU_WIDTH = 360.dp
 // How long a picked group may take to bring its channels before the menu stops waiting.
