@@ -629,27 +629,28 @@ fun PlayerScreen(
 
     // Refresh-rate matching, as Kodi and Vimu do: once the stream's frame rate is known, move the
     // screen to a mode that shows every frame evenly (25 fps on 59.94 Hz judders, on 50 Hz it doesn't).
-    // Zapping between channels of the same rate keeps the mode; leaving the player hands it back.
+    // The app already sits at 50 Hz (MainActivity), so 25/50 fps channels never switch; leaving the
+    // player goes back to that mode rather than the system's.
     val matchFrameRate by settings.matchFrameRate.collectAsState()
     LaunchedEffect(currentId, matchFrameRate) {
         val window = context.findActivity()?.window ?: return@LaunchedEffect
         if (!matchFrameRate) {
-            setPreferredDisplayMode(window, 0)
+            DisplayModes.set(window, 0)
             return@LaunchedEffect
         }
         val fps = awaitFrameRate(controller) ?: return@LaunchedEffect
         val display = window.decorView.display ?: return@LaunchedEffect
-        val modes = display.supportedModes.map { RefreshRate.Mode(it.modeId, it.physicalWidth, it.physicalHeight, it.refreshRate) }
+        val modes = DisplayModes.modes(display)
         val current = modes.firstOrNull { it.id == display.mode.modeId } ?: return@LaunchedEffect
         val target = RefreshRate.pick(modes, current, fps)
         android.util.Log.i("OpenTV", "refresh rate: ${fps}fps at ${current.hz}Hz, modes=${modes.map { it.hz }}")
         target ?: return@LaunchedEffect
         android.util.Log.i("OpenTV", "refresh rate: ${fps}fps, ${current.hz}Hz -> ${target.hz}Hz (mode ${target.id})")
-        setPreferredDisplayMode(window, target.id)
+        DisplayModes.set(window, target.id)
     }
     DisposableEffect(Unit) {
         val window = context.findActivity()?.window
-        onDispose { window?.let { setPreferredDisplayMode(it, 0) } }
+        onDispose { window?.let { DisplayModes.set(it, DisplayModes.homeId(it, settings.matchFrameRate.value)) } }
     }
 
     // Sleep timer: when the armed deadline passes, stop and leave the player. Re-arming from
@@ -1837,12 +1838,6 @@ private fun OptionRow(
             Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.common_selected), tint = fg)
         }
     }
-}
-
-/** 0 lets the system choose again. */
-private fun setPreferredDisplayMode(window: android.view.Window, modeId: Int) {
-    if (window.attributes.preferredDisplayModeId == modeId) return
-    window.attributes = window.attributes.apply { preferredDisplayModeId = modeId }
 }
 
 /**

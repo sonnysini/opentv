@@ -30,6 +30,16 @@ object RefreshRate {
             .maxByOrNull { it.hz }
     }
 
+    /**
+     * The mode the app sits in between channels: one that fits 25 fps (50 Hz) at the screen's current
+     * resolution, so Italian channels, nearly all 25/50 fps, start without a switch (and the second
+     * of black it brings). The current mode when it already fits; null when the TV has no such mode.
+     */
+    fun home(modes: List<Mode>, current: Mode): Mode? =
+        if (fits(current.hz, HOME_FPS)) current else pick(modes, current, HOME_FPS)
+
+    private const val HOME_FPS = 25f
+
     /** [hz] shows every frame of [fps] the same number of times (60.000004 Hz counts as 60). */
     fun fits(hz: Float, fps: Float): Boolean {
         val ratio = hz / fps

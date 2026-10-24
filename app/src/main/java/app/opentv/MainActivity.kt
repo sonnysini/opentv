@@ -111,6 +111,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handlePlayIntent(intent)
         val isTelevision = isRunningOnTelevision(this)
+        // Move the TV to 50 Hz right away, while the list loads, so Italian channels (25/50 fps)
+        // start without a refresh-rate switch; the player still switches for the odd 24/60 fps one.
+        val appSettings = ServiceLocator.get(this).settings
+        app.opentv.ui.player.DisplayModes.set(window, app.opentv.ui.player.DisplayModes.homeId(window, appSettings.matchFrameRate.value))
 
         setContent {
             val settings = remember { ServiceLocator.get(this).settings }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.27.0 — 25 October 2026
+
+- **The TV goes to 50 Hz as soon as OpenTV opens.** With "Match the channel's frame rate" on, the
+  switch happens once at launch, while the list loads, instead of on every channel: 25/50 fps
+  channels (nearly all Italian ones) now start without the second of black. Leaving the player
+  keeps 50 Hz; only a 24 or 60 fps channel still switches, and back.
+
 ## 0.26.2 — 23 October 2026
 
 - **☰ moves on to the next source again, in the Quality list.** Each press of the remote's menu key
