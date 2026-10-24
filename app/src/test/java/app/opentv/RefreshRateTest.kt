@@ -47,4 +47,17 @@ class RefreshRateTest {
     @Test fun unknownRateDoesNothing() {
         assertNull(RefreshRate.pick(modes, at5994, 0f))
     }
+
+    @Test fun homeIs50AtTheSameResolution() {
+        assertEquals(4, RefreshRate.home(modes, at5994)?.id)
+        assertEquals(10, RefreshRate.home(modes, modes[2])?.id)
+    }
+
+    @Test fun homeKeepsAFittingMode() {
+        assertEquals(4, RefreshRate.home(modes, modes[3])?.id)
+    }
+
+    @Test fun homeIsNullWithout50() {
+        assertNull(RefreshRate.home(listOf(at5994), at5994))
+    }
 }
