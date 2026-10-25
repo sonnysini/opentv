@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -82,6 +83,7 @@ import app.opentv.ui.theme.focusLift
  */
 enum class Tab(val labelRes: Int, val icon: ImageVector) {
     LIVE(R.string.nav_live_tv, Icons.Filled.LiveTv),
+    FOOTBALL(R.string.nav_football, Icons.Filled.SportsSoccer),
     MOVIES(R.string.nav_movies, Icons.Filled.Movie),
     SHOWS(R.string.nav_shows, Icons.Filled.Tv),
     RECORDINGS(R.string.nav_recordings, Icons.Filled.FiberManualRecord),
@@ -120,6 +122,7 @@ fun MainScreen(
     val visibleTabs = remember(liveEnabled, moviesEnabled, seriesEnabled) {
         buildList {
             if (liveEnabled) add(Tab.LIVE)
+            if (liveEnabled) add(Tab.FOOTBALL)
             if (moviesEnabled) add(Tab.MOVIES)
             if (seriesEnabled) add(Tab.SHOWS)
             add(Tab.RECORDINGS)
@@ -204,6 +207,7 @@ fun MainScreen(
                     onPlayCatchup = onPlayCatchup,
                     onRevealNav = { navRevealed = true },
                 )
+                Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(onPlayChannel = onPlayChannel)
                 Tab.MOVIES -> MoviesScreen(
                     onOpenMovie = onOpenMovie,
                     onResume = onResume,

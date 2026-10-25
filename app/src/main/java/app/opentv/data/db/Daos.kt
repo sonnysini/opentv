@@ -173,6 +173,20 @@ interface ChannelDao {
     )
     suspend fun variantsInGroup(groupKey: String): List<Channel>
 
+    /**
+     * Visible channels whose guide could be one of [guideIds] — the football home looks up who
+     * shows a match this way. A handful of ids, so the bound-variable cap is no concern here.
+     */
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE hidden = 0
+          AND (epgOverrideId IN (:guideIds) OR epgChannelId IN (:guideIds) OR matchedEpgId IN (:guideIds))
+        ORDER BY qualityRank DESC, displayName
+        """
+    )
+    suspend fun withGuideIds(guideIds: List<String>): List<Channel>
+
     @Query("SELECT COUNT(*) FROM channels WHERE sourceId = :sourceId")
     suspend fun countForSource(sourceId: Long): Int
 
@@ -448,6 +462,19 @@ interface ProgrammeDao {
         """
     )
     suspend fun upcoming(channelId: String, nowUtcMillis: Long, limit: Int): List<Programme>
+
+    /**
+     * Programmes overlapping a window whose title names both [a] and [b] — a match in the guide.
+     * LIKE is case-blind only for ASCII, so the caller re-checks the title its own way.
+     */
+    @Query(
+        """
+        SELECT * FROM programmes
+        WHERE endUtcMillis > :fromUtcMillis AND startUtcMillis < :toUtcMillis
+          AND title LIKE '%' || :a || '%' AND title LIKE '%' || :b || '%'
+        """
+    )
+    suspend fun titledBoth(a: String, b: String, fromUtcMillis: Long, toUtcMillis: Long): List<Programme>
 
     @Query("SELECT COUNT(*) FROM programmes WHERE feedId = :feedId")
     suspend fun countForFeed(feedId: Long): Int
