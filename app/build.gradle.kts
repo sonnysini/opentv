@@ -107,7 +107,9 @@ ksp {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
+    // The nio flavour also backports the Java 10+ calls NewPipeExtractor makes (URLDecoder with a
+    // Charset…), missing from Android before 13.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
