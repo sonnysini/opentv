@@ -13,6 +13,7 @@ import app.opentv.data.repo.FootballRepository
 import app.opentv.data.repo.FootballRepository.Match
 import app.opentv.data.repo.FootballRepository.MatchChannel
 import app.opentv.data.repo.FootballRepository.Phase
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 
 class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private val repo: FootballRepository = ServiceLocator.get(app).footballRepository
+    private val youTube = ServiceLocator.get(app).youTubeStreams
 
     /** A match with what the home needs to act on it. */
     data class Item(
@@ -44,6 +46,11 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
+    /** The highlights video being looked up for our own player, while it is. */
+    private val _opening = MutableStateFlow<String?>(null)
+    val opening: StateFlow<String?> = _opening.asStateFlow()
+    private var openJob: Job? = null
+
     // Highlights found stay found: the feed only keeps the latest uploads.
     private val highlights = HashMap<Long, String>()
 
@@ -54,6 +61,20 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 // A minute while a game is on (score and minute move), five otherwise.
                 delay(if (_ui.value.hero?.match?.phase == Phase.LIVE) 60_000L else 300_000L)
             }
+        }
+    }
+
+    /**
+     * Finds a stream for highlights [videoId] and hands it to [onStream]; when YouTube can't be
+     * read (an extractor YouTube has just broken) [onFallback] opens the YouTube app instead.
+     */
+    fun openHighlights(videoId: String, onStream: (String) -> Unit, onFallback: () -> Unit) {
+        if (openJob?.isActive == true) return
+        openJob = viewModelScope.launch {
+            _opening.value = videoId
+            val url = youTube.resolve(videoId)
+            _opening.value = null
+            if (url != null) onStream(url) else onFallback()
         }
     }
 

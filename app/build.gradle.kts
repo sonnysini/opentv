@@ -154,6 +154,8 @@ dependencies {
     // SMB/CIFS client for recording to a NAS (Synology etc.) and playing those recordings
     // back in-app over the network. Pure-Java SMB2/3, no native bits.
     implementation("com.hierynomus:smbj:0.12.2")
+    // Reads YouTube streams so football highlights play in our own player.
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

@@ -209,7 +209,11 @@ fun MainScreen(
                     onPlayCatchup = onPlayCatchup,
                     onRevealNav = { navRevealed = true },
                 )
-                Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(onPlayChannel = onPlayChannel)
+                Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(
+                    onPlayChannel = onPlayChannel,
+                    // A one-off stream with a seek bar: the VOD player, like catch-up.
+                    onPlayVideo = { key, url, title -> onPlayCatchup(key, url, title, "") },
+                )
                 Tab.MOVIES -> MoviesScreen(
                     onOpenMovie = onOpenMovie,
                     onResume = onResume,

@@ -25,6 +25,7 @@
     <string name="football_upcoming">Prossime</string>
     <string name="football_highlights">Highlights</string>
     <string name="football_highlights_soon">Highlights disponibili a breve</string>
+    <string name="football_highlights_loading">Carico gli highlights…</string>
     <string name="football_no_channel">Non trovata in guida</string>
     <string name="football_channels_soon">Canali in guida a breve</string>
     <string name="football_also_on">Anche su</string>

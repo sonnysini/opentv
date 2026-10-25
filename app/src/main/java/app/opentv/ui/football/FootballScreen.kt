@@ -76,17 +76,20 @@ private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.andro
 /**
  * The football home: the match on now (or next) big at the top with "Watch now" already focused —
  * OK and it plays on the best channel of the user's own lists — then rows for the other live games,
- * today's (finished ones open their YouTube highlights) and the fixtures coming up.
+ * today's (finished ones play their YouTube highlights) and the fixtures coming up.
  */
 @Composable
 fun FootballScreen(
     onPlayChannel: (Channel) -> Unit,
+    /** Plays a video in our own player: media key, stream URL, title. */
+    onPlayVideo: (key: String, url: String, title: String) -> Unit,
     viewModel: FootballViewModel = viewModel(),
 ) {
     val ui by viewModel.ui.collectAsState()
+    val opening by viewModel.opening.collectAsState()
     val context = LocalContext.current
     val noYoutube = stringResource(R.string.football_no_youtube)
-    val openHighlights: (String) -> Unit = { id ->
+    val openInYouTube: (String) -> Unit = { id ->
         // Straight into a YouTube app: on Fire TV a bare link also matches Silk and Music, and
         // Android would ask which one to use.
         val uri = Uri.parse("https://www.youtube.com/watch?v=$id")
@@ -102,33 +105,57 @@ fun FootballScreen(
         }
         if (!opened) Toast.makeText(context, noYoutube, Toast.LENGTH_LONG).show()
     }
+    val highlightsTitle = stringResource(R.string.football_highlights)
+    val openHighlights: (FootballViewModel.Item, String) -> Unit = { item, id ->
+        val title = "${item.match.home.name} - ${item.match.away.name} · $highlightsTitle"
+        viewModel.openHighlights(
+            id,
+            onStream = { url -> onPlayVideo("yt:$id", url, title) },
+            onFallback = { openInYouTube(id) },
+        )
+    }
     val open: (FootballViewModel.Item) -> Unit = { item ->
         val highlight = item.highlights
         val channel = item.channels.firstOrNull()?.channel
         when {
-            item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(highlight)
+            item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
             item.match.phase != Phase.FINISHED && channel != null -> onPlayChannel(channel)
         }
     }
 
-    when {
-        ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        ui.failed -> Message(stringResource(R.string.football_unavailable))
-        ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() -> Message(stringResource(R.string.football_none))
-        else -> LazyColumn(
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            ui.hero?.let { hero -> item(key = "hero") { Hero(hero, onPlayChannel) } }
-            if (ui.live.isNotEmpty()) item(key = "live") {
-                MatchRow(stringResource(R.string.football_live_row), ui.live, open)
+    Box(Modifier.fillMaxSize()) {
+        when {
+            ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            ui.failed -> Message(stringResource(R.string.football_unavailable))
+            ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() -> Message(stringResource(R.string.football_none))
+            else -> LazyColumn(
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                ui.hero?.let { hero -> item(key = "hero") { Hero(hero, onPlayChannel) } }
+                if (ui.live.isNotEmpty()) item(key = "live") {
+                    MatchRow(stringResource(R.string.football_live_row), ui.live, open)
+                }
+                if (ui.today.isNotEmpty()) item(key = "today") {
+                    MatchRow(stringResource(R.string.football_today), ui.today, open)
+                }
+                if (ui.upcoming.isNotEmpty()) item(key = "upcoming") {
+                    MatchRow(stringResource(R.string.football_upcoming), ui.upcoming, open)
+                }
             }
-            if (ui.today.isNotEmpty()) item(key = "today") {
-                MatchRow(stringResource(R.string.football_today), ui.today, open)
-            }
-            if (ui.upcoming.isNotEmpty()) item(key = "upcoming") {
-                MatchRow(stringResource(R.string.football_upcoming), ui.upcoming, open)
+        }
+        // Reading the stream off YouTube takes a few seconds on a slow box: say so.
+        if (opening != null) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.football_highlights_loading), style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
     }

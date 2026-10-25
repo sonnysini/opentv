@@ -118,6 +118,10 @@ object ServiceLocator {
             app.opentv.data.repo.FootballRepository(httpClient, database.programmes(), database.channels())
         }
 
+        val youTubeStreams: app.opentv.data.remote.YouTubeStreams by lazy {
+            app.opentv.data.remote.YouTubeStreams(httpClient)
+        }
+
         val playbackPositions get() = database.positions()
 
         val profiles get() = database.profiles()

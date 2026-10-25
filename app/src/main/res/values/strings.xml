@@ -33,6 +33,7 @@
     <string name="football_upcoming">Coming up</string>
     <string name="football_highlights">Highlights</string>
     <string name="football_highlights_soon">Highlights soon</string>
+    <string name="football_highlights_loading">Loading highlights…</string>
     <string name="football_no_channel">Not found in your guide</string>
     <string name="football_channels_soon">Channels once the guide lists it</string>
     <string name="football_also_on">Also on</string>
