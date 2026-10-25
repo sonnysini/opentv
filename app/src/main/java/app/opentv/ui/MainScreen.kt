@@ -48,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -132,7 +133,8 @@ fun MainScreen(
     // still switched on (or Recordings if none are).
     val homeTab = visibleTabs.first()
 
-    var tab by remember { mutableStateOf(homeTab) }
+    // Saveable: coming back from the player must land on the tab it was opened from (Football).
+    var tab by rememberSaveable { mutableStateOf(homeTab) }
 
     // The full-screen live list takes the whole screen, menu included: the rail is gone until LEFT
     // on a row brings it back, and it goes again as soon as focus leaves it.

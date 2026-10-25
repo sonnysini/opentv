@@ -186,7 +186,7 @@ private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit)
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        status(m, withDay = true),
+                        heroStatus(m),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (m.phase == Phase.LIVE) LIVE_RED else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -414,11 +414,21 @@ private fun Crest(team: Team, size: Int) {
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 private val DAY = DateTimeFormatter.ofPattern("EEE d")
+private val FULL_DAY = DateTimeFormatter.ofPattern("EEEE d MMMM")
 
 /** The big middle text: the score once it's started, the kick-off time before. */
 private fun centre(m: Match): String =
     if (m.homeScore != null && m.awayScore != null) "${m.homeScore}-${m.awayScore}"
     else TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
+
+/** Under the hero's big kick-off time, the day alone; otherwise the same line as the cards. */
+@Composable
+private fun heroStatus(m: Match): String {
+    if (m.phase != Phase.SCHEDULED) return status(m)
+    val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
+    return if (at.toLocalDate() == LocalDate.now()) stringResource(R.string.football_today)
+    else FULL_DAY.format(at).replaceFirstChar { it.uppercase() }
+}
 
 @Composable
 private fun status(m: Match, withDay: Boolean = false): String {
