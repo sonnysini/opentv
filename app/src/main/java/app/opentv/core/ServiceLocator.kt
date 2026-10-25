@@ -119,7 +119,7 @@ object ServiceLocator {
         }
 
         val youTubeStreams: app.opentv.data.remote.YouTubeStreams by lazy {
-            app.opentv.data.remote.YouTubeStreams(httpClient)
+            app.opentv.data.remote.YouTubeStreams(httpClient, appContext.cacheDir)
         }
 
         val playbackPositions get() = database.positions()
