@@ -70,6 +70,9 @@ import java.time.format.DateTimeFormatter
 
 private val LIVE_RED = Color(0xFFFF6B6B)
 
+/** YouTube on Fire TV, then on Google TV / Android TV. */
+private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
+
 /**
  * The football home: the match on now (or next) big at the top with "Watch now" already focused —
  * OK and it plays on the best channel of the user's own lists — then rows for the other live games,
@@ -84,13 +87,20 @@ fun FootballScreen(
     val context = LocalContext.current
     val noYoutube = stringResource(R.string.football_no_youtube)
     val openHighlights: (String) -> Unit = { id ->
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$id"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, noYoutube, Toast.LENGTH_LONG).show()
+        // Straight into a YouTube app: on Fire TV a bare link also matches Silk and Music, and
+        // Android would ask which one to use.
+        val uri = Uri.parse("https://www.youtube.com/watch?v=$id")
+        val opened = (YOUTUBE_APPS + null).any { pkg ->
+            val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (pkg != null) intent.setPackage(pkg)
+            try {
+                context.startActivity(intent)
+                true
+            } catch (_: ActivityNotFoundException) {
+                false
+            }
         }
+        if (!opened) Toast.makeText(context, noYoutube, Toast.LENGTH_LONG).show()
     }
     val open: (FootballViewModel.Item) -> Unit = { item ->
         val highlight = item.highlights
