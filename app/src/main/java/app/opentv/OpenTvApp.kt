@@ -57,6 +57,9 @@ class OpenTvApp : Application(), ImageLoaderFactory {
             .components { add(SvgDecoder.Factory()) }
             .build()
 
+    private fun processName(): String =
+        runCatching { java.io.File("/proc/self/cmdline").readText().substringBefore('\u0000').trim() }.getOrDefault("")
+
     // So notifications and any app-context resources use the chosen language too, not just the UI.
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(LocaleUtils.wrap(base))
@@ -64,6 +67,8 @@ class OpenTvApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // The OCR process (OcrService, ":ocr") only runs Tesseract: none of the app's start-up.
+        if (processName().endsWith(":ocr")) return
         AppText.init(this)
         val graph = ServiceLocator.get(this)
         // First thing: the live list opens on the copy saved last time while the real one builds.
