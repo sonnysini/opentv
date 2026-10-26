@@ -18,7 +18,8 @@
     <string name="common_try_again">Riprova</string>
     <string name="nav_live_tv">TV in diretta</string>
     <string name="nav_football">Calcio</string>
-    <string name="football_auto">Guarda in automatico</string>
+    <string name="football_auto_hint">Sceglie da solo il flusso migliore</string>
+    <string name="football_or_watch_on">Oppure guarda da</string>
     <string name="football_auto_scanning">Cerco il flusso migliore…</string>
     <string name="football_auto_ranked">Flussi migliori</string>
     <string name="football_auto_confirmed">partita giusta</string>
@@ -36,7 +37,6 @@
     <string name="football_highlights_loading">Carico gli highlights…</string>
     <string name="football_no_channel">Non trovata in guida</string>
     <string name="football_channels_soon">Canali in guida a breve</string>
-    <string name="football_also_on">Anche su</string>
     <string name="football_full_time">Finale</string>
     <string name="football_kickoff">Inizio %1$s</string>
     <string name="football_round">SERIE A · %1$sª GIORNATA</string>

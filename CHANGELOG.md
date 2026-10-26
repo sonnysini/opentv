@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.28.1 — 26 October 2026
+
+- **"▶ Watch now" picks the feed by itself.** On the football home the main button now runs Watch
+  automatically, at any time: every feed of the match is looked at and the best one plays. Below,
+  "Or watch on" lists all the match channels, to pick one by hand.
+
 ## 0.28.0 — 26 October 2026
 
 - **⚽ Football home.** A new ⚽ tab in the side rail (shown when Live is on) for Serie A: the match
