@@ -14,8 +14,8 @@ android {
         applicationId = "app.opentv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 74
-        versionName = "0.27.0"
+        versionCode = 75
+        versionName = "0.28.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -41,6 +41,9 @@ android {
             // Fork build: its own package, so it installs next to the official OpenTV and
             // updates in place from this fork's releases (fixed key, see docs/RELEASING.md).
             applicationIdSuffix = ".sonny"
+            // ARM only: the boxes are ARM, and the scoreboard reader's native library would add
+            // another 20 MB for x86 emulators. Debug builds keep every ABI.
+            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -107,7 +110,9 @@ ksp {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
+    // The nio flavour also backports the Java 10+ calls NewPipeExtractor makes (URLDecoder with a
+    // Charset…), missing from Android before 13.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -154,6 +159,10 @@ dependencies {
     // SMB/CIFS client for recording to a NAS (Synology etc.) and playing those recordings
     // back in-app over the network. Pure-Java SMB2/3, no native bits.
     implementation("com.hierynomus:smbj:0.12.2")
+    // Reads YouTube streams so football highlights play in our own player.
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    // Reads the scoreboard off a frame for "Watch automatically"; bundled model, no Play services.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

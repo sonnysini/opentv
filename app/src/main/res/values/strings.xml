@@ -25,6 +25,32 @@
 
     <!-- ============================ Navigation rail ============================ -->
     <string name="nav_live_tv">Live TV</string>
+    <string name="nav_football">Football</string>
+    <string name="football_auto">Watch automatically</string>
+    <string name="football_auto_scanning">Looking for the best feed…</string>
+    <string name="football_auto_ranked">Best feeds</string>
+    <string name="football_auto_confirmed">right game</string>
+    <string name="football_auto_wrong_game">another game</string>
+    <string name="football_auto_replay">replay</string>
+    <string name="football_auto_dead">doesn\'t start</string>
+    <string name="football_watch">Watch now</string>
+    <string name="football_live">LIVE</string>
+    <string name="football_live_row">Live now</string>
+    <string name="football_today">Today</string>
+    <string name="football_upcoming">Coming up</string>
+    <string name="football_last_round">Last matchday</string>
+    <string name="football_highlights">Highlights</string>
+    <string name="football_highlights_soon">Highlights soon</string>
+    <string name="football_highlights_loading">Loading highlights…</string>
+    <string name="football_no_channel">Not found in your guide</string>
+    <string name="football_channels_soon">Channels once the guide lists it</string>
+    <string name="football_also_on">Also on</string>
+    <string name="football_full_time">Full time</string>
+    <string name="football_kickoff">Kick-off %1$s</string>
+    <string name="football_round">SERIE A · MATCHDAY %1$s</string>
+    <string name="football_unavailable">Couldn\'t load the fixtures.</string>
+    <string name="football_none">No Serie A matches in the next few days.</string>
+    <string name="football_no_youtube">YouTube isn\'t installed</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_shows">Shows</string>
     <string name="nav_recordings">Recordings</string>

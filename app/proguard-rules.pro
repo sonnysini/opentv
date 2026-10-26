@@ -56,3 +56,16 @@
 -dontwarn org.slf4j.**
 -dontwarn org.ietf.jgss.**
 -dontwarn javax.security.**
+
+# NewPipeExtractor (in-app YouTube highlights). It runs YouTube's player script through Rhino,
+# which loads classes reflectively, and parses YouTube's protobuf replies. Rhino's scripting-API
+# and tools glue reference desktop-only packages that Android doesn't have.
+-keep class org.schabi.newpipe.extractor.** { *; }
+-keep class org.mozilla.javascript.** { *; }
+-keep class org.mozilla.classfile.ClassFileWriter
+-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }
+-dontwarn org.mozilla.javascript.**
+-dontwarn javax.script.**
+-dontwarn java.beans.**
+-dontwarn jdk.dynalink.**
+-dontwarn com.google.re2j.**

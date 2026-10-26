@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.28.0 — 26 October 2026
+
+- **⚽ Football home.** A new ⚽ tab in the side rail (shown when Live is on) for Serie A: the match
+  being played is the big hero with crests, score and minute, and "▶ Watch now" starts it on the
+  best channel; the other sources sit beside it. Rows below for other live games, today's
+  finished ones, the last matchday and the next fixtures.
+- **Match channels.** The two team channels come first, then the guide's channels showing the
+  match; club channels, radio commentaries, boxing feeds and replays are left out.
+- **Highlights in the app.** Finished matches open the official Serie A highlights straight in the
+  player (H.264 only, so the Fire TV decodes them); Back returns to the football home. Older ones
+  are found in the Serie A channel's video list; last season's "classic" highlights are skipped.
+- **⚡ Watch automatically.** From an hour before kick-off, a second button looks at every feed of
+  the match for a moment — real frame rate, resolution, audio — and reads its scoreboard on the
+  device: the wrong game or a replay is dropped, the best live feed starts, and the ranking
+  becomes the fallback order.
+
 ## 0.27.0 — 25 October 2026
 
 - **The TV goes to 50 Hz as soon as OpenTV opens.** With "Match the channel's frame rate" on, the

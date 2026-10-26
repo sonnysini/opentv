@@ -130,6 +130,7 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
 import app.opentv.player.HiccupWatch
+import app.opentv.player.MatchFeeds
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
 import app.opentv.player.StallWatch
@@ -216,6 +217,8 @@ fun PlayerScreen(
     // Quality fallback: the variants in try order (preferred first), the ones already tried for this
     // channel, and whether the current attempt has shown a picture yet. [attempt] restarts the timer.
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
+    // [variants] holds a match's ranked feeds across channels rather than one channel's qualities.
+    var matchFeeds by remember { mutableStateOf(false) }
     var tried by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var started by remember { mutableStateOf(false) }
     // The stream on screen, so it can be handed to another player app.
@@ -369,8 +372,13 @@ fun PlayerScreen(
 
     /** A variant's name for the switch notice and the picker: `FHD 2 · B`, numbered among its kind. */
     fun variantName(channel: Channel): String =
-        QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
-            ?: channel.qualityLabel.ifBlank { channel.shownName }
+        if (matchFeeds) {
+            // Feeds of different channels: the quality alone wouldn't say which.
+            listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
+        } else {
+            QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
+                ?: channel.qualityLabel.ifBlank { channel.shownName }
+        }
 
     /** Plays [variant] as picked by hand, and keeps it as this channel's first try from now on. */
     fun pickByHand(variant: Channel) {
@@ -398,6 +406,18 @@ fun PlayerScreen(
     suspend fun startChannel(channel: Channel) {
         listedId = channel.id
         listedChannel = channel
+        // A match's feeds ranked by "Watch automatically": play down that ranking instead.
+        val ranked = MatchFeeds.take(channel.id)?.mapNotNull { graph.catalogRepository.channel(it) }
+        matchFeeds = !ranked.isNullOrEmpty()
+        if (!ranked.isNullOrEmpty()) {
+            variants = ranked
+            tryOrder = ranked
+            tried = emptySet()
+            stallReturnId = null
+            manualPick = false
+            tuneTo(ranked.first())
+            return
+        }
         variants = graph.catalogRepository.variants(channel)
         val preferred = QualityPreference.order(
             variants, settings.preferredQuality.value, settings.preferredSources.value,

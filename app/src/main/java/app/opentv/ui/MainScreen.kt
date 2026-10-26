@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -47,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +84,7 @@ import app.opentv.ui.theme.focusLift
  */
 enum class Tab(val labelRes: Int, val icon: ImageVector) {
     LIVE(R.string.nav_live_tv, Icons.Filled.LiveTv),
+    FOOTBALL(R.string.nav_football, Icons.Filled.SportsSoccer),
     MOVIES(R.string.nav_movies, Icons.Filled.Movie),
     SHOWS(R.string.nav_shows, Icons.Filled.Tv),
     RECORDINGS(R.string.nav_recordings, Icons.Filled.FiberManualRecord),
@@ -120,6 +123,7 @@ fun MainScreen(
     val visibleTabs = remember(liveEnabled, moviesEnabled, seriesEnabled) {
         buildList {
             if (liveEnabled) add(Tab.LIVE)
+            if (liveEnabled) add(Tab.FOOTBALL)
             if (moviesEnabled) add(Tab.MOVIES)
             if (seriesEnabled) add(Tab.SHOWS)
             add(Tab.RECORDINGS)
@@ -129,7 +133,8 @@ fun MainScreen(
     // still switched on (or Recordings if none are).
     val homeTab = visibleTabs.first()
 
-    var tab by remember { mutableStateOf(homeTab) }
+    // Saveable: coming back from the player must land on the tab it was opened from (Football).
+    var tab by rememberSaveable { mutableStateOf(homeTab) }
 
     // The full-screen live list takes the whole screen, menu included: the rail is gone until LEFT
     // on a row brings it back, and it goes again as soon as focus leaves it.
@@ -203,6 +208,11 @@ fun MainScreen(
                     onRefresh = onRefresh,
                     onPlayCatchup = onPlayCatchup,
                     onRevealNav = { navRevealed = true },
+                )
+                Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(
+                    onPlayChannel = onPlayChannel,
+                    // A one-off stream with a seek bar: the VOD player, like catch-up.
+                    onPlayVideo = { key, url, title -> onPlayCatchup(key, url, title, "") },
                 )
                 Tab.MOVIES -> MoviesScreen(
                     onOpenMovie = onOpenMovie,
