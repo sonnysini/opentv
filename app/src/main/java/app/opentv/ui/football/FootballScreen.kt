@@ -73,7 +73,6 @@ import java.time.format.DateTimeFormatter
 private val LIVE_RED = Color(0xFFFF6B6B)
 
 /** "Watch automatically" shows from this long before kick-off. */
-private const val AUTO_BEFORE_MILLIS = 60 * 60_000L
 
 /** YouTube on Fire TV, then on Google TV / Android TV. */
 private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
@@ -248,21 +247,15 @@ private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                WatchButton(first, Modifier.focusRequester(watch)) { onPlayChannel(first.channel) }
-                // Only once the game is close: before, no feed is showing it yet. Debug builds
-                // always, to try it on any day.
-                val debuggable = (LocalContext.current.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-                if (debuggable || m.phase == Phase.LIVE || m.kickoffUtcMillis - System.currentTimeMillis() < AUTO_BEFORE_MILLIS) AutoButton(onAuto)
-                val others = item.channels.drop(1)
-                if (others.isNotEmpty()) {
-                    Text(
-                        stringResource(R.string.football_also_on),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(others, key = { it.channel.id }) { c -> ChannelChip(c.name) { onPlayChannel(c.channel) } }
-                    }
+                // Watch now = Watch automatically: every feed looked at, the best one plays.
+                WatchButton(Modifier.focusRequester(watch), onAuto)
+                Text(
+                    stringResource(R.string.football_or_watch_on),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(item.channels, key = { it.channel.id }) { c -> ChannelChip(c.name) { onPlayChannel(c.channel) } }
                 }
             }
         }
@@ -286,7 +279,7 @@ private fun HeroTeam(team: Team) {
 }
 
 @Composable
-private fun WatchButton(channel: MatchChannel, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun WatchButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Column(
         modifier
@@ -300,29 +293,8 @@ private fun WatchButton(channel: MatchChannel, modifier: Modifier = Modifier, on
     ) {
         val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
         Text("▶  " + stringResource(R.string.football_watch), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = fg)
-        Text(channel.name, style = MaterialTheme.typography.bodyMedium, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("⚡ " + stringResource(R.string.football_auto_hint), style = MaterialTheme.typography.bodyMedium, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
-}
-
-/** "Watch automatically": every feed tried, the best one plays. */
-@Composable
-private fun AutoButton(onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Text(
-        "⚡  " + stringResource(R.string.football_auto),
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusLift(focused)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-    )
 }
 
 /** The feeds being looked at, then their ranking, before the best one opens. */
