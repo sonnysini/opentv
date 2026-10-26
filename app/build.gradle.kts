@@ -41,6 +41,9 @@ android {
             // Fork build: its own package, so it installs next to the official OpenTV and
             // updates in place from this fork's releases (fixed key, see docs/RELEASING.md).
             applicationIdSuffix = ".sonny"
+            // ARM only: the boxes are ARM, and the scoreboard reader's native library would add
+            // another 20 MB for x86 emulators. Debug builds keep every ABI.
+            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -158,6 +161,8 @@ dependencies {
     implementation("com.hierynomus:smbj:0.12.2")
     // Reads YouTube streams so football highlights play in our own player.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    // Reads the scoreboard off a frame for "Watch automatically"; bundled model, no Play services.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

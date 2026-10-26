@@ -18,6 +18,13 @@
     <string name="common_try_again">Riprova</string>
     <string name="nav_live_tv">TV in diretta</string>
     <string name="nav_football">Calcio</string>
+    <string name="football_auto">Guarda in automatico</string>
+    <string name="football_auto_scanning">Cerco il flusso migliore…</string>
+    <string name="football_auto_ranked">Flussi migliori</string>
+    <string name="football_auto_confirmed">partita giusta</string>
+    <string name="football_auto_wrong_game">altra partita</string>
+    <string name="football_auto_replay">replica</string>
+    <string name="football_auto_dead">non parte</string>
     <string name="football_watch">Guarda ora</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">In diretta</string>

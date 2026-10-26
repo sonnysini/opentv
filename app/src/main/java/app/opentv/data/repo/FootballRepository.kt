@@ -68,7 +68,13 @@ class FootballRepository(
         val minute: String?,
         /** The matchday ("8"), when FotMob says. */
         val round: String?,
+        /** When the first and second halves really kicked off (epoch millis), once they have. */
+        val firstHalfMillis: Long? = null,
+        val secondHalfMillis: Long? = null,
     )
+
+    /** A goal: the match clock it came at (seconds) and the score after it. */
+    data class Goal(val clockSeconds: Int, val home: Int, val away: Int)
 
     /** One logical channel showing a match: [channel] is what plays, the player picks the quality. */
     data class MatchChannel(val channel: Channel, val name: String, val variants: Int)
@@ -247,6 +253,12 @@ class FootballRepository(
         val minute = status["liveTime"]?.jsonObject?.get("short")?.jsonPrimitive?.contentOrNull
             ?.filterNot { it == '‎' || it == '‏' }?.replace('’', '\'')?.trim()?.ifEmpty { null }
         val started = phase == Phase.LIVE || phase == Phase.FINISHED
+        // The halves' start times are in FotMob's own zone, the same as its "time" field: the gap
+        // between that and utcTime says which.
+        val local = m["time"]?.jsonPrimitive?.contentOrNull?.let { parseLocal(it) }
+        val shift = local?.let { it - kickoff } ?: 0L
+        val halfs = status["halfs"]?.jsonObject
+        fun half(key: String) = halfs?.get(key)?.jsonPrimitive?.contentOrNull?.let { parseLocal(it) }?.minus(shift)
         return Match(
             id = id,
             kickoffUtcMillis = kickoff,
@@ -257,7 +269,36 @@ class FootballRepository(
             phase = phase,
             minute = if (phase == Phase.LIVE) minute else null,
             round = m["tournamentStage"]?.jsonPrimitive?.contentOrNull,
+            firstHalfMillis = half("firstHalfStarted"),
+            secondHalfMillis = half("secondHalfStarted"),
         )
+    }
+
+    /** "25.10.2026 12:32:17" (or without seconds) read as if UTC: only differences are used. */
+    private fun parseLocal(s: String): Long? = runCatching {
+        val p = if (s.count { it == ':' } == 2) "dd.MM.yyyy HH:mm:ss" else "dd.MM.yyyy HH:mm"
+        java.time.LocalDateTime.parse(s.trim(), DateTimeFormatter.ofPattern(p)).toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
+    }.getOrNull()
+
+    /** [match]'s goals so far, in order. Empty when FotMob can't be reached or none yet. */
+    suspend fun goals(match: Match): List<Goal> = withContext(Dispatchers.IO) {
+        val body = get("https://www.fotmob.com/api/data/matchDetails?matchId=${match.id}") ?: return@withContext emptyList()
+        runCatching {
+            json.parseToJsonElement(body).jsonObject["content"]?.jsonObject?.get("matchFacts")?.jsonObject
+                ?.get("events")?.jsonObject?.get("events")?.jsonArray.orEmpty()
+                .map { it.jsonObject }
+                .filter { it["type"]?.jsonPrimitive?.contentOrNull == "Goal" }
+                .mapNotNull { e ->
+                    val minute = e["time"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                    val extra = e["overloadTime"]?.jsonPrimitive?.intOrNull ?: 0
+                    val score = e["newScore"]?.jsonArray ?: return@mapNotNull null
+                    Goal(
+                        clockSeconds = (minute + extra) * 60,
+                        home = score[0].jsonPrimitive.intOrNull ?: return@mapNotNull null,
+                        away = score[1].jsonPrimitive.intOrNull ?: return@mapNotNull null,
+                    )
+                }
+        }.getOrElse { Log.w(TAG, "goals ${match.id}", it); emptyList() }
     }
 
     private fun team(o: JsonObject?): Team? {

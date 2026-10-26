@@ -13,7 +13,13 @@ import app.opentv.data.repo.FootballRepository
 import app.opentv.data.repo.FootballRepository.Match
 import app.opentv.data.repo.FootballRepository.MatchChannel
 import app.opentv.data.repo.FootballRepository.Phase
+import app.opentv.data.model.Channel
+import app.opentv.data.model.shownName
+import app.opentv.player.MatchFeeds
+import app.opentv.player.ScoreboardReader
+import app.opentv.player.StreamProbe
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +29,7 @@ import kotlinx.coroutines.launch
 class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private val repo: FootballRepository = ServiceLocator.get(app).footballRepository
     private val youTube = ServiceLocator.get(app).youTubeStreams
+    private val graph = ServiceLocator.get(app)
 
     /** A match with what the home needs to act on it. */
     data class Item(
@@ -52,6 +59,124 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private val _opening = MutableStateFlow<String?>(null)
     val opening: StateFlow<String?> = _opening.asStateFlow()
     private var openJob: Job? = null
+
+    /** One feed on the "Watch automatically" screen. */
+    data class ScanRow(
+        val id: Long,
+        val name: String,
+        /** "1080p · 50 fps · 5.1", once looked at. */
+        val detail: String? = null,
+        /** What the scoreboard said: "73' SCF BAY 0-2". */
+        val board: String? = null,
+        /** Null while still to be looked at. */
+        val verdict: AutoScan.Verdict? = null,
+        /** 1-based place once ranked. */
+        val place: Int? = null,
+    )
+
+    data class Scan(val title: String, val rows: List<ScanRow>, val done: Int, val finished: Boolean = false)
+
+    private val _scan = MutableStateFlow<Scan?>(null)
+    val scan: StateFlow<Scan?> = _scan.asStateFlow()
+
+    /** The feed to open once a scan is over (its ranking already handed to [MatchFeeds]). */
+    private val _autoPlay = MutableStateFlow<Channel?>(null)
+    val autoPlay: StateFlow<Channel?> = _autoPlay.asStateFlow()
+    private var scanJob: Job? = null
+
+    fun autoPlayed() {
+        _autoPlay.value = null
+    }
+
+    fun cancelScan() {
+        scanJob?.cancel()
+        _scan.value = null
+    }
+
+    /**
+     * "Watch automatically": every feed of [item]'s channels looked at in turn (one at a time —
+     * the account allows one connection), ranked by [AutoScan], then the best one plays with the
+     * rest as its fallback order.
+     */
+    fun autoWatch(item: Item) {
+        if (scanJob?.isActive == true) return
+        scanJob = viewModelScope.launch {
+            val m = item.match
+            val catalog = graph.catalogRepository
+            val feeds = item.channels
+                .flatMap { mc -> catalog.variants(mc.channel).sortedByDescending { it.qualityRank } }
+                .distinctBy { it.id }
+                .filterNot { SD.containsMatchIn(it.qualityLabel) }
+                .take(MAX_FEEDS)
+            if (feeds.isEmpty()) return@launch
+            val title = "${m.home.name} - ${m.away.name}"
+            var rows = feeds.map { ScanRow(it.id, listOf(it.shownName, it.qualityLabel).filter(String::isNotBlank).joinToString(" · ")) }
+            _scan.value = Scan(title, rows, 0)
+            val goals = async { if (m.phase == Phase.LIVE) repo.goals(m) else emptyList() }
+            val prober = StreamProbe(graph.streamingHttpClient, getApplication<Application>().cacheDir)
+            val reader = ScoreboardReader()
+            val results = ArrayList<Pair<Channel, AutoScan.Probe?>>()
+            val deadline = System.currentTimeMillis() + SCAN_BUDGET_MILLIS
+            try {
+                for ((i, feed) in feeds.withIndex()) {
+                    if (System.currentTimeMillis() > deadline) break
+                    val source = graph.sourceRepository.byId(feed.sourceId)
+                    val url = catalog.resolvePlaybackUrl(feed, source)
+                    val r = prober.probe(url, source?.userAgent ?: "OpenTV/0.1 (Android)")
+                    val text = r?.corner?.let { reader.read(it) }
+                    r?.corner?.recycle()
+                    val board = text?.let { AutoScan.parseBoard(it) }
+                    val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, it.fetchedAt, board) }
+                    results += feed to p
+                    android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
+                    val verdict = when {
+                        p == null -> AutoScan.Verdict.DEAD
+                        board != null -> AutoScan.gameCheck(board, m.home.name, m.away.name) ?: AutoScan.Verdict.OK
+                        else -> AutoScan.Verdict.OK
+                    }
+                    rows = rows.toMutableList().also { it[i] = it[i].copy(detail = p?.let(::detail), board = board?.let(::boardText), verdict = verdict) }
+                    _scan.value = Scan(title, rows, i + 1)
+                }
+            } finally {
+                reader.close()
+            }
+            // The halves' real start times, as of now, for the replay check.
+            val fresh = repo.today().firstOrNull { it.id == m.id } ?: m
+            val ranked = AutoScan.rank(
+                results, m.home.name, m.away.name,
+                realClock = { AutoScan.realClock(it, fresh.firstHalfMillis, fresh.secondHalfMillis) },
+                goals = goals.await().map { Triple(it.clockSeconds, it.home, it.away) },
+                channel = { it.groupKey.ifEmpty { "#${it.id}" } },
+            )
+            val byId = rows.associateBy { it.id }
+            val unlooked = feeds.drop(results.size)
+            rows = ranked.mapIndexed { i, r -> byId.getValue(r.item.id).copy(verdict = r.verdict, place = i + 1) } +
+                unlooked.map { byId.getValue(it.id) }
+            _scan.value = Scan(title, rows, feeds.size, finished = true)
+            ranked.forEachIndexed { i, r ->
+                android.util.Log.i(TAG, "#${i + 1} ${r.item.shownName} ${r.item.qualityLabel}: ${r.verdict} score=${r.score} lag=${r.lagSeconds}")
+            }
+            val good = setOf(AutoScan.Verdict.OK, AutoScan.Verdict.CONFIRMED)
+            val order = (ranked.filter { it.verdict in good }.map { it.item } + unlooked).ifEmpty { feeds }
+            delay(RANKING_SHOWN_MILLIS)
+            MatchFeeds.set(order.map { it.id })
+            _scan.value = null
+            _autoPlay.value = order.first()
+        }
+    }
+
+    private fun detail(p: AutoScan.Probe) = listOfNotNull(
+        "${p.height}p",
+        p.fps?.let { "$it fps" },
+        p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
+        String.format(java.util.Locale.ITALY, "%.1f s", p.millis / 1000.0),
+    ).joinToString(" · ")
+
+    private fun boardText(b: AutoScan.Board) = listOfNotNull(
+        b.clockSeconds?.let { "${it / 60}'" },
+        b.codes.take(2).joinToString(" ").ifEmpty { null },
+        if (b.home != null && b.away != null) "${b.home}-${b.away}" else null,
+    ).joinToString(" ")
 
     // Highlights found stay found: the feed only keeps the latest uploads.
     private val highlights = HashMap<Long, String>()
@@ -114,6 +239,15 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val todayIds = today.mapTo(HashSet()) { it.id }
         val round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
         _ui.value = _ui.value.copy(lastRound = round)
+    }
+
+    private companion object {
+        const val TAG = "AutoScan"
+        /** About 1 s a feed: a minute of waiting at most. */
+        const val MAX_FEEDS = 30
+        const val SCAN_BUDGET_MILLIS = 60_000L
+        const val RANKING_SHOWN_MILLIS = 2_500L
+        val SD = Regex("\\bSD\\b", RegexOption.IGNORE_CASE)
     }
 
     private suspend fun finished(m: Match) =

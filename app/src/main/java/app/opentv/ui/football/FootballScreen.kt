@@ -28,7 +28,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +72,9 @@ import java.time.format.DateTimeFormatter
 
 private val LIVE_RED = Color(0xFFFF6B6B)
 
+/** "Watch automatically" shows from this long before kick-off. */
+private const val AUTO_BEFORE_MILLIS = 60 * 60_000L
+
 /** YouTube on Fire TV, then on Google TV / Android TV. */
 private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
 
@@ -87,6 +92,15 @@ fun FootballScreen(
 ) {
     val ui by viewModel.ui.collectAsState()
     val opening by viewModel.opening.collectAsState()
+    val scan by viewModel.scan.collectAsState()
+    val autoPlay by viewModel.autoPlay.collectAsState()
+    LaunchedEffect(autoPlay) {
+        autoPlay?.let {
+            viewModel.autoPlayed()
+            onPlayChannel(it)
+        }
+    }
+    BackHandler(enabled = scan != null) { viewModel.cancelScan() }
     val context = LocalContext.current
     val noYoutube = stringResource(R.string.football_no_youtube)
     val openInYouTube: (String) -> Unit = { id ->
@@ -133,7 +147,7 @@ fun FootballScreen(
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                ui.hero?.let { hero -> item(key = "hero") { Hero(hero, onPlayChannel) } }
+                ui.hero?.let { hero -> item(key = "hero") { Hero(hero, onPlayChannel, onAuto = { viewModel.autoWatch(hero) }) } }
                 if (ui.live.isNotEmpty()) item(key = "live") {
                     MatchRow(stringResource(R.string.football_live_row), ui.live, open)
                 }
@@ -148,6 +162,7 @@ fun FootballScreen(
                 }
             }
         }
+        scan?.let { ScanOverlay(it) }
         // Reading the stream off YouTube takes a few seconds on a slow box: say so.
         if (opening != null) {
             Box(
@@ -174,7 +189,7 @@ private fun Message(text: String) {
 // ---- Hero ---------------------------------------------------------------------------------------
 
 @Composable
-private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit) {
+private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit, onAuto: () -> Unit) {
     val m = item.match
     val watch = remember { FocusRequester() }
     val first = item.channels.firstOrNull()
@@ -183,7 +198,7 @@ private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit)
     Row(
         Modifier
             .fillMaxWidth()
-            .height(210.dp)
+            .height(240.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(
                 Brush.horizontalGradient(
@@ -234,6 +249,10 @@ private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit)
                 )
             } else {
                 WatchButton(first, Modifier.focusRequester(watch)) { onPlayChannel(first.channel) }
+                // Only once the game is close: before, no feed is showing it yet. Debug builds
+                // always, to try it on any day.
+                val debuggable = (LocalContext.current.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                if (debuggable || m.phase == Phase.LIVE || m.kickoffUtcMillis - System.currentTimeMillis() < AUTO_BEFORE_MILLIS) AutoButton(onAuto)
                 val others = item.channels.drop(1)
                 if (others.isNotEmpty()) {
                     Text(
@@ -282,6 +301,77 @@ private fun WatchButton(channel: MatchChannel, modifier: Modifier = Modifier, on
         val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
         Text("▶  " + stringResource(R.string.football_watch), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = fg)
         Text(channel.name, style = MaterialTheme.typography.bodyMedium, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** "Watch automatically": every feed tried, the best one plays. */
+@Composable
+private fun AutoButton(onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        "⚡  " + stringResource(R.string.football_auto),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusLift(focused)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    )
+}
+
+/** The feeds being looked at, then their ranking, before the best one opens. */
+@Composable
+private fun ScanOverlay(scan: FootballViewModel.Scan) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)).padding(horizontal = 80.dp, vertical = 40.dp),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Text(
+                stringResource(if (scan.finished) R.string.football_auto_ranked else R.string.football_auto_scanning),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+            Text(scan.title, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.7f))
+            Spacer(Modifier.height(14.dp))
+            LinearProgressIndicator(
+                progress = { if (scan.rows.isEmpty()) 1f else scan.done / scan.rows.size.toFloat() },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            )
+            Spacer(Modifier.height(14.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(scan.rows, key = { it.id }) { row -> ScanLine(row) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanLine(row: FootballViewModel.ScanRow) {
+    val (mark, colour, note) = when (row.verdict) {
+        null -> Triple("…", Color.White.copy(alpha = 0.4f), null)
+        AutoScan.Verdict.CONFIRMED -> Triple("✓", Color(0xFF6BDB8A), stringResource(R.string.football_auto_confirmed))
+        AutoScan.Verdict.OK -> Triple("✓", Color(0xFF6BDB8A), null)
+        AutoScan.Verdict.WRONG_GAME -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_wrong_game))
+        AutoScan.Verdict.REPLAY -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_replay))
+        AutoScan.Verdict.DEAD -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_dead))
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(row.place?.let { "$it." } ?: "", Modifier.width(36.dp), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+        Text(mark, Modifier.width(24.dp), color = colour, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text(row.name, Modifier.weight(1f), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            listOfNotNull(row.detail, row.board, note).joinToString("   "),
+            color = Color.White.copy(alpha = 0.75f),
+            maxLines = 1,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

@@ -26,6 +26,13 @@
     <!-- ============================ Navigation rail ============================ -->
     <string name="nav_live_tv">Live TV</string>
     <string name="nav_football">Football</string>
+    <string name="football_auto">Watch automatically</string>
+    <string name="football_auto_scanning">Looking for the best feed…</string>
+    <string name="football_auto_ranked">Best feeds</string>
+    <string name="football_auto_confirmed">right game</string>
+    <string name="football_auto_wrong_game">another game</string>
+    <string name="football_auto_replay">replay</string>
+    <string name="football_auto_dead">doesn\'t start</string>
     <string name="football_watch">Watch now</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">Live now</string>
