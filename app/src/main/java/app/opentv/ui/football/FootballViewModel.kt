@@ -39,6 +39,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val live: List<Item> = emptyList(),
         val today: List<Item> = emptyList(),
         val upcoming: List<Item> = emptyList(),
+        /** The latest matchday before today, finished: highlights on days without games. */
+        val lastRound: List<Item> = emptyList(),
         /** FotMob unreachable and nothing to show. */
         val failed: Boolean = false,
     )
@@ -87,7 +89,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         }
         val items = today.map { m ->
             when (m.phase) {
-                Phase.FINISHED -> Item(m, highlights = highlights[m.id] ?: repo.highlightsFor(m)?.also { highlights[m.id] = it })
+                Phase.FINISHED -> finished(m)
                 Phase.OFF -> Item(m)
                 else -> Item(m, channels = repo.channelsFor(m))
             }
@@ -105,6 +107,15 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             today = items.filter { it !== hero && it.match.phase == Phase.SCHEDULED } +
                 items.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis },
             upcoming = next.filter { it !== hero },
+            lastRound = _ui.value.lastRound,
         )
+        // After the rest is on screen: older highlights may need YouTube's full video list,
+        // a few seconds on a slow box.
+        val todayIds = today.mapTo(HashSet()) { it.id }
+        val round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
+        _ui.value = _ui.value.copy(lastRound = round)
     }
+
+    private suspend fun finished(m: Match) =
+        Item(m, highlights = highlights[m.id] ?: repo.highlightsFor(m)?.also { highlights[m.id] = it })
 }

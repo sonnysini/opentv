@@ -23,6 +23,7 @@
     <string name="football_live_row">In diretta</string>
     <string name="football_today">Oggi</string>
     <string name="football_upcoming">Prossime</string>
+    <string name="football_last_round">Ultima giornata</string>
     <string name="football_highlights">Highlights</string>
     <string name="football_highlights_soon">Highlights disponibili a breve</string>
     <string name="football_highlights_loading">Carico gli highlights…</string>

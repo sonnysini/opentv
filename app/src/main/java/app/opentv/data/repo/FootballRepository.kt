@@ -10,6 +10,7 @@ import app.opentv.data.db.ChannelDao
 import app.opentv.data.db.ProgrammeDao
 import app.opentv.data.model.Channel
 import app.opentv.data.model.TimeShift
+import app.opentv.data.remote.YouTubeStreams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -38,13 +39,15 @@ import java.time.format.DateTimeFormatter
  * - Channels are not looked up anywhere online: the guide already on disk says "Udinese - Milan"
  *   on Zona DAZN, so a match is the programme naming both teams around kick-off. Replays sit at
  *   other hours and so never match.
- * - Highlights come from the Serie A YouTube channel's RSS feed (no key either): the Italian
- *   upload is titled "… | UDINESE-MILAN | HIGHLIGHTS | SERIE A ENILIVE …".
+ * - Highlights come from the Serie A YouTube channel (no key either): the Italian upload is
+ *   titled "… | UDINESE-MILAN | HIGHLIGHTS | SERIE A ENILIVE …". The RSS feed has the latest
+ *   fifteen; older ones are found in the channel's full video list.
  */
 class FootballRepository(
     private val http: OkHttpClient,
     private val programmeDao: ProgrammeDao,
     private val channelDao: ChannelDao,
+    private val youTube: YouTubeStreams,
     private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true },
 ) {
     data class Team(val id: Long, val name: String) {
@@ -74,6 +77,8 @@ class FootballRepository(
 
     private var upcomingCache: Pair<Long, List<Match>>? = null
     private var feedCache: Pair<Long, List<Video>>? = null
+    private var uploadsCache: Pair<Long, List<Video>>? = null
+    private var lastRoundCache: Pair<Long, List<Match>>? = null
 
     /** Today's matches, kick-off order. Empty when FotMob can't be reached. */
     suspend fun today(): List<Match> = withContext(Dispatchers.IO) {
@@ -93,6 +98,31 @@ class FootballRepository(
             if (out.size >= limit) break
         }
         out.take(limit).also { upcomingCache = now to it }
+    }
+
+    /**
+     * The finished matches of the latest matchday played before today, latest first: a row to
+     * watch highlights from on days without games. Cached for an hour.
+     */
+    suspend fun lastRound(): List<Match> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        lastRoundCache?.takeIf { now - it.first < UPCOMING_TTL_MILLIS && it.second.isNotEmpty() }?.let {
+            return@withContext it.second
+        }
+        val out = ArrayList<Match>()
+        var round: String? = null
+        val today = LocalDate.now(zone)
+        for (d in 1..10) {
+            val played = fixtures(today.minusDays(d.toLong())).filter { it.phase == Phase.FINISHED }
+            if (played.isEmpty()) continue
+            if (round == null) round = played.last().round
+            val same = played.filter { it.round == round }
+            // A day of the matchday before: this one is complete.
+            if (same.isEmpty()) break
+            out += same
+            if (out.size >= ROUND_SIZE) break
+        }
+        out.sortedByDescending { it.kickoffUtcMillis }.also { lastRoundCache = now to it }
     }
 
     /**
@@ -119,16 +149,30 @@ class FootballRepository(
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
     }
 
-    /** The YouTube id of [match]'s highlights, once the Serie A channel has put them up. */
+    /**
+     * The YouTube id of [match]'s highlights, once the Serie A channel has put them up: the RSS
+     * feed first, then — for a match a few days old, out of the feed by now — the full video list.
+     */
     suspend fun highlightsFor(match: Match): String? = withContext(Dispatchers.IO) {
-        val a = keyword(match.home.name).uppercase()
-        val b = keyword(match.away.name).uppercase()
-        val hits = highlightsFeed().filter { v ->
+        pickHighlights(match, highlightsFeed())
+            ?: if (System.currentTimeMillis() - match.kickoffUtcMillis > OLD_MATCH_MILLIS) pickHighlights(match, uploads()) else null
+    }
+
+    private fun pickHighlights(match: Match, videos: List<Video>): String? {
+        val a = Regex.escape(keyword(match.home.name).uppercase())
+        val b = Regex.escape(keyword(match.away.name).uppercase())
+        val pair = Regex("\\b$a\\b.{0,24}-.{0,24}\\b$b\\b")
+        val hits = videos.filter { v ->
             val t = fold(v.title).uppercase()
-            "HIGHLIGHTS" in t && Regex("\\b$a\\b.{0,24}-.{0,24}\\b$b\\b").containsMatchIn(t)
+            // "CLASSIC HIGHLIGHTS" is last season's game between the same two teams.
+            "HIGHLIGHTS" in t && "CLASSIC" !in t && pair.containsMatchIn(t)
         }
-        // The Italian upload says ENILIVE; the English one doesn't.
-        (hits.firstOrNull { "ENILIVE" in it.title.uppercase() } ?: hits.firstOrNull())?.id
+        // The plain Italian cut (ENILIVE, the English one doesn't say it) before the extended
+        // and "cinematic" ones.
+        fun plain(v: Video) = fold(v.title).uppercase().let { "EXTENDED" !in it && "CINEMATIC" !in it }
+        return (hits.firstOrNull { plain(it) && "ENILIVE" in it.title.uppercase() }
+            ?: hits.firstOrNull { plain(it) }
+            ?: hits.firstOrNull())?.id
     }
 
     // ---- FotMob ---------------------------------------------------------------------------------
@@ -201,6 +245,14 @@ class FootballRepository(
         return videos
     }
 
+    /** Five pages of the channel's video list (a hundred uploads, about two weeks). */
+    private suspend fun uploads(): List<Video> {
+        val now = System.currentTimeMillis()
+        uploadsCache?.takeIf { now - it.first < UPLOADS_TTL_MILLIS && it.second.isNotEmpty() }?.let { return it.second }
+        return youTube.uploads(SERIE_A_CHANNEL, pages = 5).map { (id, title) -> Video(id, title) }
+            .also { uploadsCache = now to it }
+    }
+
     private fun unescape(s: String) =
         s.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
 
@@ -234,6 +286,9 @@ class FootballRepository(
         private const val MINUTE = 60_000L
         private const val UPCOMING_TTL_MILLIS = 60 * MINUTE
         private const val FEED_TTL_MILLIS = 5 * MINUTE
+        private const val UPLOADS_TTL_MILLIS = 30 * MINUTE
+        private const val OLD_MATCH_MILLIS = 12 * 60 * MINUTE
+        private const val ROUND_SIZE = 10
         private val TIMESHIFT = Regex("\\+\\s?\\d")
         private val ENTRY = Regex("<entry>.*?</entry>", RegexOption.DOT_MATCHES_ALL)
         private val VIDEO_ID = Regex("<yt:videoId>([^<]+)</yt:videoId>")

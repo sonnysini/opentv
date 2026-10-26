@@ -31,6 +31,7 @@
     <string name="football_live_row">Live now</string>
     <string name="football_today">Today</string>
     <string name="football_upcoming">Coming up</string>
+    <string name="football_last_round">Last matchday</string>
     <string name="football_highlights">Highlights</string>
     <string name="football_highlights_soon">Highlights soon</string>
     <string name="football_highlights_loading">Loading highlights…</string>

@@ -127,7 +127,7 @@ fun FootballScreen(
         when {
             ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             ui.failed -> Message(stringResource(R.string.football_unavailable))
-            ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() -> Message(stringResource(R.string.football_none))
+            ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() && ui.lastRound.isEmpty() -> Message(stringResource(R.string.football_none))
             else -> LazyColumn(
                 contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -142,6 +142,9 @@ fun FootballScreen(
                 }
                 if (ui.upcoming.isNotEmpty()) item(key = "upcoming") {
                     MatchRow(stringResource(R.string.football_upcoming), ui.upcoming, open)
+                }
+                if (ui.lastRound.isNotEmpty()) item(key = "last_round") {
+                    MatchRow(stringResource(R.string.football_last_round), ui.lastRound, open)
                 }
             }
         }
@@ -463,7 +466,9 @@ private fun status(m: Match, withDay: Boolean = false): String {
     val time = TIME.format(at)
     return when (m.phase) {
         Phase.LIVE -> m.minute ?: stringResource(R.string.football_live)
-        Phase.FINISHED -> stringResource(R.string.football_full_time) + " · " + time
+        Phase.FINISHED ->
+            if (withDay && at.toLocalDate() != LocalDate.now()) stringResource(R.string.football_full_time) + " · " + DAY.format(at).replaceFirstChar { it.uppercase() }
+            else stringResource(R.string.football_full_time) + " · " + time
         Phase.OFF -> "—"
         Phase.SCHEDULED ->
             if (withDay && at.toLocalDate() != LocalDate.now()) DAY.format(at).replaceFirstChar { it.uppercase() } + " · " + time

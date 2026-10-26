@@ -11,12 +11,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.channel.ChannelInfo
+import org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo
+import org.schabi.newpipe.extractor.channel.tabs.ChannelTabs
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.stream.StreamInfo
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.File
 
 /**
@@ -31,15 +36,48 @@ class YouTubeStreams(private val http: OkHttpClient, private val cacheDir: File)
 
     @Volatile private var ready = false
 
+    private fun init() {
+        if (!ready) synchronized(this) {
+            if (!ready) { NewPipe.init(OkHttpDownloader(http)); ready = true }
+        }
+    }
+
+    /**
+     * The latest uploads of [channelId] as (video id, title), newest first, [pages] pages of
+     * about twenty. Unlike the channel's RSS feed (fifteen videos) this reaches back weeks.
+     * Empty when YouTube can't be read now.
+     */
+    suspend fun uploads(channelId: String, pages: Int): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        try {
+            init()
+            val channel = ChannelInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/channel/$channelId")
+            val tab = channel.tabs.firstOrNull { ChannelTabs.VIDEOS in it.contentFilters } ?: return@withContext emptyList()
+            val first = ChannelTabInfo.getInfo(ServiceList.YouTube, tab)
+            val items = ArrayList<InfoItem>(first.relatedItems)
+            var next = first.nextPage
+            repeat(pages - 1) {
+                val page = next ?: return@repeat
+                val more = ChannelTabInfo.getMoreItems(ServiceList.YouTube, tab, page)
+                items += more.items
+                next = more.nextPage
+            }
+            items.filterIsInstance<StreamInfoItem>().mapNotNull { v ->
+                val id = v.url.substringAfter("v=", "").substringBefore('&').ifEmpty { null } ?: return@mapNotNull null
+                id to v.name
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "no uploads for $channelId", e)
+            emptyList()
+        }
+    }
+
     /**
      * The best stream for [videoId]: YouTube's adaptive HLS manifest (all qualities, the player
      * picks) cut down to H.264, else the single muxed MP4. Null when YouTube can't be read now.
      */
     suspend fun resolve(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
-            if (!ready) synchronized(this@YouTubeStreams) {
-                if (!ready) { NewPipe.init(OkHttpDownloader(http)); ready = true }
-            }
+            init()
             val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
             info.hlsUrl.takeIf { it.isNotBlank() }?.let { h264Only(it) }
                 ?: info.videoStreams.maxByOrNull { it.height }?.content?.takeIf { it.isNotBlank() }
