@@ -161,8 +161,9 @@ dependencies {
     implementation("com.hierynomus:smbj:0.12.2")
     // Reads YouTube streams so football highlights play in our own player.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
-    // Reads the scoreboard off a frame for "Watch automatically"; bundled model, no Play services.
-    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Reads the scoreboard off a frame for "Watch automatically". Tesseract, not ML Kit: ML Kit's
+    // XNNPACK picks dot-product kernels on a Cortex-A55 that a 32-bit Fire OS then kills (SIGILL).
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

@@ -5,44 +5,96 @@
  */
 package app.opentv.player
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.graphics.Bitmap
+import android.os.IBinder
+import android.os.Parcel
 import android.util.Log
-import com.google.android.gms.tasks.Tasks
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizer
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Text in a picture, on the device: ML Kit's bundled recogniser (no Google Play services, which
- * Fire TV hasn't got). Used on the scoreboard corner of a frame; a few hundred ms on a Fire Stick.
+ * Text in the scoreboard corner of a frame: [ScoreboardMask] here, Tesseract in [OcrService]'s own
+ * process. About a tenth of a second a picture on a Fire Stick. If that process dies the reader
+ * gives up for the rest of its life and every read is null — the scan goes on on quality alone.
  */
-class ScoreboardReader {
-    private var recognizer: TextRecognizer? = null
+class ScoreboardReader(private val context: Context) {
+    private var connection: ServiceConnection? = null
+    private var binder: IBinder? = null
+    private var broken = false
 
-    /** The text read, lines joined by spaces; null when the recogniser isn't available or fails. */
-    suspend fun read(bitmap: Bitmap): String? = withContext(Dispatchers.Default) {
-        runCatching {
-            val r = recognizer ?: TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).also { recognizer = it }
-            val result = Tasks.await(r.process(InputImage.fromBitmap(bitmap, 0)), TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            result.textBlocks.flatMap { b -> b.lines.map { it.text } }.joinToString(" ")
-        }.getOrElse {
-            // Includes UnsatisfiedLinkError on a device whose ABI the library wasn't shipped for.
-            Log.w(TAG, "OCR failed", it)
-            null
+    /** The text read; "" when the corner has nothing letter-like; null when OCR isn't available. */
+    suspend fun read(corner: Bitmap): String? {
+        if (broken) return null
+        val ink = withContext(Dispatchers.Default) {
+            val w = corner.width
+            val h = corner.height
+            val px = IntArray(w * h)
+            corner.getPixels(px, 0, w, 0, 0, w, h)
+            // The corner is the top 15 % of the frame.
+            ScoreboardMask.letters(px, w, h, frameHeight = h * 100 / CORNER_PERCENT)
+        } ?: return ""
+        val b = connect() ?: return null
+        return withContext(Dispatchers.IO) {
+            val data = Parcel.obtain()
+            val reply = Parcel.obtain()
+            try {
+                data.writeInt(corner.width)
+                data.writeInt(corner.height)
+                data.writeByteArray(ink)
+                b.transact(OcrService.READ, data, reply, 0)
+                reply.readString()
+            } catch (t: Throwable) {
+                // DeadObjectException: the OCR process crashed.
+                Log.w(TAG, "OCR process gone, reading no more scoreboards", t)
+                broken = true
+                null
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
         }
     }
 
+    private suspend fun connect(): IBinder? {
+        binder?.let { return it }
+        val ready = CompletableDeferred<IBinder?>()
+        val conn = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                binder = service
+                ready.complete(service)
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                binder = null
+                broken = true
+                ready.complete(null)
+            }
+        }
+        connection = conn
+        val bound = runCatching { context.bindService(Intent(context, OcrService::class.java), conn, Context.BIND_AUTO_CREATE) }
+            .getOrDefault(false)
+        if (!bound) {
+            broken = true
+            return null
+        }
+        return withTimeoutOrNull(CONNECT_TIMEOUT_MILLIS) { ready.await() }.also { if (it == null) broken = true }
+    }
+
     fun close() {
-        runCatching { recognizer?.close() }
-        recognizer = null
+        connection?.let { runCatching { context.unbindService(it) } }
+        connection = null
+        binder = null
     }
 
     private companion object {
         const val TAG = "ScoreboardReader"
-        const val TIMEOUT_SECONDS = 5L
+        const val CORNER_PERCENT = 15
+        const val CONNECT_TIMEOUT_MILLIS = 5_000L
     }
 }
