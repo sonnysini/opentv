@@ -126,27 +126,67 @@ class FootballRepository(
     }
 
     /**
-     * Channels carrying [match]: guide programmes naming both teams that run through the game.
-     * One entry per logical channel; timeshift copies are left out (they show it an hour late).
+     * Channels carrying [match], one entry per logical channel:
+     * - first the two team channels ("Milan", "DAZN Serie A Milan", "DAZN SERIE A 3 FHD MILAN"…),
+     *   the provider's own feed of that team's game;
+     * - then the channels whose guide names both teams through the game (Zona DAZN, DAZN 1,
+     *   Sky Sport…). Club channels ("Inter TV": a radio commentary in the guide), boxing feeds
+     *   matched to a DAZN guide by name, replays and timeshift copies are left out.
      */
     suspend fun channelsFor(match: Match): List<MatchChannel> = withContext(Dispatchers.IO) {
         val a = keyword(match.home.name)
         val b = keyword(match.away.name)
+        val teams = runCatching { channelDao.namedEither(a, b) }.getOrElse { emptyList() }
+            // "*==== Lazio ====*": a provider's section divider, not a channel.
+            .filter { it.isLive() && "==" !in it.displayName && "--" !in it.displayName }
+            .mapNotNull { c -> teamOf(c.displayName, match)?.let { it to c } }
+        val home = logical(teams.filter { it.first == 0 }.map { it.second })
+        val away = logical(teams.filter { it.first == 1 }.map { it.second })
+
         val from = match.kickoffUtcMillis + 5 * MINUTE
         val to = match.kickoffUtcMillis + 100 * MINUTE
         val guideIds = runCatching { programmeDao.titledBoth(a, b, from, to) }.getOrElse { emptyList() }
-            .filter { names(it.title, a, b) }
+            .filter { names(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase()) }
             .mapTo(LinkedHashSet()) { it.epgChannelId }
-        if (guideIds.isEmpty()) return@withContext emptyList()
-        channelDao.withGuideIds(guideIds.toList())
-            .filter { c -> c.matchedEpgId?.let { TimeShift.decode(it) } == null && !TIMESHIFT.containsMatchIn(c.displayName) }
-            .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
-            .map { (_, variants) ->
-                val best = variants.maxBy { it.qualityRank }
-                MatchChannel(best, best.customName?.takeIf { it.isNotBlank() } ?: best.displayName, variants.size)
+        val guided = if (guideIds.isEmpty()) emptyList() else channelDao.withGuideIds(guideIds.toList())
+            .filter { c ->
+                val n = fold(c.displayName).lowercase()
+                c.isLive() && !NOT_THE_GAME.containsMatchIn(n) &&
+                    // A team's name in a guide-matched channel: its club channel, not the game.
+                    !names(n, a, a) && !names(n, b, b)
             }
+            .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
+            .mapNotNull { (_, variants) -> logical(variants) }
             // The channel with the most feeds first: more ways to get a picture if one is down.
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
+        (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+    }
+
+    private fun Channel.isLive() =
+        matchedEpgId?.let { TimeShift.decode(it) } == null && !TIMESHIFT.containsMatchIn(displayName)
+
+    /** One logical channel out of its feeds: the best quality plays, the player offers the rest. */
+    private fun logical(variants: List<Channel>): MatchChannel? {
+        val best = variants.maxByOrNull { it.qualityRank } ?: return null
+        return MatchChannel(best, best.customName?.takeIf { it.isNotBlank() } ?: best.displayName, variants.size)
+    }
+
+    /**
+     * 0 when [channelName] is the home team's channel, 1 the away team's, null otherwise: what's
+     * left of the name once the DAZN / Serie A / number / quality words are gone is the team.
+     * "Milan TV" leaves "milan tv" and so isn't.
+     */
+    private fun teamOf(channelName: String, match: Match): Int? {
+        val rest = fold(channelName).lowercase().split(Regex("[^a-z0-9]+"))
+            .filter { it.isNotEmpty() && it !in TEAM_CHANNEL_NOISE && !it.all(Char::isDigit) }
+            .joinToString(" ")
+        fun same(team: Team) = rest == keyword(team.name) || rest == fold(team.name).lowercase()
+        return when {
+            rest.isEmpty() -> null
+            same(match.home) -> 0
+            same(match.away) -> 1
+            else -> null
+        }
     }
 
     /**
@@ -290,6 +330,13 @@ class FootballRepository(
         private const val OLD_MATCH_MILLIS = 12 * 60 * MINUTE
         private const val ROUND_SIZE = 10
         private val TIMESHIFT = Regex("\\+\\s?\\d")
+        /** Words around a team's name on its channel: "DAZN SERIE A 3 FHD MILAN", "Milan HD". */
+        private val TEAM_CHANNEL_NOISE = setOf(
+            "dazn", "serie", "a", "it", "fhd", "hd", "sd", "uhd", "4k", "raw", "web", "hq", "lq", "hevc", "h265",
+        )
+        /** Guide-matched channels that don't show the game: boxing feeds named like DAZN 1, replays. */
+        private val NOT_THE_GAME = Regex("\\b(box|boxe|ufc|differita|replay|serie b)\\b")
+        private val RADIO = Regex("\\bradio")
         private val ENTRY = Regex("<entry>.*?</entry>", RegexOption.DOT_MATCHES_ALL)
         private val VIDEO_ID = Regex("<yt:videoId>([^<]+)</yt:videoId>")
         private val TITLE = Regex("<title>([^<]*)</title>")

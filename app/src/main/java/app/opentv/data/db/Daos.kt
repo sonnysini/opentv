@@ -187,6 +187,16 @@ interface ChannelDao {
     )
     suspend fun withGuideIds(guideIds: List<String>): List<Channel>
 
+    /** Visible channels whose name contains [a] or [b] — the football home's team channels. */
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE hidden = 0 AND (displayName LIKE '%' || :a || '%' OR displayName LIKE '%' || :b || '%')
+        ORDER BY qualityRank DESC, displayName
+        """
+    )
+    suspend fun namedEither(a: String, b: String): List<Channel>
+
     @Query("SELECT COUNT(*) FROM channels WHERE sourceId = :sourceId")
     suspend fun countForSource(sourceId: Long): Int
 
