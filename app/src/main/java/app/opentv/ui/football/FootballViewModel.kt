@@ -22,6 +22,7 @@ import app.opentv.player.ScoreboardReader
 import app.opentv.player.StreamProbe
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,6 +121,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     /** The match whose "Watch now" was pressed: its feeds go before anything else. */
     @Volatile private var focus: Item? = null
     private var focusStarted = 0L
+    /** Wakes the worker out of its idle wait the moment "Watch now" is pressed. */
+    private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
 
     fun autoPlayed() {
         _autoPlay.value = null
@@ -188,6 +191,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         focusStarted = System.currentTimeMillis()
         publishFocus(item)
         startWorker()
+        wake.trySend(Unit)
     }
 
     /** Plays [feed] of [item] as picked by hand: up/down then zaps along the match's feeds only. */
@@ -231,7 +235,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     val bg = nextInBackground()
                     if (bg == null) {
                         _progress.value = null
-                        delay(IDLE_MILLIS)
+                        withTimeoutOrNull(IDLE_MILLIS) { wake.receive() }
                         continue
                     }
                     val (item, feed) = bg
