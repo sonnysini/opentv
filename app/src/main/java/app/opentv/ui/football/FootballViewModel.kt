@@ -166,17 +166,19 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val t = teams[item.match.id] ?: return all
         if (t.home.isEmpty() || t.spare.isEmpty()) return all
         val homePending = all.any { it.id in t.home && store.fresh(it.id) == null }
-        val homeWorks = sources(item).any { it.looked && it.usable && it.feed.id in t.home }
+        val homeWorks = rank(item, all.filter { it.id in t.home }).any { it.looked && it.usable }
         return if (homePending || homeWorks) all.filter { it.id !in t.spare } else all
     }
 
     /**
      * [item]'s feeds best first: the ones looked at ranked by [AutoScan], then the ones still to
-     * look at in channel order, then the dead and the wrong game.
+     * look at in channel order, then the dead and the wrong game. The away team's spare feeds
+     * aren't there unless the home team's all failed.
      */
-    fun sources(item: Item): List<Source> {
+    fun sources(item: Item): List<Source> = rank(item, toLook(item))
+
+    private fun rank(item: Item, all: List<Channel>): List<Source> {
         val m = item.match
-        val all = feedsOf(item)
         val looks = all.mapNotNull { f -> store.fresh(f.id)?.let { f to it.probe } }
         val ranked = AutoScan.rank(looks, m.home.name, m.away.name, channel = { it.groupKey.ifEmpty { "#${it.id}" } })
         val lookedIds = looks.mapTo(HashSet()) { it.first.id }
