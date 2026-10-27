@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.29.2 — 27 October 2026
+
+- **Faster football scan.** The home and away team channels carry the same DAZN feed, so only
+  the home team's feeds are looked at; the away team's stay out of the list and come in only
+  when none of the home team's plays the game.
+- **The scan starts as soon as Calcio opens**, instead of sometimes waiting up to 30 seconds.
+- **Games on at the same time are all scanned**: the other tabs of the big card were skipped.
+
 ## 0.29.1 — 27 October 2026
 
 - **Cleaner feed list on the football home.** Feed names are short ("Lazio", "Zona DAZN SA1"),
