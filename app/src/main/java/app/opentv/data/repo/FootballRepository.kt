@@ -89,9 +89,13 @@ class FootballRepository(
         val round: String?,
     )
 
-    /** One logical channel showing a match: [channel] is what plays, the player picks the quality. */
+    /**
+     * One logical channel showing a match: [channel] is what plays, the player picks the quality.
+     * [spare]: the away team's channel when the home team's is there too — the same DAZN feed
+     * (picture, graphics, quality; only the delay differs), looked at only if the home one fails.
+     */
     @Serializable
-    data class MatchChannel(val channel: Channel, val name: String, val variants: Int)
+    data class MatchChannel(val channel: Channel, val name: String, val variants: Int, val spare: Boolean = false)
 
     private val zone: ZoneId = ZoneId.systemDefault()
 
@@ -214,7 +218,8 @@ class FootballRepository(
      */
     suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
         val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
-        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}"
+        // "#2": entries from before [MatchChannel.spare] are looked up again.
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#2"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
         val missing = matches.filter { key(it) !in kept }
         val found = if (missing.isEmpty()) emptyMap() else {
@@ -285,7 +290,7 @@ class FootballRepository(
             .filter { it.isLive() && "==" !in it.displayName && "--" !in it.displayName }
             .mapNotNull { c -> teamOf(c.displayName, match)?.let { it to c } }
         val home = logical(teams.filter { it.first == 0 }.map { it.second })
-        val away = logical(teams.filter { it.first == 1 }.map { it.second })
+        val away = logical(teams.filter { it.first == 1 }.map { it.second })?.let { if (home != null) it.copy(spare = true) else it }
 
         val guided = guidedAll
             .filter { c -> c.epgOverrideId in guideIds || c.epgChannelId in guideIds || c.matchedEpgId in guideIds }
