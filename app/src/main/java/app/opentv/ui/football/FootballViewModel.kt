@@ -335,9 +335,6 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun boardText(b: AutoScan.Board) = b.codes.take(2).joinToString(" ")
 
-    // Highlights found stay found: the feed only keeps the latest uploads.
-    private val highlights = HashMap<Long, String>()
-
     init {
         viewModelScope.launch {
             while (true) {
@@ -369,15 +366,18 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.today.isEmpty())
             return
         }
+        val channels = repo.channelsFor(
+            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming,
+        )
+        // Highlights already found only: looking up new ones waits until the page is up.
         val items = today.map { m ->
             when (m.phase) {
-                Phase.FINISHED -> finished(m)
+                Phase.FINISHED -> Item(m, highlights = repo.knownHighlights(m))
                 Phase.OFF -> Item(m)
-                else -> Item(m, channels = repo.channelsFor(m))
+                else -> Item(m, channels = channels[m.id].orEmpty())
             }
         }
-        val next = upcoming.map { Item(it, channels = repo.channelsFor(it)) }
-        feeds = (items + next).filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsFor(it) }
+        val next = upcoming.map { Item(it, channels = channels[it.id].orEmpty()) }
         val live = items.filter { it.match.phase == Phase.LIVE }
         val hero = live.firstOrNull()
             ?: items.firstOrNull { it.match.phase == Phase.SCHEDULED }
@@ -389,6 +389,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
         }.sortedBy { it.match.kickoffUtcMillis }
         val heroes = if (together.size >= 2) together else emptyList()
+        // The big card's feeds before first paint (its source list); the rest's right after:
+        // looking them up is a query per channel, a second or so for a whole matchday.
+        val first = (listOfNotNull(hero) + heroes).distinctBy { it.match.id }
+        feeds = feeds + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsFor(it) }
         _ui.value = UiState(
             loading = false,
             hero = hero,
@@ -400,8 +404,24 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             upcoming = next.filter { it !== hero },
             lastRound = _ui.value.lastRound,
         )
-        // After the rest is on screen: older highlights may need YouTube's full video list,
-        // a few seconds on a slow box.
+        val firstIds = first.mapTo(HashSet()) { it.match.id }
+        val known = feeds
+        feeds = (items + next).filter { it.channels.isNotEmpty() }
+            .associate { item ->
+                val id = item.match.id
+                id to ((if (id in firstIds) known[id] else null) ?: feedsFor(item))
+            }
+        // The cards re-read their feeds along with the looks.
+        _looks.value++
+        // After the rest is on screen: highlights not found yet (the YouTube feed; older ones may
+        // need YouTube's full video list, a few seconds on a slow box).
+        if (items.any { it.match.phase == Phase.FINISHED && it.highlights == null }) {
+            val withHighlights = items.map { if (it.match.phase == Phase.FINISHED && it.highlights == null) finished(it.match) else it }
+                .associateBy { it.match.id }
+            _ui.value = _ui.value.let { u ->
+                u.copy(today = u.today.map { withHighlights[it.match.id] ?: it })
+            }
+        }
         val todayIds = today.mapTo(HashSet()) { it.id }
         val round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
         _ui.value = _ui.value.copy(lastRound = round)
@@ -430,6 +450,5 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val SD = Regex("\\bSD\\b", RegexOption.IGNORE_CASE)
     }
 
-    private suspend fun finished(m: Match) =
-        Item(m, highlights = highlights[m.id] ?: repo.highlightsFor(m)?.also { highlights[m.id] = it })
+    private suspend fun finished(m: Match) = Item(m, highlights = repo.highlightsFor(m))
 }

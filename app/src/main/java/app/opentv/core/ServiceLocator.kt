@@ -115,7 +115,10 @@ object ServiceLocator {
         }
 
         val footballRepository: app.opentv.data.repo.FootballRepository by lazy {
-            app.opentv.data.repo.FootballRepository(httpClient, database.programmes(), database.channels(), youTubeStreams)
+            app.opentv.data.repo.FootballRepository(
+                httpClient, database.programmes(), database.channels(), youTubeStreams,
+                java.io.File(appContext.filesDir, "football"),
+            )
         }
 
         val youTubeStreams: app.opentv.data.remote.YouTubeStreams by lazy {
