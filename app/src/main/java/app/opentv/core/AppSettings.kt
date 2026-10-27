@@ -496,15 +496,6 @@ class AppSettings private constructor(context: Context) {
         _pickedVariants.value = emptyMap()
     }
 
-    /** Player Quality button: OK steps to the next feed (hold for the list); off, OK opens the list. */
-    private val _qualityButtonCycles = pref { prefs.getBoolean(KEY_QUALITY_BUTTON_CYCLES, true) }
-    val qualityButtonCycles: StateFlow<Boolean> = _qualityButtonCycles.asStateFlow()
-
-    fun setQualityButtonCycles(on: Boolean) {
-        prefs.edit().putBoolean(KEY_QUALITY_BUTTON_CYCLES, on).apply()
-        _qualityButtonCycles.value = on
-    }
-
     /** Freeze wait in milliseconds, in [FALLBACK_STEP_MILLIS] steps; migrates the old whole-seconds pref. */
     private val _stallFallbackMillis = pref {
         prefs.getInt(
@@ -1032,7 +1023,6 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_QUALITY_FALLBACK_SECONDS = "quality_fallback_seconds"
         private const val KEY_QUALITY_FALLBACK_MILLIS = "quality_fallback_millis"
         private const val KEY_STALL_FALLBACK = "stall_fallback"
-        private const val KEY_QUALITY_BUTTON_CYCLES = "quality_button_cycles"
         private const val KEY_HICCUP_LIMIT = "hiccup_limit"
         private const val KEY_LIVE_OFFSET_SECONDS = "live_offset_seconds"
         private const val KEY_MANUAL_SOURCE_MODE = "manual_source_mode"
@@ -1056,7 +1046,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_SUBTITLES, KEY_PREVIEW_VIDEO, KEY_PREVIEW_SOUND, KEY_ITALIAN_ONLY,
                 KEY_MERGE_CATEGORY_SOURCES, KEY_STRIP_CATEGORY_SOURCES, KEY_GROUP_LOGOS_EXTERNAL, KEY_SHOW_RECENT_GROUPS, KEY_FOREIGN_SPORT_OFF, KEY_RESUME_LAST,
                 KEY_CONTENT_LIVE, KEY_CONTENT_MOVIES, KEY_CONTENT_SERIES, KEY_REC_AUTOSWITCH, KEY_LIVE_PAUSE,
-                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_QUALITY_BUTTON_CYCLES, KEY_MATCH_FRAME_RATE,
+                KEY_QUALITY_FALLBACK, KEY_STALL_FALLBACK, KEY_MATCH_FRAME_RATE,
                 KEY_REMEMBER_PICKS,
                 // The old logo switches: a restore of an older backup still migrates from them.
                 KEY_PREFER_GUIDE_LOGOS, KEY_GROUP_BADGES,

@@ -13,14 +13,20 @@ package app.opentv.player
  */
 object MatchFeeds {
     @Volatile private var ranked: List<Long> = emptyList()
+    @Volatile private var names: Map<Long, String> = emptyMap()
 
-    fun set(ids: List<Long>) {
+    /** [ids] best first; [names] as the football home shows them ("Lazio · FHD · DVS"). */
+    fun set(ids: List<Long>, names: Map<Long, String> = emptyMap()) {
         ranked = ids
+        this.names = names
     }
 
     fun clear() {
         ranked = emptyList()
+        names = emptyMap()
     }
+
+    fun name(channelId: Long): String? = names[channelId]
 
     /** The whole ranking, best first. */
     fun ranking(): List<Long> = ranked

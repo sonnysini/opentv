@@ -374,8 +374,10 @@ fun PlayerScreen(
     fun variantName(channel: Channel): String =
         if (matchFeeds) {
             // Feeds of different channels: the quality alone wouldn't say which. Numbered as ranked.
-            (MatchFeeds.place(channel.id)?.let { "$it. " } ?: "") +
-                listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
+            (MatchFeeds.place(channel.id)?.let { "$it. " } ?: "") + (
+                MatchFeeds.name(channel.id)
+                    ?: listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
+                )
         } else {
             QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
                 ?: channel.qualityLabel.ifBlank { channel.shownName }
@@ -575,7 +577,6 @@ fun PlayerScreen(
     // While watching: a stream that stops moving — stuck loading, an error the silent restart can't
     // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
     val stallFallback by settings.stallFallback.collectAsState()
-    val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeoutSeconds by settings.controlsTimeoutSeconds.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
     // ...and one that keeps stuttering, too briefly each time for the freeze wait, does the same.
@@ -1149,8 +1150,7 @@ fun PlayerScreen(
                                     } else {
                                         QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge
                                     },
-                                    onLongClick = if (qualityButtonCycles) togglePicker else null,
-                                    onClick = if (qualityButtonCycles) ({ cycleQuality() }) else togglePicker,
+                                    onClick = togglePicker,
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }

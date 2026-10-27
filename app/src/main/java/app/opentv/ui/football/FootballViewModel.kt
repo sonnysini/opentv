@@ -213,7 +213,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private fun handOver(item: Item, first: Channel) {
         val order = sources(item).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(item) }
         val ordered = listOf(first) + order.filter { it.id != first.id }
-        MatchFeeds.set(ordered.map { it.id })
+        MatchFeeds.set(ordered.map { it.id }, ordered.associate { it.id to nameOf(it) })
         PlaybackQueue.items = ordered.map { PlaybackQueue.Item(it.id, nameOf(it), it.logoUrl) }
         _autoPlay.value = first
     }
