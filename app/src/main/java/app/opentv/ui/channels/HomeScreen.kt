@@ -85,6 +85,7 @@ import app.opentv.data.model.Reminder
 import app.opentv.data.model.logo
 import app.opentv.data.model.shownName
 import app.opentv.reminders.ReminderScheduler
+import app.opentv.player.MatchFeeds
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
 import app.opentv.ui.ChannelsViewModel
@@ -251,6 +252,7 @@ fun HomeScreen(
     val logoSource = LocalLogoSource.current
     val logoPack = LocalLogoPack.current
     fun startLive(channel: Channel) {
+        MatchFeeds.clear()
         PlaybackQueue.items = rows.map {
             PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logo(logoSource, logoPack), it.primary.number)
         }

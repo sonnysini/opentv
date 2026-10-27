@@ -228,7 +228,6 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val hiccupLimit by settings.hiccupLimit.collectAsState()
     val liveOffset by settings.liveOffsetSeconds.collectAsState()
     val manualSourceMode by settings.manualSourceMode.collectAsState()
-    val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
     val matchFrameRate by settings.matchFrameRate.collectAsState()
     val rememberPicks by settings.rememberPicks.collectAsState()
@@ -357,13 +356,6 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
                     Text(stringResource(R.string.settings_remember_picks_reset, pickedCount))
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            ToggleRow(
-                title = stringResource(R.string.settings_quality_button_cycles_title),
-                subtitle = stringResource(R.string.settings_quality_button_cycles_subtitle),
-                checked = qualityButtonCycles,
-                onToggle = settings::setQualityButtonCycles,
-            )
         }
 
         Spacer(Modifier.height(16.dp))

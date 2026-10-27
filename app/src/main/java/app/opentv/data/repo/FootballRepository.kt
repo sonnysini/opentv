@@ -11,8 +11,17 @@ import app.opentv.data.db.ProgrammeDao
 import app.opentv.data.model.Channel
 import app.opentv.data.model.TimeShift
 import app.opentv.data.remote.YouTubeStreams
+import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -24,6 +33,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.text.Normalizer
 import java.time.Instant
 import java.time.LocalDate
@@ -42,20 +52,29 @@ import java.time.format.DateTimeFormatter
  * - Highlights come from the Serie A YouTube channel (no key either): the Italian upload is
  *   titled "… | UDINESE-MILAN | HIGHLIGHTS | SERIE A ENILIVE …". The RSS feed has the latest
  *   fifteen; older ones are found in the channel's full video list.
+ *
+ * The calendar is fixed weeks ahead, so all of it is kept on disk under [dir]: a day is read
+ * again once a day, an hour before each kick-off (a game put off) and every minute only while
+ * a game is on. Channels are kept until the channel list or the guide changes. Opening the
+ * football home is then a disk read, not a dozen downloads and guide searches.
  */
 class FootballRepository(
     private val http: OkHttpClient,
     private val programmeDao: ProgrammeDao,
     private val channelDao: ChannelDao,
     private val youTube: YouTubeStreams,
+    private val dir: File,
     private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true },
 ) {
+    @Serializable
     data class Team(val id: Long, val name: String) {
         val crestUrl: String get() = "https://images.fotmob.com/image_resources/logo/teamlogo/$id.png"
     }
 
+    @Serializable
     enum class Phase { SCHEDULED, LIVE, FINISHED, OFF }
 
+    @Serializable
     data class Match(
         val id: Long,
         val kickoffUtcMillis: Long,
@@ -71,49 +90,63 @@ class FootballRepository(
     )
 
     /** One logical channel showing a match: [channel] is what plays, the player picks the quality. */
+    @Serializable
     data class MatchChannel(val channel: Channel, val name: String, val variants: Int)
 
     private val zone: ZoneId = ZoneId.systemDefault()
 
-    private var upcomingCache: Pair<Long, List<Match>>? = null
     private var feedCache: Pair<Long, List<Video>>? = null
     private var uploadsCache: Pair<Long, List<Video>>? = null
-    private var lastRoundCache: Pair<Long, List<Match>>? = null
 
-    /** Today's matches, kick-off order. Empty when FotMob can't be reached. */
-    suspend fun today(): List<Match> = withContext(Dispatchers.IO) {
-        fixtures(LocalDate.now(zone))
+    /** What's kept on disk: the calendar day by day, channels per match, highlights found. */
+    @Serializable
+    private data class Disk(
+        val days: Map<String, Day> = emptyMap(),
+        /** [guideStamp][ChannelDao.guideStamp] the channels below were found with. */
+        val stamp: String = "",
+        val channels: Map<String, List<MatchChannel>> = emptyMap(),
+        val highlights: Map<Long, String> = emptyMap(),
+    )
+
+    @Serializable
+    private data class Day(val fetchedMillis: Long, val matches: List<Match>)
+
+    private val file = File(dir, "football.json")
+    private val lock = Mutex()
+    private var disk: Disk? = null
+
+    private fun disk(): Disk = disk ?: runCatching { json.decodeFromString<Disk>(file.readText()) }
+        .getOrElse { Disk() }.also { disk = it }
+
+    private fun save(d: Disk) {
+        disk = d
+        runCatching {
+            dir.mkdirs()
+            val tmp = File(dir, "football.json.tmp")
+            tmp.writeText(json.encodeToString(d))
+            tmp.renameTo(file)
+        }.onFailure { Log.w(TAG, "save", it) }
     }
 
-    /** The fixtures after today, a week ahead at most and [limit] at most. Cached for an hour. */
-    suspend fun upcoming(limit: Int = 10): List<Match> = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        upcomingCache?.takeIf { now - it.first < UPCOMING_TTL_MILLIS && it.second.isNotEmpty() }?.let {
-            return@withContext it.second
-        }
-        val out = ArrayList<Match>()
+    /** Today's matches, kick-off order. Empty when FotMob can't be reached and nothing is on disk. */
+    suspend fun today(): List<Match> = days(listOf(LocalDate.now(zone))).first()
+
+    /** The fixtures after today, a week ahead at most and [limit] at most. */
+    suspend fun upcoming(limit: Int = 10): List<Match> {
         val today = LocalDate.now(zone)
-        for (d in 1..7) {
-            out += fixtures(today.plusDays(d.toLong()))
-            if (out.size >= limit) break
-        }
-        out.take(limit).also { upcomingCache = now to it }
+        return days((1..7).map { today.plusDays(it.toLong()) }).flatten().take(limit)
     }
 
     /**
      * The finished matches of the latest matchday played before today, latest first: a row to
-     * watch highlights from on days without games. Cached for an hour.
+     * watch highlights from on days without games.
      */
-    suspend fun lastRound(): List<Match> = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        lastRoundCache?.takeIf { now - it.first < UPCOMING_TTL_MILLIS && it.second.isNotEmpty() }?.let {
-            return@withContext it.second
-        }
+    suspend fun lastRound(): List<Match> {
+        val today = LocalDate.now(zone)
         val out = ArrayList<Match>()
         var round: String? = null
-        val today = LocalDate.now(zone)
-        for (d in 1..10) {
-            val played = fixtures(today.minusDays(d.toLong())).filter { it.phase == Phase.FINISHED }
+        for (day in days((1..10).map { today.minusDays(it.toLong()) })) {
+            val played = day.filter { it.phase == Phase.FINISHED }
             if (played.isEmpty()) continue
             if (round == null) round = played.last().round
             val same = played.filter { it.round == round }
@@ -122,33 +155,140 @@ class FootballRepository(
             out += same
             if (out.size >= ROUND_SIZE) break
         }
-        out.sortedByDescending { it.kickoffUtcMillis }.also { lastRoundCache = now to it }
+        return out.sortedByDescending { it.kickoffUtcMillis }
+    }
+
+    /** The matches of each of [dates], from disk when still good, else FotMob (all at once). */
+    private suspend fun days(dates: List<LocalDate>): List<List<Match>> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val kept = lock.withLock { disk().days }
+        val stale = dates.filter { d -> kept[d.toString()]?.let { !isFresh(d, it, now) } ?: true }
+        val fetched = coroutineScope {
+            stale.map { d -> async { d to fixtures(d) } }.awaitAll()
+        }.mapNotNull { (d, m) -> m?.let { d.toString() to Day(now, it) } }.toMap()
+        if (stale.isNotEmpty()) Log.i(TAG, "FotMob: ${stale.size} days in ${System.currentTimeMillis() - now} ms")
+        val days = lock.withLock {
+            val d = disk()
+            if (fetched.isNotEmpty()) {
+                val oldest = LocalDate.now(zone).minusDays(KEEP_DAYS).toString()
+                save(d.copy(days = (d.days + fetched).filterKeys { it >= oldest }))
+            }
+            disk().days
+        }
+        // FotMob down: the copy on disk, however old, beats an empty page.
+        dates.map { days[it.toString()]?.matches.orEmpty() }
     }
 
     /**
-     * Channels carrying [match], one entry per logical channel:
+     * Whether [day] read at [Day.fetchedMillis] can still be shown: games over stay over; else
+     * read again on a new day, an hour before a kick-off and each minute once a game has begun.
+     */
+    private fun isFresh(date: LocalDate, day: Day, now: Long): Boolean {
+        val fetched = day.fetchedMillis
+        val open = day.matches.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE }
+        val fetchedOn = Instant.ofEpochMilli(fetched).atZone(zone).toLocalDate()
+        // A day gone by: final once read after it ended (a game left "scheduled" was put off).
+        if (date < LocalDate.now(zone)) return open.isEmpty() || fetchedOn > date
+        if (fetchedOn != LocalDate.now(zone)) return false
+        return open.none { m ->
+            val k = m.kickoffUtcMillis
+            when {
+                // On (or should be by now): score and minute move.
+                k <= now -> now - fetched >= LIVE_TTL_MILLIS
+                // The last hour before kick-off: once, to catch a game put off.
+                k - now <= PRE_MATCH_MILLIS -> fetched < k - PRE_MATCH_MILLIS
+                else -> false
+            }
+        }
+    }
+
+    /**
+     * Channels carrying each of [matches], one entry per logical channel:
      * - first the two team channels ("Milan", "DAZN Serie A Milan", "DAZN SERIE A 3 FHD MILAN"…),
      *   the provider's own feed of that team's game;
      * - then the channels whose guide names both teams through the game (Zona DAZN, DAZN 1,
      *   Sky Sport…). Club channels ("Inter TV": a radio commentary in the guide), boxing feeds
      *   matched to a DAZN guide by name, replays and timeshift copies are left out.
+     * Kept on disk until the channel list or the guide changes; the guide is searched once for
+     * all the matches not known yet.
      */
-    suspend fun channelsFor(match: Match): List<MatchChannel> = withContext(Dispatchers.IO) {
+    suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
+        val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}"
+        val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
+        val missing = matches.filter { key(it) !in kept }
+        val found = if (missing.isEmpty()) emptyMap() else {
+            val started = System.currentTimeMillis()
+            val guide = guideIdsFor(missing)
+            // Two passes over the channels for all the matches, not two per match.
+            val named = namedAny(missing.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) })
+            val allIds = guide.values.flatten().distinct()
+            val guided = if (allIds.isEmpty()) emptyList()
+            else runCatching { channelDao.withGuideIds(allIds) }.getOrElse { emptyList() }
+            missing.associate { key(it) to lookUp(it, guide[it.id].orEmpty(), named, guided) }
+                .also { Log.i(TAG, "channels for ${missing.size} matches in ${System.currentTimeMillis() - started} ms") }
+        }
+        if (found.isNotEmpty() || lock.withLock { disk().stamp } != stamp) lock.withLock {
+            val ids = matches.mapTo(HashSet()) { key(it) }
+            // Only the matches still asked for: the file doesn't grow over a season.
+            save(disk().copy(stamp = stamp, channels = (kept + found).filterKeys { it in ids }))
+        }
+        matches.associate { it.id to (kept[key(it)] ?: found[key(it)].orEmpty()) }
+    }
+
+    /**
+     * One query over the guide for all of [matches]: each match's guide ids naming both teams.
+     * Each part reads only the programmes ending around its own game (the end-time index), not
+     * the days of guide after it.
+     */
+    private suspend fun guideIdsFor(matches: List<Match>): Map<Long, Set<String>> {
+        val windows = matches.map { m ->
+            Triple(m, m.kickoffUtcMillis + 5 * MINUTE, m.kickoffUtcMillis + 100 * MINUTE)
+        }
+        val args = ArrayList<Any>()
+        val sql = windows.joinToString(" UNION ALL ") { (m, from, to) ->
+            args += from
+            args += to + LONGEST_PROGRAMME_MILLIS
+            args += to
+            args += "%${keyword(m.home.name)}%"
+            args += "%${keyword(m.away.name)}%"
+            "SELECT * FROM programmes WHERE endUtcMillis > ? AND endUtcMillis < ? AND startUtcMillis < ?" +
+                " AND title LIKE ? AND title LIKE ?"
+        }
+        val programmes = runCatching { programmeDao.query(SimpleSQLiteQuery(sql, args.toTypedArray())) }
+            .getOrElse { Log.w(TAG, "guide", it); emptyList() }
+        return windows.associate { (m, from, to) ->
+            val a = keyword(m.home.name)
+            val b = keyword(m.away.name)
+            m.id to programmes
+                .filter { it.endUtcMillis > from && it.startUtcMillis < to }
+                .filter { names(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase()) }
+                .mapTo(LinkedHashSet()) { it.epgChannelId }
+        }
+    }
+
+    /** Visible channels whose name contains any of [words] (LIKE: case-blind for ASCII). */
+    private suspend fun namedAny(words: List<String>): List<Channel> {
+        val distinct = words.distinct()
+        if (distinct.isEmpty()) return emptyList()
+        val sql = "SELECT * FROM channels WHERE hidden = 0 AND (" +
+            distinct.joinToString(" OR ") { "displayName LIKE ?" } + ")"
+        return runCatching { channelDao.query(SimpleSQLiteQuery(sql, distinct.map { "%$it%" }.toTypedArray())) }
+            .getOrElse { Log.w(TAG, "channels", it); emptyList() }
+    }
+
+    private fun lookUp(match: Match, guideIds: Set<String>, named: List<Channel>, guidedAll: List<Channel>): List<MatchChannel> {
         val a = keyword(match.home.name)
         val b = keyword(match.away.name)
-        val teams = runCatching { channelDao.namedEither(a, b) }.getOrElse { emptyList() }
+        val teams = named.filter { it.displayName.contains(a, ignoreCase = true) || it.displayName.contains(b, ignoreCase = true) }
             // "*==== Lazio ====*": a provider's section divider, not a channel.
             .filter { it.isLive() && "==" !in it.displayName && "--" !in it.displayName }
             .mapNotNull { c -> teamOf(c.displayName, match)?.let { it to c } }
         val home = logical(teams.filter { it.first == 0 }.map { it.second })
         val away = logical(teams.filter { it.first == 1 }.map { it.second })
 
-        val from = match.kickoffUtcMillis + 5 * MINUTE
-        val to = match.kickoffUtcMillis + 100 * MINUTE
-        val guideIds = runCatching { programmeDao.titledBoth(a, b, from, to) }.getOrElse { emptyList() }
-            .filter { names(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase()) }
-            .mapTo(LinkedHashSet()) { it.epgChannelId }
-        val guided = if (guideIds.isEmpty()) emptyList() else channelDao.withGuideIds(guideIds.toList())
+        val guided = guidedAll
+            .filter { c -> c.epgOverrideId in guideIds || c.epgChannelId in guideIds || c.matchedEpgId in guideIds }
             .filter { c ->
                 val n = fold(c.displayName).lowercase()
                 c.isLive() && !NOT_THE_GAME.containsMatchIn(n) &&
@@ -159,7 +299,7 @@ class FootballRepository(
             .mapNotNull { (_, variants) -> logical(variants) }
             // The channel with the most feeds first: more ways to get a picture if one is down.
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
-        (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+        return (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
     }
 
     private fun Channel.isLive() =
@@ -177,7 +317,7 @@ class FootballRepository(
      * "Milan TV" leaves "milan tv" and so isn't.
      */
     private fun teamOf(channelName: String, match: Match): Int? {
-        val rest = fold(channelName).lowercase().split(Regex("[^a-z0-9]+"))
+        val rest = fold(channelName).lowercase().split(NON_WORD)
             .filter { it.isNotEmpty() && it !in TEAM_CHANNEL_NOISE && !it.all(Char::isDigit) }
             .joinToString(" ")
         fun same(team: Team) = rest == keyword(team.name) || rest == fold(team.name).lowercase()
@@ -194,9 +334,14 @@ class FootballRepository(
      * feed first, then — for a match a few days old, out of the feed by now — the full video list.
      */
     suspend fun highlightsFor(match: Match): String? = withContext(Dispatchers.IO) {
-        pickHighlights(match, highlightsFeed())
+        knownHighlights(match)?.let { return@withContext it }
+        val id = pickHighlights(match, highlightsFeed())
             ?: if (System.currentTimeMillis() - match.kickoffUtcMillis > OLD_MATCH_MILLIS) pickHighlights(match, uploads()) else null
+        id?.also { lock.withLock { disk().let { d -> save(d.copy(highlights = d.highlights + (match.id to it))) } } }
     }
+
+    /** Highlights found before (they stay found: the feed only keeps the latest uploads). */
+    suspend fun knownHighlights(match: Match): String? = lock.withLock { disk().highlights[match.id] }
 
     private fun pickHighlights(match: Match, videos: List<Video>): String? {
         val a = Regex.escape(keyword(match.home.name).uppercase())
@@ -217,9 +362,10 @@ class FootballRepository(
 
     // ---- FotMob ---------------------------------------------------------------------------------
 
-    private fun fixtures(day: LocalDate): List<Match> {
+    /** [day]'s Serie A matches; null when FotMob couldn't be read. */
+    private fun fixtures(day: LocalDate): List<Match>? {
         val url = "https://www.fotmob.com/api/data/matches?date=${day.format(DateTimeFormatter.BASIC_ISO_DATE)}"
-        val body = get(url) ?: return emptyList()
+        val body = get(url) ?: return null
         return runCatching {
             json.parseToJsonElement(body).jsonObject["leagues"]?.jsonArray.orEmpty()
                 .map { it.jsonObject }
@@ -227,7 +373,7 @@ class FootballRepository(
                 .flatMap { it["matches"]?.jsonArray.orEmpty() }
                 .mapNotNull { parseMatch(it.jsonObject) }
                 .sortedBy { it.kickoffUtcMillis }
-        }.getOrElse { Log.w(TAG, "fixtures $day", it); emptyList() }
+        }.getOrElse { Log.w(TAG, "fixtures $day", it); null }
     }
 
     private fun parseMatch(m: JsonObject): Match? {
@@ -313,18 +459,29 @@ class FootballRepository(
     /** Both teams named as words (not inside another word) in [title]. */
     private fun names(title: String, a: String, b: String): Boolean {
         val t = fold(title).lowercase()
-        return Regex("\\b${Regex.escape(a)}\\b").containsMatchIn(t) && Regex("\\b${Regex.escape(b)}\\b").containsMatchIn(t)
+        return word(a).containsMatchIn(t) && word(b).containsMatchIn(t)
     }
 
     private fun fold(s: String): String =
-        Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+        if (s.all { it.code < 128 }) s else Normalizer.normalize(s, Normalizer.Form.NFD).replace(MARKS, "")
+
+    // Compiled once: building a regex per channel and per programme took seconds on a Fire TV.
+    private val words = HashMap<String, Regex>()
+
+    private fun word(w: String): Regex = synchronized(words) {
+        words.getOrPut(w) { Regex("\\b${Regex.escape(w)}\\b") }
+    }
 
     companion object {
         private const val TAG = "Football"
         private const val SERIE_A = 55
         private const val SERIE_A_CHANNEL = "UCBJeMCIeLQos7wacox4hmLQ"
         private const val MINUTE = 60_000L
-        private const val UPCOMING_TTL_MILLIS = 60 * MINUTE
+        private const val LIVE_TTL_MILLIS = 50_000L
+        private const val PRE_MATCH_MILLIS = 60 * MINUTE
+        private const val KEEP_DAYS = 14L
+        /** A game's programme ends at most this long after the game: bounds the guide search. */
+        private const val LONGEST_PROGRAMME_MILLIS = 6 * 60 * MINUTE
         private const val FEED_TTL_MILLIS = 5 * MINUTE
         private const val UPLOADS_TTL_MILLIS = 30 * MINUTE
         private const val OLD_MATCH_MILLIS = 12 * 60 * MINUTE
@@ -337,6 +494,8 @@ class FootballRepository(
         /** Guide-matched channels that don't show the game: boxing feeds named like DAZN 1, replays. */
         private val NOT_THE_GAME = Regex("\\b(box|boxe|ufc|differita|replay|serie b)\\b")
         private val RADIO = Regex("\\bradio")
+        private val MARKS = Regex("\\p{M}+")
+        private val NON_WORD = Regex("[^a-z0-9]+")
         private val ENTRY = Regex("<entry>.*?</entry>", RegexOption.DOT_MATCHES_ALL)
         private val VIDEO_ID = Regex("<yt:videoId>([^<]+)</yt:videoId>")
         private val TITLE = Regex("<title>([^<]*)</title>")

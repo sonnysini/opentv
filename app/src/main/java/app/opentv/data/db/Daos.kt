@@ -9,6 +9,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.Upsert
@@ -29,6 +30,7 @@ import app.opentv.data.model.Series
 import app.opentv.data.model.SeriesRule
 import app.opentv.data.model.Source
 import app.opentv.data.model.StreamKind
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
 /** Rows per upsert statement. Keeps a 40,000-channel playlist from building one huge query. */
@@ -187,15 +189,22 @@ interface ChannelDao {
     )
     suspend fun withGuideIds(guideIds: List<String>): List<Channel>
 
-    /** Visible channels whose name contains [a] or [b] — the football home's team channels. */
+    /** Free-form channel lookup: the football home asks for all of its teams in one pass. */
+    @RawQuery(observedEntities = [Channel::class])
+    suspend fun query(query: SupportSQLiteQuery): List<Channel>
+
+    /**
+     * Changes whenever the channels or the guide may have: visible channel count, last catalog
+     * sync, last guide download. The football home keeps its match → channels answers until then.
+     */
     @Query(
         """
-        SELECT * FROM channels
-        WHERE hidden = 0 AND (displayName LIKE '%' || :a || '%' OR displayName LIKE '%' || :b || '%')
-        ORDER BY qualityRank DESC, displayName
+        SELECT (SELECT COUNT(*) FROM channels WHERE hidden = 0) || '/' ||
+               (SELECT IFNULL(MAX(lastCatalogSyncMillis), 0) FROM sources) || '/' ||
+               (SELECT IFNULL(MAX(lastSyncMillis), 0) FROM epg_feeds)
         """
     )
-    suspend fun namedEither(a: String, b: String): List<Channel>
+    suspend fun guideStamp(): String
 
     @Query("SELECT COUNT(*) FROM channels WHERE sourceId = :sourceId")
     suspend fun countForSource(sourceId: Long): Int
@@ -473,18 +482,9 @@ interface ProgrammeDao {
     )
     suspend fun upcoming(channelId: String, nowUtcMillis: Long, limit: Int): List<Programme>
 
-    /**
-     * Programmes overlapping a window whose title names both [a] and [b] — a match in the guide.
-     * LIKE is case-blind only for ASCII, so the caller re-checks the title its own way.
-     */
-    @Query(
-        """
-        SELECT * FROM programmes
-        WHERE endUtcMillis > :fromUtcMillis AND startUtcMillis < :toUtcMillis
-          AND title LIKE '%' || :a || '%' AND title LIKE '%' || :b || '%'
-        """
-    )
-    suspend fun titledBoth(a: String, b: String, fromUtcMillis: Long, toUtcMillis: Long): List<Programme>
+    /** Free-form programme lookup: the football home asks for all of its matches in one pass. */
+    @RawQuery(observedEntities = [Programme::class])
+    suspend fun query(query: SupportSQLiteQuery): List<Programme>
 
     @Query("SELECT COUNT(*) FROM programmes WHERE feedId = :feedId")
     suspend fun countForFeed(feedId: Long): Int

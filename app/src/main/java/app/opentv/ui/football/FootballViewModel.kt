@@ -15,10 +15,14 @@ import app.opentv.data.repo.FootballRepository.MatchChannel
 import app.opentv.data.repo.FootballRepository.Phase
 import app.opentv.data.model.Channel
 import app.opentv.data.model.shownName
+import app.opentv.BuildConfig
 import app.opentv.player.MatchFeeds
+import app.opentv.player.PlaybackQueue
 import app.opentv.player.ScoreboardReader
 import app.opentv.player.StreamProbe
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +46,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val loading: Boolean = true,
         /** The big card: the live match, else the next one to start. */
         val hero: Item? = null,
+        /** Games on at the same time, as tabs on the big card: two or more, else empty. */
+        val heroes: List<Item> = emptyList(),
         val live: List<Item> = emptyList(),
         val today: List<Item> = emptyList(),
         val upcoming: List<Item> = emptyList(),
@@ -81,83 +87,244 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     /** The feed to open once a scan is over (its ranking already handed to [MatchFeeds]). */
     private val _autoPlay = MutableStateFlow<Channel?>(null)
     val autoPlay: StateFlow<Channel?> = _autoPlay.asStateFlow()
-    private var scanJob: Job? = null
+
+    /** A match's feed with what its last look found: [looked] false while still to be looked at. */
+    data class Source(
+        val feed: Channel,
+        val name: String,
+        val looked: Boolean,
+        val probe: AutoScan.Probe?,
+        val verdict: AutoScan.Verdict?,
+        /** When it was looked at. */
+        val at: Long? = null,
+    ) {
+        val usable get() = !looked || verdict == AutoScan.Verdict.OK || verdict == AutoScan.Verdict.CONFIRMED
+    }
+
+    /** The scan going on by itself, for the thin bar: "Roma - Cagliari · 12/30". */
+    data class Progress(val matchId: Long, val title: String, val done: Int, val total: Int)
+
+    private val _progress = MutableStateFlow<Progress?>(null)
+    val progress: StateFlow<Progress?> = _progress.asStateFlow()
+
+    /** Bumped on every look stored: what the screen re-reads [sources] on. */
+    private val _looks = MutableStateFlow(0)
+    val looks: StateFlow<Int> = _looks.asStateFlow()
+
+    private val store = ScanStore.get(app)
+
+    /** Each match's feeds, best quality first within a channel, as looked at and listed. */
+    @Volatile private var feeds: Map<Long, List<Channel>> = emptyMap()
+
+    private var active = false
+    private var worker: Job? = null
+    /** The match whose "Watch now" was pressed: its feeds go before anything else. */
+    @Volatile private var focus: Item? = null
+    private var focusStarted = 0L
+    /** Wakes the worker out of its idle wait the moment "Watch now" is pressed. */
+    private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
 
     fun autoPlayed() {
         _autoPlay.value = null
     }
 
     fun cancelScan() {
-        scanJob?.cancel()
+        focus = null
         _scan.value = null
     }
 
     /**
-     * "Watch automatically": every feed of [item]'s channels looked at in turn (one at a time —
-     * the account allows one connection), ranked by [AutoScan], then the best one plays with the
-     * rest as its fallback order.
+     * The football home is on screen (or not): only then do feeds get looked at, one at a time —
+     * the account allows one connection, and the player needs it the moment it opens.
+     */
+    fun setActive(on: Boolean) {
+        if (on == active) return
+        active = on
+        if (on) {
+            startWorker()
+        } else {
+            worker?.cancel()
+            worker = null
+            focus = null
+            _scan.value = null
+            _progress.value = null
+        }
+    }
+
+    fun feedsOf(item: Item): List<Channel> = feeds[item.match.id].orEmpty()
+
+    /**
+     * [item]'s feeds best first: the ones looked at ranked by [AutoScan], then the ones still to
+     * look at in channel order, then the dead and the wrong game.
+     */
+    fun sources(item: Item): List<Source> {
+        val m = item.match
+        val all = feedsOf(item)
+        val looks = all.mapNotNull { f -> store.fresh(f.id)?.let { f to it.probe } }
+        val ranked = AutoScan.rank(looks, m.home.name, m.away.name, channel = { it.groupKey.ifEmpty { "#${it.id}" } })
+        val lookedIds = looks.mapTo(HashSet()) { it.first.id }
+        val out = ranked.map { Source(it.item, nameOf(it.item), true, it.probe, it.verdict, store.fresh(it.item.id)?.at) }
+        val unlooked = all.filter { it.id !in lookedIds }.map { Source(it, nameOf(it), false, null, null) }
+        return out.filter { it.usable } + unlooked + out.filterNot { it.usable }
+    }
+
+    /** [feedId]'s picture from its last look. */
+    fun frame(feedId: Long): java.io.File? = store.frame(feedId)
+
+    /** Whether every feed of [item] has a fresh look. */
+    fun ready(item: Item): Boolean = feedsOf(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(it.id) != null } }
+
+    /** "Scan again": [item]'s looks dropped, looked at afresh. */
+    fun rescan(item: Item) {
+        store.forget(feedsOf(item).map { it.id })
+        _looks.value++
+        autoWatch(item)
+    }
+
+    /**
+     * "Watch now": [item]'s feeds not looked at lately are (on the scan screen, picking up where any
+     * earlier scan stopped), then the best one plays with the rest of the ranking as its fallback.
      */
     fun autoWatch(item: Item) {
-        if (scanJob?.isActive == true) return
-        scanJob = viewModelScope.launch {
-            val m = item.match
-            val catalog = graph.catalogRepository
-            val feeds = item.channels
-                .flatMap { mc -> catalog.variants(mc.channel).sortedByDescending { it.qualityRank } }
-                .distinctBy { it.id }
-                .filterNot { SD.containsMatchIn(it.qualityLabel) }
-                .take(MAX_FEEDS)
-            if (feeds.isEmpty()) return@launch
-            val title = "${m.home.name} - ${m.away.name}"
-            var rows = feeds.map { ScanRow(it.id, listOf(it.shownName, it.qualityLabel).filter(String::isNotBlank).joinToString(" · ")) }
-            _scan.value = Scan(title, rows, 0)
+        if (feedsOf(item).isEmpty()) return
+        // Every feed looked at lately: straight to the best, no scan screen.
+        if (ready(item)) {
+            val best = sources(item).firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
+            play(item, best)
+            return
+        }
+        focus = item
+        focusStarted = System.currentTimeMillis()
+        publishFocus(item)
+        startWorker()
+        wake.trySend(Unit)
+    }
+
+    /** Plays [feed] of [item] as picked by hand: up/down then zaps along the match's feeds only. */
+    fun play(item: Item, feed: Channel) {
+        viewModelScope.launch {
+            // The feed being looked at holds the one connection: let it go first.
+            worker?.cancelAndJoin()
+            worker = null
+            handOver(item, feed)
+        }
+    }
+
+    private fun handOver(item: Item, first: Channel) {
+        val order = sources(item).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(item) }
+        val ordered = listOf(first) + order.filter { it.id != first.id }
+        MatchFeeds.set(ordered.map { it.id }, ordered.associate { it.id to nameOf(it) })
+        PlaybackQueue.items = ordered.map { PlaybackQueue.Item(it.id, nameOf(it), it.logoUrl) }
+        _autoPlay.value = first
+    }
+
+    private fun startWorker() {
+        if (!active || worker?.isActive == true) return
+        worker = viewModelScope.launch {
             val prober = StreamProbe(graph.streamingHttpClient, getApplication<Application>().cacheDir)
             val reader = ScoreboardReader(getApplication())
-            val results = ArrayList<Pair<Channel, AutoScan.Probe?>>()
-            val deadline = System.currentTimeMillis() + SCAN_BUDGET_MILLIS
             try {
-                for ((i, feed) in feeds.withIndex()) {
-                    if (System.currentTimeMillis() > deadline) break
-                    val source = graph.sourceRepository.byId(feed.sourceId)
-                    val url = catalog.resolvePlaybackUrl(feed, source)
-                    val r = prober.probe(url, source?.userAgent ?: "OpenTV/0.1 (Android)")
-                    val text = r?.corner?.let { reader.read(it) }
-                    r?.corner?.recycle()
-                    val board = text?.let { AutoScan.parseBoard(it) }
-                    val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board) }
-                    results += feed to p
-                    android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
-                    val verdict = when {
-                        p == null -> AutoScan.Verdict.DEAD
-                        board != null -> AutoScan.gameCheck(board, m.home.name, m.away.name) ?: AutoScan.Verdict.OK
-                        else -> AutoScan.Verdict.OK
+                while (true) {
+                    val f = focus
+                    if (f != null) {
+                        val overBudget = System.currentTimeMillis() - focusStarted > SCAN_BUDGET_MILLIS
+                        val next = if (overBudget) null else feedsOf(f).firstOrNull { store.fresh(it.id) == null }
+                        if (next == null) {
+                            finishFocus(f)
+                            // The player is about to take the connection: no more looks until back.
+                            return@launch
+                        }
+                        look(next, prober, reader)
+                        if (focus === f) publishFocus(f)
+                        continue
                     }
-                    rows = rows.toMutableList().also { it[i] = it[i].copy(detail = p?.let(::detail), board = board?.let(::boardText), verdict = verdict) }
-                    _scan.value = Scan(title, rows, i + 1)
+                    val bg = nextInBackground()
+                    if (bg == null) {
+                        _progress.value = null
+                        withTimeoutOrNull(IDLE_MILLIS) { wake.receive() }
+                        continue
+                    }
+                    val (item, feed) = bg
+                    val all = feedsOf(item)
+                    val m = item.match
+                    _progress.value = Progress(m.id, "${m.home.name} - ${m.away.name}", all.count { store.fresh(it.id) != null }, all.size)
+                    look(feed, prober, reader)
                 }
             } finally {
                 reader.close()
             }
-            val ranked = AutoScan.rank(
-                results, m.home.name, m.away.name,
-                channel = { it.groupKey.ifEmpty { "#${it.id}" } },
-            )
-            val byId = rows.associateBy { it.id }
-            val unlooked = feeds.drop(results.size)
-            rows = ranked.mapIndexed { i, r -> byId.getValue(r.item.id).copy(verdict = r.verdict, place = i + 1) } +
-                unlooked.map { byId.getValue(it.id) }
-            _scan.value = Scan(title, rows, feeds.size, finished = true)
-            ranked.forEachIndexed { i, r ->
-                android.util.Log.i(TAG, "#${i + 1} ${r.item.shownName} ${r.item.qualityLabel}: ${r.verdict} score=${r.score}")
-            }
-            val good = setOf(AutoScan.Verdict.OK, AutoScan.Verdict.CONFIRMED)
-            val order = (ranked.filter { it.verdict in good }.map { it.item } + unlooked).ifEmpty { feeds }
-            delay(RANKING_SHOWN_MILLIS)
-            MatchFeeds.set(order.map { it.id })
-            _scan.value = null
-            _autoPlay.value = order.first()
         }
     }
+
+    /** The next feed to look at by itself: matches on now or starting soon, soonest first. */
+    private fun nextInBackground(): Pair<Item, Channel>? {
+        val now = System.currentTimeMillis()
+        val window = if (BuildConfig.DEBUG) DEBUG_WINDOW_MILLIS else AHEAD_MILLIS
+        val ui = _ui.value
+        val candidates = (listOfNotNull(ui.hero) + ui.live + ui.today + ui.upcoming)
+            .distinctBy { it.match.id }
+            .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
+            .sortedBy { it.match.kickoffUtcMillis }
+        for (item in candidates) {
+            val next = feedsOf(item).firstOrNull { store.fresh(it.id) == null } ?: continue
+            return item to next
+        }
+        return null
+    }
+
+    private suspend fun look(feed: Channel, prober: StreamProbe, reader: ScoreboardReader) {
+        val catalog = graph.catalogRepository
+        val source = graph.sourceRepository.byId(feed.sourceId)
+        val url = catalog.resolvePlaybackUrl(feed, source)
+        val r = prober.probe(url, source?.userAgent ?: "OpenTV/0.1 (Android)")
+        val text = r?.corner?.let { reader.read(it) }
+        r?.corner?.recycle()
+        val board = text?.let { AutoScan.parseBoard(it) }
+        val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board) }
+        android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
+        store.put(feed.id, p, r?.preview)
+        _looks.value++
+    }
+
+    /** The scan screen for [item], from what's known of its feeds so far. */
+    private fun publishFocus(item: Item) {
+        val m = item.match
+        val all = feedsOf(item)
+        val rows = all.map { f ->
+            val e = store.fresh(f.id)
+            val p = e?.probe
+            val verdict = when {
+                e == null -> null
+                p == null -> AutoScan.Verdict.DEAD
+                p.board != null -> AutoScan.gameCheck(p.board, m.home.name, m.away.name) ?: AutoScan.Verdict.OK
+                else -> AutoScan.Verdict.OK
+            }
+            ScanRow(f.id, nameOf(f), p?.let(::detail), p?.board?.let(::boardText), verdict)
+        }
+        _scan.value = Scan("${m.home.name} - ${m.away.name}", rows, rows.count { it.verdict != null })
+    }
+
+    /** The ranking shown a moment, then the best feed plays. */
+    private suspend fun finishFocus(item: Item) {
+        val m = item.match
+        val src = sources(item)
+        val rows = src.mapIndexed { i, s ->
+            ScanRow(
+                s.feed.id, s.name, s.probe?.let(::detail), s.probe?.board?.let(::boardText),
+                verdict = if (s.looked) s.verdict else null,
+                place = (i + 1).takeIf { s.looked && s.usable },
+            )
+        }
+        _scan.value = Scan("${m.home.name} - ${m.away.name}", rows, rows.size, finished = true)
+        src.forEachIndexed { i, s -> android.util.Log.i(TAG, "#${i + 1} ${s.name}: ${s.verdict}") }
+        if (focus !== item) return
+        focus = null
+        _scan.value = null
+        val first = src.firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
+        handOver(item, first)
+    }
+
+    private fun nameOf(c: Channel) = listOf(c.shownName, c.qualityLabel).filter(String::isNotBlank).joinToString(" · ")
 
     private fun detail(p: AutoScan.Probe) = listOfNotNull(
         "${p.height}p",
@@ -167,9 +334,6 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     ).joinToString(" · ")
 
     private fun boardText(b: AutoScan.Board) = b.codes.take(2).joinToString(" ")
-
-    // Highlights found stay found: the feed only keeps the latest uploads.
-    private val highlights = HashMap<Long, String>()
 
     init {
         viewModelScope.launch {
@@ -202,33 +366,74 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.today.isEmpty())
             return
         }
+        val channels = repo.channelsFor(
+            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming,
+        )
+        // Highlights already found only: looking up new ones waits until the page is up.
         val items = today.map { m ->
             when (m.phase) {
-                Phase.FINISHED -> finished(m)
+                Phase.FINISHED -> Item(m, highlights = repo.knownHighlights(m))
                 Phase.OFF -> Item(m)
-                else -> Item(m, channels = repo.channelsFor(m))
+                else -> Item(m, channels = channels[m.id].orEmpty())
             }
         }
-        val next = upcoming.map { Item(it, channels = repo.channelsFor(it)) }
+        val next = upcoming.map { Item(it, channels = channels[it.id].orEmpty()) }
         val live = items.filter { it.match.phase == Phase.LIVE }
         val hero = live.firstOrNull()
             ?: items.firstOrNull { it.match.phase == Phase.SCHEDULED }
             ?: next.firstOrNull()
+        // Games on together (or about to be) share the big card as tabs.
+        val now = System.currentTimeMillis()
+        val together = items.filter {
+            it.match.phase == Phase.LIVE ||
+                (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
+        }.sortedBy { it.match.kickoffUtcMillis }
+        val heroes = if (together.size >= 2) together else emptyList()
+        // The big card's feeds before first paint (its source list); the rest's right after:
+        // looking them up is a query per channel, a second or so for a whole matchday.
+        val first = (listOfNotNull(hero) + heroes).distinctBy { it.match.id }
+        feeds = feeds + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsFor(it) }
         _ui.value = UiState(
             loading = false,
             hero = hero,
-            live = live.filter { it !== hero },
+            heroes = heroes,
+            live = live.filter { it !== hero && it !in heroes },
             // Today's row: still to come first, then the finished ones latest first.
-            today = items.filter { it !== hero && it.match.phase == Phase.SCHEDULED } +
+            today = items.filter { it !== hero && it !in heroes && it.match.phase == Phase.SCHEDULED } +
                 items.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis },
             upcoming = next.filter { it !== hero },
             lastRound = _ui.value.lastRound,
         )
-        // After the rest is on screen: older highlights may need YouTube's full video list,
-        // a few seconds on a slow box.
+        val firstIds = first.mapTo(HashSet()) { it.match.id }
+        val known = feeds
+        feeds = (items + next).filter { it.channels.isNotEmpty() }
+            .associate { item ->
+                val id = item.match.id
+                id to ((if (id in firstIds) known[id] else null) ?: feedsFor(item))
+            }
+        // The cards re-read their feeds along with the looks.
+        _looks.value++
+        // After the rest is on screen: highlights not found yet (the YouTube feed; older ones may
+        // need YouTube's full video list, a few seconds on a slow box).
+        if (items.any { it.match.phase == Phase.FINISHED && it.highlights == null }) {
+            val withHighlights = items.map { if (it.match.phase == Phase.FINISHED && it.highlights == null) finished(it.match) else it }
+                .associateBy { it.match.id }
+            _ui.value = _ui.value.let { u ->
+                u.copy(today = u.today.map { withHighlights[it.match.id] ?: it })
+            }
+        }
         val todayIds = today.mapTo(HashSet()) { it.id }
         val round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
         _ui.value = _ui.value.copy(lastRound = round)
+    }
+
+    private suspend fun feedsFor(item: Item): List<Channel> {
+        val catalog = graph.catalogRepository
+        return item.channels
+            .flatMap { mc -> catalog.variants(mc.channel).sortedByDescending { it.qualityRank } }
+            .distinctBy { it.id }
+            .filterNot { SD.containsMatchIn(it.qualityLabel) }
+            .take(MAX_FEEDS)
     }
 
     private companion object {
@@ -236,10 +441,14 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** About 1 s a feed: a minute of waiting at most. */
         const val MAX_FEEDS = 30
         const val SCAN_BUDGET_MILLIS = 60_000L
-        const val RANKING_SHOWN_MILLIS = 2_500L
+        /** Matches looked at by themselves from this long before kick-off: earlier the feeds aren't up yet. */
+        const val AHEAD_MILLIS = 45 * 60_000L
+        /** Test builds look at the whole day, so there's something to try between games. */
+        const val DEBUG_WINDOW_MILLIS = 24 * 60 * 60_000L
+        const val IDLE_MILLIS = 30_000L
+        const val TABS_AHEAD_MILLIS = 15 * 60_000L
         val SD = Regex("\\bSD\\b", RegexOption.IGNORE_CASE)
     }
 
-    private suspend fun finished(m: Match) =
-        Item(m, highlights = highlights[m.id] ?: repo.highlightsFor(m)?.also { highlights[m.id] = it })
+    private suspend fun finished(m: Match) = Item(m, highlights = repo.highlightsFor(m))
 }

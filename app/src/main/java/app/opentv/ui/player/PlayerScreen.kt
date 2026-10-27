@@ -373,8 +373,11 @@ fun PlayerScreen(
     /** A variant's name for the switch notice and the picker: `FHD 2 · B`, numbered among its kind. */
     fun variantName(channel: Channel): String =
         if (matchFeeds) {
-            // Feeds of different channels: the quality alone wouldn't say which.
-            listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
+            // Feeds of different channels: the quality alone wouldn't say which. Numbered as ranked.
+            (MatchFeeds.place(channel.id)?.let { "$it. " } ?: "") + (
+                MatchFeeds.name(channel.id)
+                    ?: listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
+                )
         } else {
             QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
                 ?: channel.qualityLabel.ifBlank { channel.shownName }
@@ -407,10 +410,11 @@ fun PlayerScreen(
         listedId = channel.id
         listedChannel = channel
         // A match's feeds ranked by "Watch automatically": play down that ranking instead.
-        val ranked = MatchFeeds.take(channel.id)?.mapNotNull { graph.catalogRepository.channel(it) }
+        val ranked = MatchFeeds.forFeed(channel.id)?.mapNotNull { graph.catalogRepository.channel(it) }
         matchFeeds = !ranked.isNullOrEmpty()
         if (!ranked.isNullOrEmpty()) {
-            variants = ranked
+            // The picker lists them in the ranking's order, numbered as on the football home.
+            variants = ranked.sortedBy { MatchFeeds.place(it.id) ?: Int.MAX_VALUE }
             tryOrder = ranked
             tried = emptySet()
             stallReturnId = null
@@ -497,9 +501,15 @@ fun PlayerScreen(
     }
 
     /** Position of the playing channel in [queue], matched by any of its quality variants. */
-    fun queueIndex(): Int = queue.indexOfFirst { item ->
-        item.id == listedId || item.id == currentId || variants.any { it.id == item.id }
-    }
+    fun queueIndex(): Int =
+        // A match's feeds are each other's "variants": only the one picked says where we are.
+        if (matchFeeds) {
+            queue.indexOfFirst { it.id == listedId }
+        } else {
+            queue.indexOfFirst { item ->
+                item.id == listedId || item.id == currentId || variants.any { it.id == item.id }
+            }
+        }
 
     fun zapBy(delta: Int) {
         if (queue.isEmpty()) return
@@ -567,7 +577,6 @@ fun PlayerScreen(
     // While watching: a stream that stops moving — stuck loading, an error the silent restart can't
     // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
     val stallFallback by settings.stallFallback.collectAsState()
-    val qualityButtonCycles by settings.qualityButtonCycles.collectAsState()
     val controlsTimeoutSeconds by settings.controlsTimeoutSeconds.collectAsState()
     val stallMillis by settings.stallFallbackMillis.collectAsState()
     // ...and one that keeps stuttering, too briefly each time for the freeze wait, does the same.
@@ -1130,9 +1139,18 @@ fun PlayerScreen(
                                     icon = Icons.Filled.HighQuality,
                                     label = stringResource(R.string.player_quality),
                                     selected = panel == Panel.QUALITY,
-                                    badge = QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge,
-                                    onLongClick = if (qualityButtonCycles) togglePicker else null,
-                                    onClick = if (qualityButtonCycles) ({ cycleQuality() }) else togglePicker,
+                                    badge = if (matchFeeds) {
+                                        // A match's feeds: its place in the ranking, as on the football home.
+                                        variants.firstOrNull { it.id == currentId }?.let { v ->
+                                            listOfNotNull(
+                                                MatchFeeds.place(v.id)?.toString(),
+                                                v.qualityLabel.substringBefore(" · ").ifBlank { null },
+                                            ).joinToString(" · ")
+                                        }
+                                    } else {
+                                        QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge
+                                    },
+                                    onClick = togglePicker,
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }

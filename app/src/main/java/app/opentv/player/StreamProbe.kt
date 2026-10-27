@@ -37,6 +37,8 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         val millis: Long,
         /** The top-left corner of a frame, where the scoreboard is. Null when no frame decoded. */
         val corner: Bitmap?,
+        /** The same frame small, for showing what the feed is on. */
+        val preview: Bitmap? = null,
     )
 
     private val http = http.newBuilder()
@@ -52,13 +54,15 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
             if (!fetch(url, userAgent, file, depth = 0)) return@runCatching null
             val fetchedAt = System.currentTimeMillis()
             val info = inspect(file) ?: return@runCatching null
+            val (corner, preview) = frame(file)
             Result(
                 width = info.width,
                 height = info.height,
                 fps = info.fps,
                 audioChannels = info.audioChannels,
                 millis = fetchedAt - t0,
-                corner = corner(file),
+                corner = corner,
+                preview = preview,
             )
         }.getOrElse { Log.w(TAG, "probe failed", it); null }.also { file.delete() }
     }
@@ -150,16 +154,19 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         }
     }
 
-    private fun corner(file: File): Bitmap? {
+    /** The scoreboard corner of a frame and the frame shrunk to [PREVIEW_WIDTH]; nulls when none decoded. */
+    private fun frame(file: File): Pair<Bitmap?, Bitmap?> {
         val mmr = MediaMetadataRetriever()
         return try {
             mmr.setDataSource(file.path)
-            val frame = mmr.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return null
-            Bitmap.createBitmap(frame, 0, 0, frame.width * 4 / 10, frame.height * 15 / 100)
-                .also { if (it !== frame) frame.recycle() }
+            val frame = mmr.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return null to null
+            val corner = Bitmap.createBitmap(frame, 0, 0, frame.width * 4 / 10, frame.height * 15 / 100)
+            val preview = Bitmap.createScaledBitmap(frame, PREVIEW_WIDTH, PREVIEW_WIDTH * frame.height / frame.width, true)
+            if (corner !== frame && preview !== frame) frame.recycle()
+            corner to preview
         } catch (t: Throwable) {
             Log.w(TAG, "no frame", t)
-            null
+            null to null
         } finally {
             runCatching { mmr.release() }
         }
@@ -174,6 +181,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         private const val MIN_BYTES = 50_000L
         private const val PLAYLIST_BYTES = 256_000L
         private const val FPS_SAMPLES = 40
+        private const val PREVIEW_WIDTH = 480
 
         /** Frames per second from sample timestamps (decode order, so sorted first). */
         fun fpsOf(timesUs: List<Long>): Int? {

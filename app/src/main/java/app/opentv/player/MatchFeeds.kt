@@ -6,21 +6,38 @@
 package app.opentv.player
 
 /**
- * A match's feeds ranked by "Watch automatically", handed to the player: it plays the first and
- * falls back, stall-switches and cycles (☰) along the ranking — across channels — instead of the
- * one channel's qualities. Taken once, by the player opening the first feed.
+ * A match's feeds, best first, handed to the player by the football home: playing one of them, the
+ * player falls back, stall-switches and cycles (☰) along this ranking — across channels — instead
+ * of the one channel's qualities. Kept until another list is played from, so zapping between the
+ * match's feeds stays in it.
  */
 object MatchFeeds {
     @Volatile private var ranked: List<Long> = emptyList()
+    @Volatile private var names: Map<Long, String> = emptyMap()
 
-    fun set(ids: List<Long>) {
+    /** [ids] best first; [names] as the football home shows them ("Lazio · FHD · DVS"). */
+    fun set(ids: List<Long>, names: Map<Long, String> = emptyMap()) {
         ranked = ids
+        this.names = names
     }
 
-    /** The ranking, when [channelId] is the feed it starts with; clears it either way. */
-    fun take(channelId: Long): List<Long>? {
-        val r = ranked
+    fun clear() {
         ranked = emptyList()
-        return r.takeIf { it.firstOrNull() == channelId }
+        names = emptyMap()
+    }
+
+    fun name(channelId: Long): String? = names[channelId]
+
+    /** The whole ranking, best first. */
+    fun ranking(): List<Long> = ranked
+
+    /** [channelId]'s 1-based place in the ranking, null when not one of the match's feeds. */
+    fun place(channelId: Long): Int? = ranked.indexOf(channelId).takeIf { it >= 0 }?.plus(1)
+
+    /** The ranking with [channelId] first, when it is one of the match's feeds. */
+    fun forFeed(channelId: Long): List<Long>? {
+        val r = ranked
+        if (channelId !in r) return null
+        return listOf(channelId) + r.filter { it != channelId }
     }
 }
