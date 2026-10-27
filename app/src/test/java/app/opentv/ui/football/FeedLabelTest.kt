@@ -34,6 +34,9 @@ class FeedLabelTest {
 
     @Test fun mixedCaseLeftAlone() = check("Zona Serie A 2", "SD", FeedLabel.Parts("Zona SA2", "SD", ""))
 
+    @Test fun longSourceByInitials() =
+        check("Sassuolo", "FHD · High Quality", FeedLabel.Parts("Sassuolo", "FHD", "HQ"))
+
     @Test fun resolutions() {
         assertEquals("1080p", FeedLabel.resolution(1080))
         assertEquals("720p", FeedLabel.resolution(720))

@@ -30,9 +30,13 @@ object FeedLabel {
         n = titleCase(SPACES.replace(n, " ").trim())
         val claimed = ArrayList<String>()
         val source = ArrayList<String>()
-        for (token in qualityLabel.split('·', ' ').map { it.trim() }.filter { it.isNotEmpty() }) {
-            if (ChannelNameNormalizer.qualityRankOfToken(token) != null) claimed += token.uppercase()
-            else source += token.uppercase()
+        // "FHD HEVC · High Quality": resolution words are the claim, the rest is the source.
+        for (segment in qualityLabel.split('·')) {
+            val rest = ArrayList<String>()
+            for (token in segment.trim().split(' ').filter { it.isNotEmpty() }) {
+                if (ChannelNameNormalizer.qualityRankOfToken(token) != null) claimed += token.uppercase() else rest += token
+            }
+            if (rest.isNotEmpty()) source += shortSource(rest)
         }
         return Parts(
             name = n.ifEmpty { name },
@@ -40,6 +44,10 @@ object FeedLabel {
             source = source.distinct().joinToString(" · "),
         )
     }
+
+    /** A source of several words by its initials ("High Quality" → "HQ"); one word in capitals. */
+    private fun shortSource(words: List<String>): String =
+        if (words.size == 1) words[0].uppercase() else words.joinToString("") { it.take(1).uppercase() }
 
     /** "ZONA DAZN SA1" → "Zona DAZN SA1"; names already in mixed case are left as they are. */
     private fun titleCase(s: String): String {
