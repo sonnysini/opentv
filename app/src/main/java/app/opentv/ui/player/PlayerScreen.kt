@@ -373,8 +373,9 @@ fun PlayerScreen(
     /** A variant's name for the switch notice and the picker: `FHD 2 · B`, numbered among its kind. */
     fun variantName(channel: Channel): String =
         if (matchFeeds) {
-            // Feeds of different channels: the quality alone wouldn't say which.
-            listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
+            // Feeds of different channels: the quality alone wouldn't say which. Numbered as ranked.
+            (MatchFeeds.place(channel.id)?.let { "$it. " } ?: "") +
+                listOf(channel.shownName, channel.qualityLabel).filter { it.isNotBlank() }.joinToString(" · ")
         } else {
             QualityNames.of(variants.map { it.id to it.qualityLabel })[channel.id]?.full?.ifBlank { null }
                 ?: channel.qualityLabel.ifBlank { channel.shownName }
@@ -410,7 +411,8 @@ fun PlayerScreen(
         val ranked = MatchFeeds.forFeed(channel.id)?.mapNotNull { graph.catalogRepository.channel(it) }
         matchFeeds = !ranked.isNullOrEmpty()
         if (!ranked.isNullOrEmpty()) {
-            variants = ranked
+            // The picker lists them in the ranking's order, numbered as on the football home.
+            variants = ranked.sortedBy { MatchFeeds.place(it.id) ?: Int.MAX_VALUE }
             tryOrder = ranked
             tried = emptySet()
             stallReturnId = null
@@ -1136,7 +1138,17 @@ fun PlayerScreen(
                                     icon = Icons.Filled.HighQuality,
                                     label = stringResource(R.string.player_quality),
                                     selected = panel == Panel.QUALITY,
-                                    badge = QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge,
+                                    badge = if (matchFeeds) {
+                                        // A match's feeds: its place in the ranking, as on the football home.
+                                        variants.firstOrNull { it.id == currentId }?.let { v ->
+                                            listOfNotNull(
+                                                MatchFeeds.place(v.id)?.toString(),
+                                                v.qualityLabel.substringBefore(" · ").ifBlank { null },
+                                            ).joinToString(" · ")
+                                        }
+                                    } else {
+                                        QualityNames.of(variants.map { it.id to it.qualityLabel })[currentId]?.badge
+                                    },
                                     onLongClick = if (qualityButtonCycles) togglePicker else null,
                                     onClick = if (qualityButtonCycles) ({ cycleQuality() }) else togglePicker,
                                 )

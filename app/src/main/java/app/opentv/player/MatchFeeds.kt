@@ -22,6 +22,12 @@ object MatchFeeds {
         ranked = emptyList()
     }
 
+    /** The whole ranking, best first. */
+    fun ranking(): List<Long> = ranked
+
+    /** [channelId]'s 1-based place in the ranking, null when not one of the match's feeds. */
+    fun place(channelId: Long): Int? = ranked.indexOf(channelId).takeIf { it >= 0 }?.plus(1)
+
     /** The ranking with [channelId] first, when it is one of the match's feeds. */
     fun forFeed(channelId: Long): List<Long>? {
         val r = ranked
