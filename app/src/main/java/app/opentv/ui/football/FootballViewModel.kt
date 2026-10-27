@@ -278,7 +278,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val now = System.currentTimeMillis()
         val window = if (BuildConfig.DEBUG) DEBUG_WINDOW_MILLIS else AHEAD_MILLIS
         val ui = _ui.value
-        val candidates = (listOfNotNull(ui.hero) + ui.live + ui.today + ui.upcoming)
+        // ui.heroes: games on together are tabs of the big card, in none of the rows.
+        val candidates = (listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming)
             .distinctBy { it.match.id }
             .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
             .sortedBy { it.match.kickoffUtcMillis }
