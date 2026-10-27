@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.CircularProgressIndicator
@@ -351,7 +354,19 @@ private fun Hero(
                         SmallButton(stringResource(R.string.football_rescan)) { viewModel.rescan(item) }
                     }
                     Spacer(Modifier.height(6.dp))
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Back at the top once focus leaves: the best feeds are what the card shows.
+                    val listState = rememberLazyListState()
+                    val scope = rememberCoroutineScope()
+                    LazyColumn(
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.onFocusChanged {
+                            if (!it.hasFocus) {
+                                shown = null
+                                scope.launch { listState.scrollToItem(0) }
+                            }
+                        },
+                    ) {
                         items(sources.size) { i ->
                             val s = sources[i]
                             SourceRow(s, place = i + 1, onFocus = { shown = s.feed.id }) { onPlay(item, s.feed) }

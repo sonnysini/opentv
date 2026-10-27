@@ -187,6 +187,12 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun autoWatch(item: Item) {
         if (feedsOf(item).isEmpty()) return
+        // Every feed looked at lately: straight to the best, no scan screen.
+        if (ready(item)) {
+            val best = sources(item).firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
+            play(item, best)
+            return
+        }
         focus = item
         focusStarted = System.currentTimeMillis()
         publishFocus(item)
@@ -311,7 +317,6 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         }
         _scan.value = Scan("${m.home.name} - ${m.away.name}", rows, rows.size, finished = true)
         src.forEachIndexed { i, s -> android.util.Log.i(TAG, "#${i + 1} ${s.name}: ${s.verdict}") }
-        delay(RANKING_SHOWN_MILLIS)
         if (focus !== item) return
         focus = null
         _scan.value = null
@@ -416,7 +421,6 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** About 1 s a feed: a minute of waiting at most. */
         const val MAX_FEEDS = 30
         const val SCAN_BUDGET_MILLIS = 60_000L
-        const val RANKING_SHOWN_MILLIS = 2_500L
         /** Matches looked at by themselves from this long before kick-off: earlier the feeds aren't up yet. */
         const val AHEAD_MILLIS = 45 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */
