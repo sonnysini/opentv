@@ -331,7 +331,6 @@ private fun ScanLine(row: FootballViewModel.ScanRow) {
         AutoScan.Verdict.CONFIRMED -> Triple("✓", Color(0xFF6BDB8A), stringResource(R.string.football_auto_confirmed))
         AutoScan.Verdict.OK -> Triple("✓", Color(0xFF6BDB8A), null)
         AutoScan.Verdict.WRONG_GAME -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_wrong_game))
-        AutoScan.Verdict.REPLAY -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_replay))
         AutoScan.Verdict.DEAD -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_dead))
     }
     Row(verticalAlignment = Alignment.CenterVertically) {

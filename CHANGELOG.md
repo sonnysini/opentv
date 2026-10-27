@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.28.2 — 26 October 2026
+
+- **Watch automatically no longer crashes on the Fire TV Stick 4K Max.** The scoreboard is now
+  read with Tesseract instead of ML Kit, whose kernels a Cortex-A55 on 32-bit Fire OS rejects
+  (SIGILL). Same result on every Fire, about a tenth of a second a picture.
+- **OCR in its own process.** If reading a scoreboard ever crashes, the app stays up and the scan
+  goes on ranking feeds on quality alone.
+- **Simpler check.** Only the two team codes on the scoreboard are read: the right game is
+  confirmed, another game is dropped. Clock, score and delay are no longer looked at.
+
 ## 0.28.1 — 26 October 2026
 
 - **"▶ Watch now" picks the feed by itself.** On the football home the main button now runs Watch

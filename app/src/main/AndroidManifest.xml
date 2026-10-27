@@ -107,6 +107,13 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- Reads scoreboards for "Watch automatically" in its own process: a native crash there
+             can't take the app down. -->
+        <service
+            android:name=".player.OcrService"
+            android:exported="false"
+            android:process=":ocr" />
+
         <!-- Starts a booked recording when its alarm fires; re-arms bookings after a reboot. -->
         <receiver
             android:name=".recording.RecordingAlarmReceiver"

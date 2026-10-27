@@ -19,7 +19,6 @@ import app.opentv.player.MatchFeeds
 import app.opentv.player.ScoreboardReader
 import app.opentv.player.StreamProbe
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,7 +65,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val name: String,
         /** "1080p · 50 fps · 5.1", once looked at. */
         val detail: String? = null,
-        /** What the scoreboard said: "73' SCF BAY 0-2". */
+        /** The team codes the scoreboard showed: "SCF BAY". */
         val board: String? = null,
         /** Null while still to be looked at. */
         val verdict: AutoScan.Verdict? = null,
@@ -112,9 +111,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             val title = "${m.home.name} - ${m.away.name}"
             var rows = feeds.map { ScanRow(it.id, listOf(it.shownName, it.qualityLabel).filter(String::isNotBlank).joinToString(" · ")) }
             _scan.value = Scan(title, rows, 0)
-            val goals = async { if (m.phase == Phase.LIVE) repo.goals(m) else emptyList() }
             val prober = StreamProbe(graph.streamingHttpClient, getApplication<Application>().cacheDir)
-            val reader = ScoreboardReader()
+            val reader = ScoreboardReader(getApplication())
             val results = ArrayList<Pair<Channel, AutoScan.Probe?>>()
             val deadline = System.currentTimeMillis() + SCAN_BUDGET_MILLIS
             try {
@@ -126,7 +124,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     val text = r?.corner?.let { reader.read(it) }
                     r?.corner?.recycle()
                     val board = text?.let { AutoScan.parseBoard(it) }
-                    val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, it.fetchedAt, board) }
+                    val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board) }
                     results += feed to p
                     android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
                     val verdict = when {
@@ -140,12 +138,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 reader.close()
             }
-            // The halves' real start times, as of now, for the replay check.
-            val fresh = repo.today().firstOrNull { it.id == m.id } ?: m
             val ranked = AutoScan.rank(
                 results, m.home.name, m.away.name,
-                realClock = { AutoScan.realClock(it, fresh.firstHalfMillis, fresh.secondHalfMillis) },
-                goals = goals.await().map { Triple(it.clockSeconds, it.home, it.away) },
                 channel = { it.groupKey.ifEmpty { "#${it.id}" } },
             )
             val byId = rows.associateBy { it.id }
@@ -154,7 +148,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 unlooked.map { byId.getValue(it.id) }
             _scan.value = Scan(title, rows, feeds.size, finished = true)
             ranked.forEachIndexed { i, r ->
-                android.util.Log.i(TAG, "#${i + 1} ${r.item.shownName} ${r.item.qualityLabel}: ${r.verdict} score=${r.score} lag=${r.lagSeconds}")
+                android.util.Log.i(TAG, "#${i + 1} ${r.item.shownName} ${r.item.qualityLabel}: ${r.verdict} score=${r.score}")
             }
             val good = setOf(AutoScan.Verdict.OK, AutoScan.Verdict.CONFIRMED)
             val order = (ranked.filter { it.verdict in good }.map { it.item } + unlooked).ifEmpty { feeds }
@@ -172,11 +166,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         String.format(java.util.Locale.ITALY, "%.1f s", p.millis / 1000.0),
     ).joinToString(" · ")
 
-    private fun boardText(b: AutoScan.Board) = listOfNotNull(
-        b.clockSeconds?.let { "${it / 60}'" },
-        b.codes.take(2).joinToString(" ").ifEmpty { null },
-        if (b.home != null && b.away != null) "${b.home}-${b.away}" else null,
-    ).joinToString(" ")
+    private fun boardText(b: AutoScan.Board) = b.codes.take(2).joinToString(" ")
 
     // Highlights found stay found: the feed only keeps the latest uploads.
     private val highlights = HashMap<Long, String>()

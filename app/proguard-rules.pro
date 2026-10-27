@@ -69,3 +69,6 @@
 -dontwarn java.beans.**
 -dontwarn jdk.dynalink.**
 -dontwarn com.google.re2j.**
+
+# Tesseract4Android: the native side calls back into these by name.
+-keep class com.googlecode.tesseract.android.** { *; }

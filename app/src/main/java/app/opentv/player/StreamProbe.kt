@@ -35,8 +35,6 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         val audioChannels: Int?,
         /** Time to the video in hand, the stream's start-up cost. */
         val millis: Long,
-        /** When the video was fetched (epoch millis): its scoreboard clock was this moment, give or take the segment. */
-        val fetchedAt: Long,
         /** The top-left corner of a frame, where the scoreboard is. Null when no frame decoded. */
         val corner: Bitmap?,
     )
@@ -60,7 +58,6 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
                 fps = info.fps,
                 audioChannels = info.audioChannels,
                 millis = fetchedAt - t0,
-                fetchedAt = fetchedAt,
                 corner = corner(file),
             )
         }.getOrElse { Log.w(TAG, "probe failed", it); null }.also { file.delete() }

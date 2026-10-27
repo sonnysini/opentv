@@ -17,9 +17,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // NewPipeExtractor (in-app YouTube highlights) is only published on JitPack.
+        // NewPipeExtractor (in-app YouTube highlights) and Tesseract4Android (scoreboard OCR)
+        // are only published on JitPack.
         maven("https://jitpack.io") {
-            content { includeGroupByRegex("com\\.github\\.TeamNewPipe.*") }
+            content {
+                includeGroupByRegex("com\\.github\\.TeamNewPipe.*")
+                includeGroup("cz.adaptech.tesseract4android")
+            }
         }
     }
 }
