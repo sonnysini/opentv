@@ -457,7 +457,7 @@ private fun SourceRow(s: FootballViewModel.Source, place: Int, onFocus: () -> Un
     ) {
         val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
         val faint = if (focused) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-        Text("$place", Modifier.width(16.dp), color = faint, style = MaterialTheme.typography.labelMedium)
+        Text("$place", Modifier.width(22.dp), color = faint, style = MaterialTheme.typography.labelMedium, maxLines = 1)
         Text(
             parts.name,
             Modifier.weight(1f),
@@ -854,7 +854,7 @@ private fun action(item: FootballViewModel.Item, viewModel: FootballViewModel, p
 
 /** "1080p · 50 fps · 5.1" */
 private fun quality(p: AutoScan.Probe): String = listOfNotNull(
-    "${p.height}p",
+    FeedLabel.resolution(p.height),
     p.fps?.let { "$it fps" },
     "Audio HD".takeIf { p.audioHd },
     p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },

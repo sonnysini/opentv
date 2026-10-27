@@ -327,7 +327,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private fun nameOf(c: Channel) = listOf(c.shownName, c.qualityLabel).filter(String::isNotBlank).joinToString(" · ")
 
     private fun detail(p: AutoScan.Probe) = listOfNotNull(
-        "${p.height}p",
+        FeedLabel.resolution(p.height),
         p.fps?.let { "$it fps" },
         "Audio HD".takeIf { p.audioHd },
         p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
