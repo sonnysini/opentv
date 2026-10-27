@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.29.1 — 27 October 2026
+
+- **Cleaner feed list on the football home.** Feed names are short ("Lazio", "Zona DAZN SA1"),
+  the restream source sits small at the end ("DVS", "HQ", "SAT · HEVC"), and outlined tags in
+  the theme's colours show what the scan measured: ✓ right game, resolution, 50/60 FPS,
+  Audio HD, 5.1. Feeds not looked at yet show the quality their name claims, dashed; feeds that
+  don't start or show another game fade at the bottom.
+- **Audio HD.** E-AC3 (Dolby Digital Plus) audio is recognised and ranks a feed a little higher
+  (less than 5.1 does).
+
 ## 0.29.0 — 27 October 2026
 
 - **New football home.** The big card shows the next or live match with "⚡ Watch now" (it says

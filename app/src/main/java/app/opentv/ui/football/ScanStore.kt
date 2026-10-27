@@ -75,6 +75,7 @@ class ScanStore private constructor(private val dir: File) {
                         put("h", p.height)
                         p.fps?.let { put("fps", it) }
                         p.audioChannels?.let { put("ch", it) }
+                        if (p.audioHd) put("eac3", true)
                         put("ms", p.millis)
                         p.board?.let { put("board", JSONArray(it.codes)) }
                     }
@@ -105,6 +106,7 @@ class ScanStore private constructor(private val dir: File) {
                         audioChannels = if (o.has("ch")) o.getInt("ch") else null,
                         millis = o.getLong("ms"),
                         board = o.optJSONArray("board")?.let { b -> AutoScan.Board((0 until b.length()).map { b.getString(it) }) },
+                        audioHd = o.optBoolean("eac3"),
                     )
                 } else {
                     null

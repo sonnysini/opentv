@@ -30,6 +30,8 @@ object AutoScan {
         val audioChannels: Int?,
         val millis: Long,
         val board: Board?,
+        /** E-AC3 (Dolby Digital Plus) audio: rare on these feeds, a little better than plain AC3/AAC. */
+        val audioHd: Boolean = false,
     )
 
     data class Ranked<T>(val item: T, val probe: Probe?, val verdict: Verdict, val score: Int)
@@ -122,14 +124,16 @@ object AutoScan {
         )
     }
 
-    /** The quality part of the score: 50 fps above all, then lines, 5.1, start-up time. */
+    /** The quality part of the score: 50 fps above all, then lines, 5.1, E-AC3, start-up time. */
     fun quality(p: Probe): Int =
         (if ((p.fps ?: 0) >= 48) FPS50_BONUS else 0) + p.height / 2 +
-            (if ((p.audioChannels ?: 0) >= 6) SURROUND_BONUS else 0) - (p.millis / 50).toInt()
+            (if ((p.audioChannels ?: 0) >= 6) SURROUND_BONUS else 0) +
+            (if (p.audioHd) AUDIO_HD_BONUS else 0) - (p.millis / 50).toInt()
 
     private fun fold(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
     private const val FPS50_BONUS = 1000
     private const val SURROUND_BONUS = 50
+    private const val AUDIO_HD_BONUS = 20
     private const val CONFIRMED_BONUS = 200
 }
