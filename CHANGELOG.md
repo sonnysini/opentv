@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.29.0 — 27 October 2026
+
+- **New football home.** The big card shows the next or live match with "⚡ Watch now" (it says
+  which feed is ready and how good it is), the match's feeds listed best first, and a preview
+  picture of the feed under the cursor. Games on at the same time sit as tabs on the big card.
+- **Feeds looked at in the background.** While the football home is open, the feeds of live
+  matches and of those starting within 45 minutes are checked one at a time; results are kept
+  for 20 minutes and survive a restart. "Watch now" then plays at once, with no ranking pause.
+- **⚡ on every match card.** OK watches the best feed; hold OK to pick a channel by hand. Up/down
+  in the player now zaps through that match's feeds only, numbered as ranked.
+- **Quality list.** OK on Quality always opens the numbered list with full names (☰ still steps).
+- **Football home opens at once.** The calendar, the match channels and the highlights found are
+  kept on disk: FotMob is asked again only on a new day, an hour before a kick-off (a game put
+  off) and every minute while a game is on; channels are found again only when the channel list
+  or the guide changes, in one pass for all matches. About 10 s → under a second on a Fire TV.
+
 ## 0.28.2 — 26 October 2026
 
 - **Watch automatically no longer crashes on the Fire TV Stick 4K Max.** The scoreboard is now
