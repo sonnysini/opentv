@@ -6,9 +6,10 @@
 package app.opentv.player
 
 /**
- * A match's feeds ranked by "Watch automatically", handed to the player: it plays the first and
- * falls back, stall-switches and cycles (☰) along the ranking — across channels — instead of the
- * one channel's qualities. Taken once, by the player opening the first feed.
+ * A match's feeds, best first, handed to the player by the football home: playing one of them, the
+ * player falls back, stall-switches and cycles (☰) along this ranking — across channels — instead
+ * of the one channel's qualities. Kept until another list is played from, so zapping between the
+ * match's feeds stays in it.
  */
 object MatchFeeds {
     @Volatile private var ranked: List<Long> = emptyList()
@@ -17,10 +18,14 @@ object MatchFeeds {
         ranked = ids
     }
 
-    /** The ranking, when [channelId] is the feed it starts with; clears it either way. */
-    fun take(channelId: Long): List<Long>? {
-        val r = ranked
+    fun clear() {
         ranked = emptyList()
-        return r.takeIf { it.firstOrNull() == channelId }
+    }
+
+    /** The ranking with [channelId] first, when it is one of the match's feeds. */
+    fun forFeed(channelId: Long): List<Long>? {
+        val r = ranked
+        if (channelId !in r) return null
+        return listOf(channelId) + r.filter { it != channelId }
     }
 }

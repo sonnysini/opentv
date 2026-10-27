@@ -34,6 +34,18 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -72,8 +84,6 @@ import java.time.format.DateTimeFormatter
 
 private val LIVE_RED = Color(0xFFFF6B6B)
 
-/** "Watch automatically" shows from this long before kick-off. */
-
 /** YouTube on Fire TV, then on Google TV / Android TV. */
 private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
 
@@ -93,13 +103,36 @@ fun FootballScreen(
     val opening by viewModel.opening.collectAsState()
     val scan by viewModel.scan.collectAsState()
     val autoPlay by viewModel.autoPlay.collectAsState()
+    val progress by viewModel.progress.collectAsState()
+    // Re-read the feeds' looks whenever one lands.
+    val looks by viewModel.looks.collectAsState()
     LaunchedEffect(autoPlay) {
         autoPlay?.let {
             viewModel.autoPlayed()
             onPlayChannel(it)
         }
     }
+    // Feeds get looked at only while this screen is up: the player needs the one connection.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.setActive(true)
+                Lifecycle.Event.ON_PAUSE -> viewModel.setActive(false)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) viewModel.setActive(true)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.setActive(false)
+        }
+    }
     BackHandler(enabled = scan != null) { viewModel.cancelScan() }
+    // Hold OK on a card: its feeds to pick from by hand.
+    var picking by remember { mutableStateOf<FootballViewModel.Item?>(null) }
+    BackHandler(enabled = picking != null) { picking = null }
     val context = LocalContext.current
     val noYoutube = stringResource(R.string.football_no_youtube)
     val openInYouTube: (String) -> Unit = { id ->
@@ -129,12 +162,16 @@ fun FootballScreen(
     }
     val open: (FootballViewModel.Item) -> Unit = { item ->
         val highlight = item.highlights
-        val channel = item.channels.firstOrNull()?.channel
         when {
             item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
-            item.match.phase != Phase.FINISHED && channel != null -> onPlayChannel(channel)
+            item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> viewModel.autoWatch(item)
         }
     }
+    val hold: (FootballViewModel.Item) -> Unit = { item ->
+        if (item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty()) picking = item
+    }
+    // What a card says under the teams, the scan's state included.
+    val cardAction: @Composable (FootballViewModel.Item) -> String = { item -> action(item, viewModel, progress, looks) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -146,22 +183,40 @@ fun FootballScreen(
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                ui.hero?.let { hero -> item(key = "hero") { Hero(hero, onPlayChannel, onAuto = { viewModel.autoWatch(hero) }) } }
-                if (ui.live.isNotEmpty()) item(key = "live") {
-                    MatchRow(stringResource(R.string.football_live_row), ui.live, open)
+                ui.hero?.let { hero ->
+                    item(key = "hero") {
+                        Hero(
+                            tabs = ui.heroes,
+                            first = hero,
+                            viewModel = viewModel,
+                            looks = looks,
+                            progress = progress,
+                            onPlay = { item, feed -> viewModel.play(item, feed) },
+                        )
+                    }
                 }
-                if (ui.today.isNotEmpty()) item(key = "today") {
-                    MatchRow(stringResource(R.string.football_today), ui.today, open)
+                if (ui.live.isNotEmpty()) item(key = "live") {
+                    MatchRow(stringResource(R.string.football_live_row), ui.live, open, hold, cardAction, hint = true)
+                }
+                if (ui.today.isNotEmpty()) {
+                    val h = ui.live.isEmpty() && ui.today.any { it.match.phase != Phase.FINISHED }
+                    item(key = "today") { MatchRow(stringResource(R.string.football_today), ui.today, open, hold, cardAction, hint = h) }
                 }
                 if (ui.upcoming.isNotEmpty()) item(key = "upcoming") {
-                    MatchRow(stringResource(R.string.football_upcoming), ui.upcoming, open)
+                    MatchRow(stringResource(R.string.football_upcoming), ui.upcoming, open, hold, cardAction)
                 }
                 if (ui.lastRound.isNotEmpty()) item(key = "last_round") {
-                    MatchRow(stringResource(R.string.football_last_round), ui.lastRound, open)
+                    MatchRow(stringResource(R.string.football_last_round), ui.lastRound, open, hold, cardAction)
                 }
             }
         }
         scan?.let { ScanOverlay(it) }
+        picking?.let { item ->
+            SourcePicker(item, viewModel, looks) { feed ->
+                picking = null
+                viewModel.play(item, feed)
+            }
+        }
         // Reading the stream off YouTube takes a few seconds on a slow box: say so.
         if (opening != null) {
             Box(
@@ -187,75 +242,285 @@ private fun Message(text: String) {
 
 // ---- Hero ---------------------------------------------------------------------------------------
 
+/**
+ * The big card: the teams with "Watch now" under them, the match's feeds best first beside, and
+ * a picture of the feed in focus (or the best one). Games on together come as tabs along the top.
+ */
 @Composable
-private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit, onAuto: () -> Unit) {
+private fun Hero(
+    tabs: List<FootballViewModel.Item>,
+    first: FootballViewModel.Item,
+    viewModel: FootballViewModel,
+    looks: Int,
+    progress: FootballViewModel.Progress?,
+    onPlay: (FootballViewModel.Item, Channel) -> Unit,
+) {
+    var selectedId by rememberSaveable { mutableStateOf(first.match.id) }
+    val item = tabs.firstOrNull { it.match.id == selectedId } ?: tabs.firstOrNull() ?: first
     val m = item.match
     val watch = remember { FocusRequester() }
-    val first = item.channels.firstOrNull()
-    LaunchedEffect(m.id, first != null) { if (first != null) runCatching { watch.requestFocus() } }
+    val feeds = viewModel.feedsOf(item)
+    val sources = remember(item, looks) { viewModel.sources(item) }
+    val best = sources.firstOrNull { it.looked && it.usable }
+    var shown by remember(item.match.id) { mutableStateOf<Long?>(null) }
+    // The feed in focus, else the best: whichever has a picture.
+    val previewId = listOfNotNull(shown, best?.feed?.id).firstOrNull { viewModel.frame(it) != null }
+    LaunchedEffect(first.match.id, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
 
-    Row(
+    Box(
         Modifier
             .fillMaxWidth()
-            .height(240.dp)
+            .height(262.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(
                 Brush.horizontalGradient(
                     listOf(Color(0xFF16261B), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface),
                 ),
-            )
-            .padding(horizontal = 32.dp, vertical = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            ),
     ) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (m.phase == Phase.LIVE) {
-                    LiveBadge()
-                    Spacer(Modifier.width(10.dp))
+        // Room along the bottom for the scan's bar.
+        Row(Modifier.fillMaxSize().padding(start = 24.dp, end = 18.dp, top = 14.dp, bottom = 26.dp)) {
+            Column(Modifier.width(330.dp)) {
+                if (tabs.size >= 2) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(tabs, key = { it.match.id }) { t ->
+                            MatchTab(t, selected = t.match.id == item.match.id) { selectedId = t.match.id }
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (m.phase == Phase.LIVE) {
+                            LiveBadge()
+                            Spacer(Modifier.width(10.dp))
+                        }
+                        Text(
+                            m.round?.let { stringResource(R.string.football_round, it) } ?: "Serie A",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                Text(
-                    m.round?.let { stringResource(R.string.football_round, it) } ?: "Serie A",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HeroTeam(m.home)
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            centre(m),
+                            fontSize = if (m.phase == Phase.SCHEDULED) 32.sp else 40.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            heroStatus(m),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (m.phase == Phase.LIVE) LIVE_RED else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HeroTeam(m.away)
+                }
+                Spacer(Modifier.weight(1f))
+                if (feeds.isEmpty()) {
+                    Text(
+                        stringResource(if (m.phase == Phase.LIVE) R.string.football_no_channel else R.string.football_channels_soon),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    val sub = when {
+                        best != null -> stringResource(R.string.football_ready, best.name) +
+                            (best.probe?.let { " · " + quality(it) } ?: "") + " · " + ago(best.at)
+                        progress?.matchId == m.id -> stringResource(R.string.football_scanning_short, progress.done, progress.total)
+                        else -> stringResource(R.string.football_auto_hint)
+                    }
+                    WatchButton(Modifier.focusRequester(watch), sub) { viewModel.autoWatch(item) }
+                }
             }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HeroTeam(m.home)
-                Column(Modifier.width(150.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        centre(m),
-                        fontSize = if (m.phase == Phase.SCHEDULED) 34.sp else 46.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        heroStatus(m),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (m.phase == Phase.LIVE) LIVE_RED else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            if (feeds.isNotEmpty()) {
+                Spacer(Modifier.width(20.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.football_or_watch_on) + " · " + stringResource(R.string.football_best_first),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        SmallButton(stringResource(R.string.football_rescan)) { viewModel.rescan(item) }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(sources.size) { i ->
+                            val s = sources[i]
+                            SourceRow(s, place = i + 1, onFocus = { shown = s.feed.id }) { onPlay(item, s.feed) }
+                        }
+                    }
                 }
-                HeroTeam(m.away)
+                Spacer(Modifier.width(16.dp))
+                Preview(
+                    file = previewId?.let { viewModel.frame(it) },
+                    label = sources.firstOrNull { it.feed.id == previewId }?.let { "${it.name} · ${ago(it.at)}" },
+                    match = m,
+                    looks = looks,
+                    modifier = Modifier.width(230.dp).align(Alignment.CenterVertically),
+                )
             }
         }
-        Column(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (first == null) {
+        // Looking at feeds by itself: a thin bar along the bottom, and which game.
+        progress?.let { p ->
+            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
                 Text(
-                    stringResource(if (m.phase == Phase.LIVE) R.string.football_no_channel else R.string.football_channels_soon),
-                    style = MaterialTheme.typography.bodyLarge,
+                    stringResource(R.string.football_scanning_bar, p.title, p.done, p.total),
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else {
-                // Watch now = Watch automatically: every feed looked at, the best one plays.
-                WatchButton(Modifier.focusRequester(watch), onAuto)
-                Text(
-                    stringResource(R.string.football_or_watch_on),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                LinearProgressIndicator(
+                    progress = { if (p.total == 0) 0f else p.done / p.total.toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(item.channels, key = { it.channel.id }) { c -> ChannelChip(c.name) { onPlayChannel(c.channel) } }
+            }
+        }
+    }
+}
+
+/** A game on the big card's tabs: crests, score, minute. Focus selects it. */
+@Composable
+private fun MatchTab(item: FootballViewModel.Item, selected: Boolean, onSelect: () -> Unit) {
+    val m = item.match
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (focused) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF26352E) else MaterialTheme.colorScheme.surfaceVariant)
+            .then(if (selected && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onSelect()
+            }
+            .clickable(interactionSource = null, indication = null, onClick = onSelect)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        if (m.phase == Phase.LIVE) Text("●", color = LIVE_RED, fontSize = 10.sp)
+        Spacer(Modifier.width(4.dp))
+        Crest(m.home, 16)
+        Text(" ${centre(m)} ", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = fg)
+        Crest(m.away, 16)
+        if (m.phase == Phase.LIVE) m.minute?.let { Text(" $it", fontSize = 11.sp, color = fg) }
+    }
+}
+
+/** One feed in the big card's list: place, name, what its look found. OK plays it. */
+@Composable
+private fun SourceRow(s: FootballViewModel.Source, place: Int, onFocus: () -> Unit = {}, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val (mark, markColour) = when {
+        !s.looked -> "·" to MaterialTheme.colorScheme.onSurfaceVariant
+        s.usable -> "$place" to Color(0xFF6BDB8A)
+        else -> "✗" to LIVE_RED
+    }
+    val note = when {
+        !s.looked -> stringResource(R.string.football_not_looked)
+        s.verdict == AutoScan.Verdict.DEAD -> stringResource(R.string.football_auto_dead)
+        s.verdict == AutoScan.Verdict.WRONG_GAME -> stringResource(R.string.football_auto_wrong_game)
+        else -> s.probe?.let { quality(it) }.orEmpty()
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        val dim = if (s.usable || focused) 1f else 0.5f
+        Text(mark, Modifier.width(18.dp), color = if (focused) fg else markColour, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+        Text(
+            s.name,
+            Modifier.weight(1f),
+            color = fg.copy(alpha = dim),
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(note, color = (if (focused) fg else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = dim), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
+}
+
+/** The feed's picture from its look; before any, the two crests faint. */
+@Composable
+private fun Preview(file: java.io.File?, label: String?, match: Match, looks: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .height(130.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
+    ) {
+        if (file != null) {
+            AsyncImage(
+                // The same file is rewritten by a new look: key the request on it.
+                model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
+                    .memoryCacheKey("${file.path}#${file.lastModified()}#$looks").build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (label != null) {
+                Text(
+                    "● " + stringResource(R.string.football_preview) + " · " + label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        } else {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.alpha(0.18f)) { Crest(match.home, 80) }
+                Box(Modifier.alpha(0.18f)) { Crest(match.away, 80) }
+            }
+        }
+    }
+}
+
+/** Hold OK on a card: the match's feeds, best first, to pick one by hand. */
+@Composable
+private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewModel, looks: Int, onPick: (Channel) -> Unit) {
+    val sources = remember(item, looks) { viewModel.sources(item) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .width(460.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(18.dp),
+        ) {
+            Text(stringResource(R.string.football_pick_source), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${item.match.home.name} - ${item.match.away.name}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            LazyColumn(Modifier.height(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(sources.size) { i ->
+                    val s = sources[i]
+                    Box(if (i == 0) Modifier.focusRequester(first) else Modifier) {
+                        SourceRow(s, place = i + 1) { onPick(s.feed) }
+                    }
                 }
             }
         }
@@ -264,12 +529,12 @@ private fun Hero(item: FootballViewModel.Item, onPlayChannel: (Channel) -> Unit,
 
 @Composable
 private fun HeroTeam(team: Team) {
-    Column(Modifier.width(120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Crest(team, 76)
-        Spacer(Modifier.height(6.dp))
+    Column(Modifier.width(96.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Crest(team, 60)
+        Spacer(Modifier.height(4.dp))
         Text(
             team.name,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -279,7 +544,7 @@ private fun HeroTeam(team: Team) {
 }
 
 @Composable
-private fun WatchButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun WatchButton(modifier: Modifier = Modifier, sub: String, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Column(
         modifier
@@ -289,12 +554,29 @@ private fun WatchButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
             .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 9.dp),
     ) {
         val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        Text("▶  " + stringResource(R.string.football_watch), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = fg)
-        Text("⚡ " + stringResource(R.string.football_auto_hint), style = MaterialTheme.typography.bodyMedium, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("⚡ " + stringResource(R.string.football_watch), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = fg)
+        Text(sub, style = MaterialTheme.typography.bodySmall, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+}
+
+@Composable
+private fun SmallButton(text: String, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }
 
 /** The feeds being looked at, then their ranking, before the best one opens. */
@@ -346,27 +628,18 @@ private fun ScanLine(row: FootballViewModel.ScanRow) {
     }
 }
 
-@Composable
-private fun ChannelChip(name: String, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Text(
-        name,
-        style = MaterialTheme.typography.labelLarge,
-        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
-}
-
 // ---- Rows ---------------------------------------------------------------------------------------
 
 @Composable
-private fun MatchRow(title: String, items: List<FootballViewModel.Item>, onOpen: (FootballViewModel.Item) -> Unit) {
+private fun MatchRow(
+    title: String,
+    items: List<FootballViewModel.Item>,
+    onOpen: (FootballViewModel.Item) -> Unit,
+    onHold: (FootballViewModel.Item) -> Unit,
+    action: @Composable (FootballViewModel.Item) -> String,
+    /** Say what OK and holding OK do, under the row. */
+    hint: Boolean = false,
+) {
     Column(Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -379,13 +652,21 @@ private fun MatchRow(title: String, items: List<FootballViewModel.Item>, onOpen:
             contentPadding = PaddingValues(vertical = 6.dp, horizontal = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(items, key = { it.match.id }) { item -> MatchCard(item) { onOpen(item) } }
+            items(items, key = { it.match.id }) { item -> MatchCard(item, action(item), onHold = { onHold(item) }) { onOpen(item) } }
+        }
+        if (hint) {
+            Text(
+                stringResource(R.string.football_hold_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun MatchCard(item: FootballViewModel.Item, onClick: () -> Unit) {
+private fun MatchCard(item: FootballViewModel.Item, action: String, onHold: () -> Unit, onClick: () -> Unit) {
     val m = item.match
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp)
@@ -400,6 +681,7 @@ private fun MatchCard(item: FootballViewModel.Item, onClick: () -> Unit) {
                 else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape),
             )
             .onFocusChanged { focused = it.isFocused }
+            .onOkHeld(onHold)
             .clickable(interactionSource = null, indication = null, onClick = onClick),
     ) {
         val thumb = item.highlights
@@ -460,8 +742,9 @@ private fun MatchCard(item: FootballViewModel.Item, onClick: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                action(item),
+                action,
                 style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (action.startsWith("⚡")) FontWeight.Bold else null,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -471,14 +754,59 @@ private fun MatchCard(item: FootballViewModel.Item, onClick: () -> Unit) {
 }
 
 @Composable
-private fun action(item: FootballViewModel.Item): String = when {
+private fun action(item: FootballViewModel.Item, viewModel: FootballViewModel, progress: FootballViewModel.Progress?, looks: Int): String = when {
     item.match.phase == Phase.FINISHED ->
         if (item.highlights != null) "▶ " + stringResource(R.string.football_highlights)
         else stringResource(R.string.football_highlights_soon)
     item.match.phase == Phase.OFF -> "—"
-    item.channels.isNotEmpty() -> "▶ " + item.channels.first().name +
-        (if (item.channels.size > 1) "  +${item.channels.size - 1}" else "")
+    viewModel.feedsOf(item).isNotEmpty() -> {
+        val usable = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
+        "⚡ " + stringResource(R.string.football_watch) + when {
+            progress?.matchId == item.match.id -> " · " + stringResource(R.string.football_scanning_short, progress.done, progress.total)
+            usable > 0 -> " · " + stringResource(R.string.football_ready_count, usable)
+            else -> ""
+        }
+    }
     else -> stringResource(R.string.football_channels_soon)
+}
+
+/** "1080p · 50 fps · 5.1" */
+private fun quality(p: AutoScan.Probe): String = listOfNotNull(
+    "${p.height}p",
+    p.fps?.let { "$it fps" },
+    p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
+).joinToString(" · ")
+
+/** How long ago a feed was looked at: "4 min ago". */
+@Composable
+private fun ago(at: Long?): String {
+    val min = at?.let { ((System.currentTimeMillis() - it) / 60_000L).toInt() } ?: return ""
+    return if (min < 1) stringResource(R.string.football_just_now) else stringResource(R.string.football_minutes_ago, min)
+}
+
+/**
+ * Holding OK (centre or Enter) for a moment calls [onHeld] instead of the click: the key repeats
+ * while held, and the release that follows is swallowed.
+ */
+private fun Modifier.onOkHeld(onHeld: () -> Unit): Modifier = composed {
+    var held by remember { mutableStateOf(false) }
+    onPreviewKeyEvent { e ->
+        val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+        when {
+            !ok -> false
+            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 1 && !held -> {
+                held = true
+                onHeld()
+                true
+            }
+            e.type == KeyEventType.KeyDown && held -> true
+            e.type == KeyEventType.KeyUp && held -> {
+                held = false
+                true
+            }
+            else -> false
+        }
+    }
 }
 
 @Composable

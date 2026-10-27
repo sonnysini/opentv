@@ -407,7 +407,7 @@ fun PlayerScreen(
         listedId = channel.id
         listedChannel = channel
         // A match's feeds ranked by "Watch automatically": play down that ranking instead.
-        val ranked = MatchFeeds.take(channel.id)?.mapNotNull { graph.catalogRepository.channel(it) }
+        val ranked = MatchFeeds.forFeed(channel.id)?.mapNotNull { graph.catalogRepository.channel(it) }
         matchFeeds = !ranked.isNullOrEmpty()
         if (!ranked.isNullOrEmpty()) {
             variants = ranked
@@ -497,9 +497,15 @@ fun PlayerScreen(
     }
 
     /** Position of the playing channel in [queue], matched by any of its quality variants. */
-    fun queueIndex(): Int = queue.indexOfFirst { item ->
-        item.id == listedId || item.id == currentId || variants.any { it.id == item.id }
-    }
+    fun queueIndex(): Int =
+        // A match's feeds are each other's "variants": only the one picked says where we are.
+        if (matchFeeds) {
+            queue.indexOfFirst { it.id == listedId }
+        } else {
+            queue.indexOfFirst { item ->
+                item.id == listedId || item.id == currentId || variants.any { it.id == item.id }
+            }
+        }
 
     fun zapBy(delta: Int) {
         if (queue.isEmpty()) return

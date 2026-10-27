@@ -33,6 +33,18 @@
     <string name="football_auto_confirmed">right game</string>
     <string name="football_auto_wrong_game">another game</string>
     <string name="football_auto_dead">doesn\'t start</string>
+    <string name="football_ready">Ready: %1$s</string>
+    <string name="football_minutes_ago">%1$d min ago</string>
+    <string name="football_just_now">just now</string>
+    <string name="football_scanning_bar">Scanning %1$s · %2$d/%3$d</string>
+    <string name="football_scanning_short">scanning %1$d/%2$d</string>
+    <string name="football_ready_count">%1$d ready</string>
+    <string name="football_rescan">↻ Scan again</string>
+    <string name="football_best_first">best first</string>
+    <string name="football_not_looked">not tried yet</string>
+    <string name="football_hold_hint">OK = ⚡ watch now · hold OK = pick the channel</string>
+    <string name="football_pick_source">Pick the channel</string>
+    <string name="football_preview">PREVIEW</string>
     <string name="football_watch">Watch now</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">Live now</string>
