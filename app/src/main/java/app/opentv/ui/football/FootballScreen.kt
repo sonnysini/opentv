@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -74,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
 import app.opentv.data.model.Channel
+import app.opentv.data.model.shownName
 import app.opentv.data.repo.FootballRepository.Match
 import app.opentv.data.repo.FootballRepository.MatchChannel
 import app.opentv.data.repo.FootballRepository.Phase
@@ -428,24 +430,20 @@ private fun MatchTab(item: FootballViewModel.Item, selected: Boolean, onSelect: 
     }
 }
 
-/** One feed in the big card's list: place, name, what its look found. OK plays it. */
+/**
+ * One feed in the big card's list: place, short name, badges for what its look measured (✓ right
+ * game, resolution, 50 fps, Audio HD, 5.1), the restream source small at the end. Not looked at
+ * yet: the quality the name claims, dashed. Dead or another game: faded, at the bottom. OK plays it.
+ */
 @Composable
 private fun SourceRow(s: FootballViewModel.Source, place: Int, onFocus: () -> Unit = {}, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val (mark, markColour) = when {
-        !s.looked -> "·" to MaterialTheme.colorScheme.onSurfaceVariant
-        s.usable -> "$place" to Color(0xFF6BDB8A)
-        else -> "✗" to LIVE_RED
-    }
-    val note = when {
-        !s.looked -> stringResource(R.string.football_not_looked)
-        s.verdict == AutoScan.Verdict.DEAD -> stringResource(R.string.football_auto_dead)
-        s.verdict == AutoScan.Verdict.WRONG_GAME -> stringResource(R.string.football_auto_wrong_game)
-        else -> s.probe?.let { quality(it) }.orEmpty()
-    }
+    val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
+    val dim = if (s.usable || focused) 1f else 0.4f
     Row(
         Modifier
             .fillMaxWidth()
+            .alpha(dim)
             .clip(RoundedCornerShape(7.dp))
             .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
             .onFocusChanged {
@@ -455,20 +453,89 @@ private fun SourceRow(s: FootballViewModel.Source, place: Int, onFocus: () -> Un
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        val dim = if (s.usable || focused) 1f else 0.5f
-        Text(mark, Modifier.width(18.dp), color = if (focused) fg else markColour, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+        val faint = if (focused) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
+        Text("$place", Modifier.width(16.dp), color = faint, style = MaterialTheme.typography.labelMedium)
         Text(
-            s.name,
+            parts.name,
             Modifier.weight(1f),
-            color = fg.copy(alpha = dim),
+            color = fg,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Text(note, color = (if (focused) fg else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = dim), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        val p = s.probe
+        when {
+            !s.looked -> Badge("${parts.claimed}?", focused, dashed = true)
+            s.verdict == AutoScan.Verdict.DEAD -> Badge(stringResource(R.string.football_auto_dead).uppercase(), focused)
+            s.verdict == AutoScan.Verdict.WRONG_GAME -> Badge(stringResource(R.string.football_auto_wrong_game).uppercase(), focused)
+            p != null -> {
+                if (s.verdict == AutoScan.Verdict.CONFIRMED) Badge("✓", focused, accent = true)
+                Badge(FeedLabel.resolution(p.height), focused)
+                FeedLabel.smooth(p.fps)?.let { Badge(it, focused) }
+                if (p.audioHd) Badge("AUDIO HD", focused)
+                if ((p.audioChannels ?: 0) >= 6) Badge("5.1", focused)
+            }
+        }
+        Text(
+            parts.source,
+            Modifier.width(64.dp),
+            color = faint,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.sp,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
+}
+
+/**
+ * A thin-outlined tag ("1080p", "50 FPS"): neutral, in the theme's colours. [accent]: the one that
+ * means something (✓ right game) takes the primary colour — off the focused row, where it would
+ * vanish. [dashed]: a guess (the name's claim before any look).
+ */
+@Composable
+private fun Badge(text: String, focused: Boolean, accent: Boolean = false, dashed: Boolean = false) {
+    val scheme = MaterialTheme.colorScheme
+    val colour = when {
+        focused -> scheme.onPrimary
+        accent -> scheme.primary
+        dashed -> scheme.onSurfaceVariant.copy(alpha = 0.7f)
+        else -> scheme.onSurface.copy(alpha = 0.85f)
+    }
+    val line = when {
+        focused -> scheme.onPrimary.copy(alpha = 0.5f)
+        accent -> scheme.primary
+        else -> scheme.outlineVariant
+    }
+    Text(
+        text,
+        color = colour,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.8.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .drawBehind {
+                val r = 3.dp.toPx()
+                val w = 1.dp.toPx()
+                drawRoundRect(
+                    color = line,
+                    topLeft = androidx.compose.ui.geometry.Offset(w / 2, w / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(r),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = w,
+                        pathEffect = if (dashed) androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx())) else null,
+                    ),
+                )
+            }
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    )
 }
 
 /** The feed's picture from its look; before any, the two crests faint. */
@@ -789,6 +856,7 @@ private fun action(item: FootballViewModel.Item, viewModel: FootballViewModel, p
 private fun quality(p: AutoScan.Probe): String = listOfNotNull(
     "${p.height}p",
     p.fps?.let { "$it fps" },
+    "Audio HD".takeIf { p.audioHd },
     p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
 ).joinToString(" · ")
 

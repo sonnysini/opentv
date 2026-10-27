@@ -280,7 +280,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val text = r?.corner?.let { reader.read(it) }
         r?.corner?.recycle()
         val board = text?.let { AutoScan.parseBoard(it) }
-        val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board) }
+        val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board, it.audioHd) }
         android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
         store.put(feed.id, p, r?.preview)
         _looks.value++
@@ -329,6 +329,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private fun detail(p: AutoScan.Probe) = listOfNotNull(
         "${p.height}p",
         p.fps?.let { "$it fps" },
+        "Audio HD".takeIf { p.audioHd },
         p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
         String.format(java.util.Locale.ITALY, "%.1f s", p.millis / 1000.0),
     ).joinToString(" · ")

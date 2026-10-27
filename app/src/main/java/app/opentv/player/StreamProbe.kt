@@ -33,6 +33,8 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         val height: Int,
         val fps: Int?,
         val audioChannels: Int?,
+        /** An E-AC3 (Dolby Digital Plus) audio track. */
+        val audioHd: Boolean = false,
         /** Time to the video in hand, the stream's start-up cost. */
         val millis: Long,
         /** The top-left corner of a frame, where the scoreboard is. Null when no frame decoded. */
@@ -60,6 +62,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
                 height = info.height,
                 fps = info.fps,
                 audioChannels = info.audioChannels,
+                audioHd = info.audioHd,
                 millis = fetchedAt - t0,
                 corner = corner,
                 preview = preview,
@@ -117,7 +120,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         return lines.lastOrNull { it.isNotEmpty() && !it.startsWith("#") }
     }
 
-    private data class Info(val width: Int, val height: Int, val fps: Int?, val audioChannels: Int?)
+    private data class Info(val width: Int, val height: Int, val fps: Int?, val audioChannels: Int?, val audioHd: Boolean)
 
     private fun inspect(file: File): Info? {
         val ex = MediaExtractor()
@@ -127,6 +130,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
             var width = 0
             var height = 0
             var audio: Int? = null
+            var audioHd = false
             for (i in 0 until ex.trackCount) {
                 val f = ex.getTrackFormat(i)
                 val mime = f.getString(MediaFormat.KEY_MIME).orEmpty()
@@ -137,6 +141,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
                 } else if (mime.startsWith("audio/")) {
                     val ch = f.intOr(MediaFormat.KEY_CHANNEL_COUNT)
                     if (ch > (audio ?: 0)) audio = ch
+                    if (mime.startsWith(MediaFormat.MIMETYPE_AUDIO_EAC3)) audioHd = true
                 }
             }
             if (video < 0 || height == 0) return null
@@ -148,7 +153,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
                 times += t
                 if (!ex.advance()) break
             }
-            return Info(width, height, fpsOf(times), audio)
+            return Info(width, height, fpsOf(times), audio, audioHd)
         } finally {
             ex.release()
         }
