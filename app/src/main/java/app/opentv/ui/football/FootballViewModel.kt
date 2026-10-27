@@ -115,6 +115,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Each match's feeds, best quality first within a channel, as looked at and listed. */
     @Volatile private var feeds: Map<Long, List<Channel>> = emptyMap()
+    /** Per match: the home team channel's feeds and the away team's (its spare). */
+    @Volatile private var teams: Map<Long, Teams> = emptyMap()
+
+    private class Teams(val home: Set<Long>, val spare: Set<Long>)
 
     private var active = false
     private var worker: Job? = null
@@ -154,12 +158,27 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     fun feedsOf(item: Item): List<Channel> = feeds[item.match.id].orEmpty()
 
     /**
-     * [item]'s feeds best first: the ones looked at ranked by [AutoScan], then the ones still to
-     * look at in channel order, then the dead and the wrong game.
+     * The feeds of [item] to look at: the away team's channel carries the very same DAZN feed as
+     * the home team's, so it's looked at only once none of the home team's feeds plays the game.
      */
-    fun sources(item: Item): List<Source> {
-        val m = item.match
+    private fun toLook(item: Item): List<Channel> {
         val all = feedsOf(item)
+        val t = teams[item.match.id] ?: return all
+        if (t.home.isEmpty() || t.spare.isEmpty()) return all
+        val homePending = all.any { it.id in t.home && store.fresh(it.id) == null }
+        val homeWorks = rank(item, all.filter { it.id in t.home }).any { it.looked && it.usable }
+        return if (homePending || homeWorks) all.filter { it.id !in t.spare } else all
+    }
+
+    /**
+     * [item]'s feeds best first: the ones looked at ranked by [AutoScan], then the ones still to
+     * look at in channel order, then the dead and the wrong game. The away team's spare feeds
+     * aren't there unless the home team's all failed.
+     */
+    fun sources(item: Item): List<Source> = rank(item, toLook(item))
+
+    private fun rank(item: Item, all: List<Channel>): List<Source> {
+        val m = item.match
         val looks = all.mapNotNull { f -> store.fresh(f.id)?.let { f to it.probe } }
         val ranked = AutoScan.rank(looks, m.home.name, m.away.name, channel = { it.groupKey.ifEmpty { "#${it.id}" } })
         val lookedIds = looks.mapTo(HashSet()) { it.first.id }
@@ -172,7 +191,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     fun frame(feedId: Long): java.io.File? = store.frame(feedId)
 
     /** Whether every feed of [item] has a fresh look. */
-    fun ready(item: Item): Boolean = feedsOf(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(it.id) != null } }
+    fun ready(item: Item): Boolean = toLook(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(it.id) != null } }
 
     /** "Scan again": [item]'s looks dropped, looked at afresh. */
     fun rescan(item: Item) {
@@ -228,7 +247,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     val f = focus
                     if (f != null) {
                         val overBudget = System.currentTimeMillis() - focusStarted > SCAN_BUDGET_MILLIS
-                        val next = if (overBudget) null else feedsOf(f).firstOrNull { store.fresh(it.id) == null }
+                        val next = if (overBudget) null else toLook(f).firstOrNull { store.fresh(it.id) == null }
                         if (next == null) {
                             finishFocus(f)
                             // The player is about to take the connection: no more looks until back.
@@ -245,7 +264,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                         continue
                     }
                     val (item, feed) = bg
-                    val all = feedsOf(item)
+                    val all = toLook(item)
                     val m = item.match
                     _progress.value = Progress(m.id, "${m.home.name} - ${m.away.name}", all.count { store.fresh(it.id) != null }, all.size)
                     look(feed, prober, reader)
@@ -261,12 +280,13 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val now = System.currentTimeMillis()
         val window = if (BuildConfig.DEBUG) DEBUG_WINDOW_MILLIS else AHEAD_MILLIS
         val ui = _ui.value
-        val candidates = (listOfNotNull(ui.hero) + ui.live + ui.today + ui.upcoming)
+        // ui.heroes: games on together are tabs of the big card, in none of the rows.
+        val candidates = (listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming)
             .distinctBy { it.match.id }
             .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
             .sortedBy { it.match.kickoffUtcMillis }
         for (item in candidates) {
-            val next = feedsOf(item).firstOrNull { store.fresh(it.id) == null } ?: continue
+            val next = toLook(item).firstOrNull { store.fresh(it.id) == null } ?: continue
             return item to next
         }
         return null
@@ -289,7 +309,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     /** The scan screen for [item], from what's known of its feeds so far. */
     private fun publishFocus(item: Item) {
         val m = item.match
-        val all = feedsOf(item)
+        val all = toLook(item)
         val rows = all.map { f ->
             val e = store.fresh(f.id)
             val p = e?.probe
@@ -394,6 +414,9 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // looking them up is a query per channel, a second or so for a whole matchday.
         val first = (listOfNotNull(hero) + heroes).distinctBy { it.match.id }
         feeds = feeds + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsFor(it) }
+        // The worker may have found nothing to look at yet (Calcio opened before the first load):
+        // wake it now, not at the end of its idle wait.
+        wake.trySend(Unit)
         _ui.value = UiState(
             loading = false,
             hero = hero,
@@ -412,6 +435,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 val id = item.match.id
                 id to ((if (id in firstIds) known[id] else null) ?: feedsFor(item))
             }
+        wake.trySend(Unit)
         // The cards re-read their feeds along with the looks.
         _looks.value++
         // After the rest is on screen: highlights not found yet (the YouTube feed; older ones may
@@ -430,11 +454,17 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun feedsFor(item: Item): List<Channel> {
         val catalog = graph.catalogRepository
-        return item.channels
-            .flatMap { mc -> catalog.variants(mc.channel).sortedByDescending { it.qualityRank } }
-            .distinctBy { it.id }
-            .filterNot { SD.containsMatchIn(it.qualityLabel) }
-            .take(MAX_FEEDS)
+        val per = item.channels.map { mc ->
+            mc to catalog.variants(mc.channel).sortedByDescending { it.qualityRank }
+                .filterNot { SD.containsMatchIn(it.qualityLabel) }
+        }
+        val out = per.flatMap { it.second }.distinctBy { it.id }.take(MAX_FEEDS)
+        val spare = per.filter { it.first.spare }.flatMap { p -> p.second.map { it.id } }.toSet()
+        // The home team's channel comes first in [Item.channels] when there's a spare.
+        val home = if (spare.isEmpty()) emptySet()
+        else per.firstOrNull { !it.first.spare }?.second?.mapTo(HashSet()) { it.id }.orEmpty() - spare
+        teams = teams + (item.match.id to Teams(home, spare))
+        return out
     }
 
     private companion object {
