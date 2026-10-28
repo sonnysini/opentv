@@ -598,14 +598,28 @@ class EpgRepository(
         /**
          * One guide per channel id. Two guides can publish the same id (`Rai3.it` from the
          * provider and from a free guide); merged, their schedules overlap in the grid. Keeps
-         * the guide with the most entries for each id.
+         * the guide that reads like a schedule: most entries, minus the ones that start before
+         * the previous one ended. A provider copy listing every slot twice an hour apart has
+         * more entries than the clean guide, and must not win on that.
          */
         fun onePerChannel(programmes: List<Programme>): List<Programme> {
             if (programmes.isEmpty()) return programmes
-            val feeds = programmes.groupingBy { it.feedId }.eachCount()
-            if (feeds.size == 1) return programmes
-            val best = feeds.maxBy { it.value }.key
+            val byFeed = programmes.groupBy { it.feedId }
+            if (byFeed.size == 1) return programmes
+            val best = byFeed.maxBy { (_, list) -> scheduleScore(list) }.key
             return programmes.filter { it.feedId == best }
+        }
+
+        /** Entries in a feed's schedule for one channel, each overlap counted against it twice. */
+        internal fun scheduleScore(programmes: List<Programme>): Int {
+            val sorted = programmes.sortedBy { it.startUtcMillis }
+            var overlaps = 0
+            var lastEnd = Long.MIN_VALUE
+            for (p in sorted) {
+                if (p.startUtcMillis < lastEnd) overlaps++
+                lastEnd = maxOf(lastEnd, p.endUtcMillis)
+            }
+            return sorted.size - 2 * overlaps
         }
 
         val BUILT_IN_FEEDS: List<Pair<String, String>> = listOf(

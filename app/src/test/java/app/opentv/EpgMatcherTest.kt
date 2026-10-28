@@ -233,4 +233,18 @@ class EpgMatcherTest {
         assertThat(EpgMatcher.similar("skyserie+1", "skyserie")).isFalse()
         assertThat(EpgMatcher.similar("skycinemasuspence", "skycinemasuspense")).isTrue()
     }
+
+    @Test
+    fun `of two guides with one id, the clean schedule beats the one listing slots twice`() {
+        val h = 3_600_000L
+        fun p(feed: Long, start: Long, end: Long) =
+            app.opentv.data.model.Programme(feedId = feed, epgChannelId = "SkySportF1.it", startUtcMillis = start * h, endUtcMillis = end * h, title = "x")
+        // Feed 1 (provider): every slot twice, an hour apart — more entries, overlapping.
+        val provider = listOf(p(1, 0, 1), p(1, 1, 2), p(1, 2, 3), p(1, 1, 2), p(1, 2, 3), p(1, 3, 4))
+        // Feed 2 (free guide): one clean run.
+        val clean = listOf(p(2, 0, 1), p(2, 1, 2), p(2, 2, 3), p(2, 3, 4))
+
+        assertThat(app.opentv.data.repo.EpgRepository.onePerChannel(provider + clean).map { it.feedId }.distinct())
+            .containsExactly(2L)
+    }
 }
