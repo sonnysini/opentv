@@ -609,18 +609,21 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             // What plays on click and in the preview: the user's preferred quality, not always the best.
             val primary = QualityPreference.order(variants, preferredQuality).first()
 
-            // Walk every variant's guide-id candidates (override → provider → matched)
-            // and use the first that actually has programmes. An id that never lights up
-            // must not shadow a sibling variant whose id does.
+            // Walk every variant's guide-id candidates (override → matched → provider)
+            // and use the first that actually has programmes in the window. An id that never
+            // lights up — or only holds programmes that are over — must not shadow a sibling
+            // variant whose id does.
             val windowStart = windowStartMillis.value
             val list = variants
                 .flatMap { it.epgCandidates }
+                .distinct()
                 .firstNotNullOfOrNull { id ->
-                    byEpgChannel[id] ?: TimeShift.decode(id)?.let { (base, offset) ->
+                    (byEpgChannel[id] ?: TimeShift.decode(id)?.let { (base, offset) ->
                         byEpgChannel[base]?.let { TimeShift.shift(it, offset, id) }
-                    }
+                    })
+                        ?.filter { it.endUtcMillis > windowStart }
+                        ?.takeIf { it.isNotEmpty() }
                 }
-                ?.filter { it.endUtcMillis > windowStart }
                 ?.sortedBy { it.startUtcMillis }
                 .orEmpty()
 

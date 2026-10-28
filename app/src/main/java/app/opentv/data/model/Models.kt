@@ -175,17 +175,13 @@ data class Channel(
 ) {
     /**
      * The guide ids worth trying for this channel, most trustworthy first. The UI walks
-     * them in order and uses the first that actually has programmes — a provider-supplied
-     * id pointing at a guide the provider never ships must not shadow a working match.
+     * them in order and uses the first that actually has programmes. The matched id is the
+     * matcher's final word (the provider's id when it holds up, else the name match, or a
+     * timeshift computed from the base channel), so it goes before the provider's raw id —
+     * which stays as the last resort for channels the matcher hasn't seen yet.
      */
     val epgCandidates: List<String>
-        get() = if (matchedEpgId != null && TimeShift.decode(matchedEpgId) != null) {
-            // A computed timeshift (`Rai1.it@+1h`) is only set when the provider's own id is
-            // missing, empty, or just the base channel's guide an hour early — so it goes first.
-            listOfNotNull(epgOverrideId, matchedEpgId, epgChannelId)
-        } else {
-            listOfNotNull(epgOverrideId, epgChannelId, matchedEpgId)
-        }
+        get() = listOfNotNull(epgOverrideId, matchedEpgId, epgChannelId).distinct()
 }
 
 /** Programme count per guide id: how much guide an id really carries. */

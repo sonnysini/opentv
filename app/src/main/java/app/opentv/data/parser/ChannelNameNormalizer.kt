@@ -85,6 +85,12 @@ object ChannelNameNormalizer {
     private val BANDWIDTH_NOTE = Regex("""\b(?:richiede|requires?)\s*\d+\s*mbps\b""", RegexOption.IGNORE_CASE)
     /** Timeshift: `+1`, `+ 1`, `+24`, also glued to the name (`Food Network+1`). */
     private val TIMESHIFT = Regex("""\+\s*(\d{1,2})(?!\d)""")
+    /** A `+` that is not a timeshift is part of the name: `Sky Uno +`, `Disney+` read as Plus. */
+    private val BARE_PLUS = Regex("""\+""")
+    /** Availability notes public lists append: `Rai 1 (720p) [Geo-blocked]`, `[Not 24/7]`. */
+    private val AVAILABILITY_NOTE = Regex("""\[\s*(?:not\s*24\s*/\s*7|geo[\s-]*blocked)\s*]""", RegexOption.IGNORE_CASE)
+    /** A bare resolution in lines: `540p`, `1080i`. The named ones are in [QUALITY_RANKS]. */
+    private val RESOLUTION = Regex("""(\d{3,4})[PI]""")
     private val STRONG_MARKERS = setOf("HDR", "DOLBY", "VISION")
 
     /**
@@ -170,6 +176,7 @@ object ChannelNameNormalizer {
         }
 
         working = BANDWIDTH_NOTE.replace(working, " ")
+        working = AVAILABILITY_NOTE.replace(working, " ")
         // Source tags before the country prefix: `[SRC]` would otherwise pass for a country.
         BRACKET_SOURCE.find(working)?.let { m ->
             if (m.groupValues[1].uppercase() in sourceTags) {
@@ -200,6 +207,9 @@ object ChannelNameNormalizer {
             timeshift = m.groupValues[1].trimStart('0').ifEmpty { "0" }
             working = working.removeRange(m.range)
         }
+        // Any `+` left is a word. Without this `Sky Uno +` and `Sky Uno` share a key, and a
+        // guide carrying both can't be matched to either.
+        working = BARE_PLUS.replace(working, " Plus ")
 
         // Country prefix BEFORE decoration stripping: the brackets in `[UK]` are the
         // delimiter, and the decoration pass would eat them and lose the tag.
@@ -231,7 +241,7 @@ object ChannelNameNormalizer {
                 i++
             }
 
-            val rank = QUALITY_RANKS[upper]
+            val rank = QUALITY_RANKS[upper] ?: resolutionRank(upper)
             when {
                 // `HDR PLUS` is a stream marker; `Disney Plus` / `Boing Plus` are channels.
                 upper == "PLUS" && labelParts.lastOrNull()?.uppercase() in STRONG_MARKERS -> labelParts += bare
@@ -303,6 +313,18 @@ object ChannelNameNormalizer {
         if (!hevc && !raw) return rank
         val base = if (rank == 0) FHD_RANK else rank
         return base + if (hevc) HEVC_BONUS else RAW_BONUS
+    }
+
+    /** `540P` → SD, `1080I` → FHD: the lines no table lists. Null when the token isn't one. */
+    private fun resolutionRank(upper: String): Int? {
+        val lines = RESOLUTION.matchEntire(upper)?.groupValues?.get(1)?.toInt() ?: return null
+        return when {
+            lines < 240 -> null
+            lines >= 2160 -> 400
+            lines >= 1080 -> 300
+            lines >= 720 -> 200
+            else -> 100
+        }
     }
 
     /** The resolution tier of a rank (`320` HEVC 1080p → `300`), dropping the codec bonus. */

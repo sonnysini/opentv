@@ -329,6 +329,7 @@ class EpgRepository(
      * Returns (channels with a working guide id, total channels).
      */
     suspend fun runMatcher(): Pair<Int, Int> {
+        val startedAt = System.currentTimeMillis()
         // Only ids that actually have programmes count — and only those are matched to. A
         // guide that lists a channel but never fills it (epgshare's empty `TG.NORBA.24.it`)
         // must not win over another guide that does.
@@ -372,8 +373,35 @@ class EpgRepository(
         var matched = 0
         var guideLogos = 0
 
-        // Pass 1: ordinary channels. Remember each one's working guide and logo by key, for
-        // the timeshift copies in pass 2.
+        val rawKeys = HashMap<Long, String>()
+        fun rawKey(channel: Channel) =
+            rawKeys.getOrPut(channel.id) { ChannelNameNormalizer.normalize(channel.name).groupKey }
+
+        /**
+         * The channel's guide by name. Its stored key first; then, exact only, the key before
+         * [ChannelNameNormalizer.keyAliases] folded it (`Sky Nature` filed as `nature` because the
+         * list also has a `Nature`): guides spell the full name.
+         */
+        fun byName(channel: Channel): EpgMatcher.Match? =
+            index.find(channel.groupKey) ?: rawKey(channel)
+                .takeIf { it != channel.groupKey }
+                ?.let(index::exact)
+                ?.let { EpgMatcher.Match(it, EpgMatcher.Tier.EXACT) }
+
+        /**
+         * Whether the provider's own guide id can be believed. Providers copy ids between
+         * channels (`Discovery Channel` → `Disney Plus Animazione`), so the id has to look like
+         * the channel — unless the name finds nothing better, in which case it is all there is.
+         */
+        fun providerAgrees(channel: Channel, id: String, exactByName: String?): Boolean {
+            if (exactByName == null || exactByName == id) return true
+            val keys = listOf(channel.groupKey, rawKey(channel))
+            return index.keysOf(id).any { guideKey -> keys.any { EpgMatcher.similar(guideKey, it) } }
+        }
+
+        // Pass 1: ordinary channels. The matched id is the matcher's final word — the provider's
+        // id when it holds up, else the name match — so every reader can simply try it first.
+        // Remember each one's guide and logo by key, for the timeshift copies in pass 2.
         val baseGuide = HashMap<String, String>()
         val baseLogo = HashMap<String, String>()
         val baseGuideLogo = HashMap<String, String>()
@@ -384,13 +412,16 @@ class EpgRepository(
                 shifted += channel to split
                 continue
             }
-            val newMatch = index.match(channel.groupKey)
+            val named = byName(channel)
+            val exactByName = named?.takeIf { it.tier == EpgMatcher.Tier.EXACT }?.epgId
+            val provider = channel.epgChannelId?.takeIf { populated(it) && providerAgrees(channel, it, exactByName) }
+            val newMatch = provider ?: named?.epgId
             if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
-            val working = (listOfNotNull(channel.epgOverrideId, channel.epgChannelId) + listOfNotNull(newMatch))
-                .firstOrNull(::populated)
+            val working = (listOfNotNull(channel.epgOverrideId, newMatch)).firstOrNull(::populated)
             if (working != null) {
                 matched++
                 baseGuide.putIfAbsent(channel.groupKey, working)
+                baseGuide.putIfAbsent(rawKey(channel), working)
             }
             channel.logoUrl?.takeIf { it.isNotBlank() }?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
             val guideLogo = guideLogoOf(channel.groupKey, working)
@@ -400,25 +431,33 @@ class EpgRepository(
         }
 
         // Pass 2: `+1`/`+2`/`+3` copies. Their own guide if one exists; otherwise the base
-        // channel's, moved later. A provider id that is just the base's guide (it happens:
-        // `Italia 1 +1` → `Italia1.it`) would show the schedule an hour early — skipped.
+        // channel's, moved later. A provider id has to be a guide for the same timeshift: one
+        // that is just the base's guide (it happens: `Italia 1 +1` → `Italia1.it`) would show
+        // the schedule an hour early. Only an exact name beats the base's guide moved later —
+        // a typo-tolerant or prefix one may well be another channel's `+1`.
         for ((channel, split) in shifted) {
             val (baseKey, hours) = split
-            val base = baseGuide[baseKey]
-            val own = index.match(channel.groupKey)
-            val providerOwn = channel.epgChannelId?.takeIf { populated(it) && it != base }
+            val base = baseGuide[baseKey] ?: TimeShift.splitKey(rawKey(channel))?.first?.let(baseGuide::get)
+            val own = byName(channel)?.takeIf { it.epgId != base && (it.tier == EpgMatcher.Tier.EXACT || base == null) }
+            val shift = EpgMatcher.splitShift(channel.groupKey).second
+            val providerOwn = channel.epgChannelId?.takeIf { id ->
+                populated(id) && id != base && index.keysOf(id).any { EpgMatcher.splitShift(it).second == shift }
+            }
+            // A free guide's own `+1` first, then the base's guide moved later, and only then the
+            // provider's `+1`: providers often ship copies that mix shifted and unshifted times
+            // (Sky Sport F1 +1 listed the same slot twice, an hour apart).
             val newMatch = when {
-                own != null && own != base -> own
-                providerOwn != null -> null
+                own != null -> own.epgId
                 base != null -> TimeShift.encode(base, hours)
+                providerOwn != null -> providerOwn
                 else -> null
             }
             if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
-            if (populated(channel.epgOverrideId) || providerOwn != null || newMatch != null) matched++
+            if (populated(channel.epgOverrideId) || newMatch != null) matched++
             if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
             // The base channel's logo first: a `+1` is the same channel, and guides often give
             // the copies a poorer icon or a mismatched one.
-            val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own).firstOrNull(::populated)
+            val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own?.epgId).firstOrNull(::populated)
             val guideLogo = baseGuideLogo[baseKey] ?: ownGuide?.let { guideLogoOf(channel.groupKey, it) }
             if (guideLogo != null) guideLogos++
             if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
@@ -427,7 +466,8 @@ class EpgRepository(
         Log.i(
             TAG,
             "Matcher: $matched of ${channels.size} channels have a working guide " +
-                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo)",
+                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo) " +
+                "in ${System.currentTimeMillis() - startedAt} ms",
         )
         return matched to channels.size
     }
@@ -558,14 +598,28 @@ class EpgRepository(
         /**
          * One guide per channel id. Two guides can publish the same id (`Rai3.it` from the
          * provider and from a free guide); merged, their schedules overlap in the grid. Keeps
-         * the guide with the most entries for each id.
+         * the guide that reads like a schedule: most entries, minus the ones that start before
+         * the previous one ended. A provider copy listing every slot twice an hour apart has
+         * more entries than the clean guide, and must not win on that.
          */
         fun onePerChannel(programmes: List<Programme>): List<Programme> {
             if (programmes.isEmpty()) return programmes
-            val feeds = programmes.groupingBy { it.feedId }.eachCount()
-            if (feeds.size == 1) return programmes
-            val best = feeds.maxBy { it.value }.key
+            val byFeed = programmes.groupBy { it.feedId }
+            if (byFeed.size == 1) return programmes
+            val best = byFeed.maxBy { (_, list) -> scheduleScore(list) }.key
             return programmes.filter { it.feedId == best }
+        }
+
+        /** Entries in a feed's schedule for one channel, each overlap counted against it twice. */
+        internal fun scheduleScore(programmes: List<Programme>): Int {
+            val sorted = programmes.sortedBy { it.startUtcMillis }
+            var overlaps = 0
+            var lastEnd = Long.MIN_VALUE
+            for (p in sorted) {
+                if (p.startUtcMillis < lastEnd) overlaps++
+                lastEnd = maxOf(lastEnd, p.endUtcMillis)
+            }
+            return sorted.size - 2 * overlaps
         }
 
         val BUILT_IN_FEEDS: List<Pair<String, String>> = listOf(
