@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.1 — 28 October 2026
+
+- **Football: the Serie A goal channel** ("Diretta Gol Serie A") is listed under every Serie A
+  match, last. It has no guide, so it was never found; goal channels of other competitions stay
+  out.
+
 ## 0.31.0 — 28 October 2026
 
 - **Football: a match's scan holds for the whole game.** Watch now used to look at the feeds again
