@@ -287,8 +287,11 @@ class RecordingEngine(
         val now = System.currentTimeMillis()
         for (rule in rules) {
             val channel = channelDao.byId(rule.channelId) ?: continue
+            // The first guide that has programmes, as the guide and the player show: mixing
+            // in the others would record from a guide the matcher turned down.
             val upcoming = channel.epgCandidates
-                .flatMap { epgId -> epgRepository.upcoming(epgId, now, 200) }
+                .firstNotNullOfOrNull { epgId -> epgRepository.upcoming(epgId, now, 200).takeIf { it.isNotEmpty() } }
+                .orEmpty()
                 .distinctBy { it.startUtcMillis to it.title }
             scheduleMatching(channel, rule.titleKey, rule.id, upcoming)
         }

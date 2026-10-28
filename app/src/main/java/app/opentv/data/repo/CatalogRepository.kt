@@ -1266,7 +1266,7 @@ class CatalogRepository(
          * already-imported channels. The app compares it against a stored value on launch
          * and runs [renormalizeAll] once when it moves.
          */
-        const val NORMALIZER_VERSION = 8
+        const val NORMALIZER_VERSION = 9
         private const val MAX_MERGE_HOPS = 8
     }
 }

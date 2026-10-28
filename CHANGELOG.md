@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.29.3 — 28 October 2026
+
+- **More channels find their guide, and fewer get the wrong one.** The guide matcher was checked
+  against a real Italian list, the same list without the provider's guide ids, and a public
+  playlist:
+  - a guide that lists two channels under one name no longer blocks the other guides from
+    matching it;
+  - a `+` that is not a timeshift is part of the name (`Sky Uno +` is Sky Uno Plus, not Sky Uno);
+  - small typos on long names are forgiven (`Suspence`, `Documentaris`, `Fisching`), never
+    across a number (`27 Mediaset` is not `20 Mediaset`) or a timeshift;
+  - `+2` no longer takes the guide of `+24`, and a `+1` no longer shows its base channel's guide
+    when the provider gives it the base's id;
+  - the provider's guide id is checked against the channel's name (`Discovery Channel` carrying
+    `Disney Plus Animazione` is turned down when the name finds the right guide);
+  - a channel filed under a shorter name (`Sky Nature` → `Nature`) is also looked up by its
+    full name.
+- **A guide id with only finished programmes no longer hides the next one**: the guide row
+  moves on to the channel's next candidate.
+- `(540p)`, `(1080i)`, `[Not 24/7]` and `[Geo-blocked]` in channel names are recognised.
+
 ## 0.29.2 — 27 October 2026
 
 - **Faster football scan.** The home and away team channels carry the same DAZN feed, so only

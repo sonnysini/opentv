@@ -317,4 +317,24 @@ class ChannelNameNormalizerTest {
         assertThat(ChannelNameNormalizer.normalize("VH- 1").region).isNull()
         assertThat(ChannelNameNormalizer.normalize("UK| BBC ONE").region).isEqualTo("UK")
     }
+
+    @Test
+    fun `a bare plus reads as Plus, a timeshift stays a timeshift`() {
+        assertThat(ChannelNameNormalizer.normalize("IT - Sky Uno +").groupKey).isEqualTo("skyunoplus")
+        assertThat(ChannelNameNormalizer.normalize("Sky UNO Plus FHD").groupKey).isEqualTo("skyunoplus")
+        assertThat(ChannelNameNormalizer.normalize("Disney+ HD").groupKey).isEqualTo("disneyplus")
+        assertThat(ChannelNameNormalizer.normalize("Sky Uno +1 HD").groupKey).isEqualTo("skyuno+1")
+        assertThat(ChannelNameNormalizer.normalize("Sky Uno + 1").groupKey).isEqualTo("skyuno+1")
+    }
+
+    @Test
+    fun `public list notes and line counts are not part of the name`() {
+        val n = ChannelNameNormalizer.normalize("12 TV Parma (540p) [Not 24/7]")
+        assertThat(n.groupKey).isEqualTo("12tvparma")
+        assertThat(n.qualityLabel).isEqualTo("540P")
+        assertThat(ChannelNameNormalizer.normalize("Antenna Tre (480p) [Geo-blocked]").groupKey).isEqualTo("antennatre")
+        assertThat(ChannelNameNormalizer.normalize("Rai 1 (1080i)").qualityRank).isEqualTo(300)
+        // A number that isn't a line count stays: `Sky Sport 251`.
+        assertThat(ChannelNameNormalizer.normalize("Sky Sport 251").groupKey).isEqualTo("skysport251")
+    }
 }
