@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.29.4 — 28 October 2026
+
+- **Football: holding OK on a match lets you pick the channel again.** Letting go of OK used to
+  play the first source in the picker straight away; the picker now waits for a fresh press.
+
 ## 0.29.3 — 28 October 2026
 
 - **More channels find their guide, and fewer get the wrong one.** The guide matcher was checked
