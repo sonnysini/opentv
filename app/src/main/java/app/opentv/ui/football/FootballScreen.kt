@@ -586,9 +586,21 @@ private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewMo
     val sources = remember(item, looks) { viewModel.sources(item) }
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    // Opened by holding OK, the same press keeps repeating into the picker and its release
+    // would tap the first source. Ignore OK until a fresh press.
+    var armed by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), contentAlignment = Alignment.Center) {
         Column(
             Modifier
+                .onPreviewKeyEvent { e ->
+                    val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                    when {
+                        armed || !ok -> false
+                        e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { armed = true; false }
+                        e.type == KeyEventType.KeyUp -> { armed = true; true }
+                        else -> true
+                    }
+                }
                 .width(460.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
