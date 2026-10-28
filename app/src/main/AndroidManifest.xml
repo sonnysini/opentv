@@ -44,6 +44,12 @@
       Fire TV. Shipping separate builds per form factor is a maintenance tax a volunteer
       project cannot afford.
     -->
+    <!-- Guards the launcher rows (LauncherProvider): only an app signed with the same key — the
+         fork's own home-screen launcher — can read them. -->
+    <permission
+        android:name="${applicationId}.permission.LAUNCHER"
+        android:protectionLevel="signature" />
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
@@ -131,6 +137,13 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- Recent and favourite channels, Football matches: rows for a home-screen launcher. -->
+        <provider
+            android:name=".launcher.LauncherProvider"
+            android:authorities="${applicationId}.launcher"
+            android:exported="true"
+            android:readPermission="${applicationId}.permission.LAUNCHER" />
 
         <!-- Serves the downloaded update APK to the system installer via a content:// uri. -->
         <provider

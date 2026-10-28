@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.30.0 — 28 October 2026
+
+- **Rows for a home-screen launcher.** A launcher signed with the same key can read the channels
+  played lately, the favourites with what is on now, and the Football matches (live, today,
+  finished with highlights, coming up) — through a provider no other app can open.
+- **A launcher can open Football**: the tab, a match with Watch automatically, or its highlights.
+
 ## 0.29.4 — 28 October 2026
 
 - **Football: holding OK on a match lets you pick the channel again.** Letting go of OK used to

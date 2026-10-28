@@ -165,6 +165,20 @@ class MainActivity : ComponentActivity() {
     private fun handlePlayIntent(intent: Intent?) {
         val id = intent?.getLongExtra(EXTRA_PLAY_CHANNEL, 0L) ?: 0L
         if (id != 0L) app.opentv.core.PlayRequests.request(id)
+        if (intent?.getStringExtra(EXTRA_OPEN) == OPEN_FOOTBALL) {
+            val action = when (intent.getStringExtra(EXTRA_MATCH_ACTION)) {
+                "watch" -> app.opentv.core.FootballRequests.Action.WATCH
+                "highlights" -> app.opentv.core.FootballRequests.Action.HIGHLIGHTS
+                else -> app.opentv.core.FootballRequests.Action.OPEN
+            }
+            app.opentv.core.FootballRequests.request(
+                app.opentv.core.FootballRequests.Request(
+                    action = action,
+                    matchId = intent.getLongExtra(EXTRA_MATCH_ID, 0L),
+                    highlightsId = intent.getStringExtra(EXTRA_HIGHLIGHTS_ID),
+                ),
+            )
+        }
         val recId = intent?.getLongExtra(EXTRA_WATCH_RECORDING, 0L) ?: 0L
         if (recId != 0L) {
             app.opentv.core.RecordingSignals.requestWatch(recId, System.currentTimeMillis())
@@ -216,6 +230,17 @@ class MainActivity : ComponentActivity() {
 
         /** A recording auto-switch notification carries the recording to watch in this extra. */
         const val EXTRA_WATCH_RECORDING = "opentv.watch_recording"
+
+        /**
+         * A home-screen launcher opens a part of the app: [OPEN_FOOTBALL] goes to the Football tab,
+         * with [EXTRA_MATCH_ID] (FotMob id) and [EXTRA_MATCH_ACTION] `watch` (Watch automatically)
+         * or `highlights` ([EXTRA_HIGHLIGHTS_ID] = YouTube id) to act on one match.
+         */
+        const val EXTRA_OPEN = "opentv.open"
+        const val OPEN_FOOTBALL = "football"
+        const val EXTRA_MATCH_ID = "opentv.match_id"
+        const val EXTRA_MATCH_ACTION = "opentv.match_action"
+        const val EXTRA_HIGHLIGHTS_ID = "opentv.highlights_id"
     }
 }
 
@@ -309,6 +334,13 @@ private fun OpenTvApp(isTelevision: Boolean) {
             app.opentv.core.PlayRequests.consume()
             navController.navigate(Routes.player(id))
         }
+    }
+
+    // A launcher's match card: back to the home, where the Football tab picks the request up.
+    val footballRequest by app.opentv.core.FootballRequests.request.collectAsState()
+    LaunchedEffect(footballRequest) {
+        if (footballRequest == null || start != Routes.HOME) return@LaunchedEffect
+        runCatching { navController.popBackStack(Routes.HOME, inclusive = false) }
     }
 
     // Auto-switch: a scheduled recording started, so move the live view onto the recording file
