@@ -26,7 +26,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests
-        run: ./gradlew test
+        # Room's schema export: debug and release KSP write the same schemas/<version>.json, and in
+        # parallel one can read it half-written ("Empty schema file"). Run them one after the other.
+        run: |
+          ./gradlew kspDebugKotlin --no-parallel
+          ./gradlew kspReleaseKotlin --no-parallel
+          ./gradlew test
 
       # Only runs if a keystore has been added to repository secrets. Without one the
       # release build falls back to the debug key, which still produces an installable

@@ -31,7 +31,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests
-        run: ./gradlew test --stacktrace
+        # Room's schema export: debug and release KSP write the same schemas/<version>.json, and in
+        # parallel one can read it half-written ("Empty schema file"). Run them one after the other.
+        run: |
+          ./gradlew kspDebugKotlin --no-parallel
+          ./gradlew kspReleaseKotlin --no-parallel
+          ./gradlew test --stacktrace
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
