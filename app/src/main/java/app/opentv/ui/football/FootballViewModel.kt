@@ -255,12 +255,12 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 it.match.id == item.match.id || it.match.phase == Phase.LIVE ||
                     (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
             }
-            .sortedWith(compareBy({ it.match.kickoffUtcMillis }, { it.match.id }))
+            .sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }, { it.match.id }))
         val games = on.mapNotNull { g ->
             val order = sources(g).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(g) }
             val ordered = if (g.match.id == item.match.id) listOf(first) + order.filter { it.id != first.id } else order
             if (ordered.isEmpty()) return@mapNotNull null
-            MatchFeeds.Game(g.match.id, "${g.match.home.name} - ${g.match.away.name}", ordered.map { it.id }, ordered.associate { it.id to nameOf(it) }) to
+            MatchFeeds.Game(g.match.id, titleOf(g.match), ordered.map { it.id }, ordered.associate { it.id to nameOf(it) }) to
                 ordered.first()
         }.distinctBy { it.second.id } // one feed can't open two games: the queue keys on it
         MatchFeeds.set(games.map { it.first })
@@ -297,7 +297,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     val (item, feed) = bg
                     val all = toLook(item)
                     val m = item.match
-                    _progress.value = Progress(m.id, "${m.home.name} - ${m.away.name}", all.count { store.fresh(m.id, it.id) != null }, all.size)
+                    _progress.value = Progress(m.id, titleOf(m), all.count { store.fresh(m.id, it.id) != null }, all.size)
                     look(item, feed, prober, reader)
                 }
             } finally {
@@ -315,7 +315,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val candidates = (listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming)
             .distinctBy { it.match.id }
             .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
-            .sortedBy { it.match.kickoffUtcMillis }
+            .sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }))
         for (item in candidates) {
             val next = toLook(item).firstOrNull { store.fresh(item.match.id, it.id) == null } ?: continue
             return item to next
@@ -328,7 +328,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val source = graph.sourceRepository.byId(feed.sourceId)
         val url = catalog.resolvePlaybackUrl(feed, source)
         val r = prober.probe(url, source?.userAgent ?: "OpenTV/0.1 (Android)")
-        val text = r?.corner?.let { reader.read(it) }
+        // The goal show cuts between games: its scoreboard never says which one it's meant to be.
+        val text = if (item.match.goals) null else r?.corner?.let { reader.read(it) }
         r?.corner?.recycle()
         val board = text?.let { AutoScan.parseBoard(it) }
         val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board, it.audioHd) }
@@ -352,7 +353,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             }
             ScanRow(f.id, nameOf(f), p?.let(::detail), p?.board?.let(::boardText), verdict)
         }
-        _scan.value = Scan("${m.home.name} - ${m.away.name}", rows, rows.count { it.verdict != null })
+        _scan.value = Scan(titleOf(m), rows, rows.count { it.verdict != null })
     }
 
     /** The ranking shown a moment, then the best feed plays. */
@@ -366,7 +367,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 place = (i + 1).takeIf { s.looked && s.usable },
             )
         }
-        _scan.value = Scan("${m.home.name} - ${m.away.name}", rows, rows.size, finished = true)
+        _scan.value = Scan(titleOf(m), rows, rows.size, finished = true)
         src.forEachIndexed { i, s -> android.util.Log.i(TAG, "#${i + 1} ${s.name}: ${s.verdict}") }
         if (focus !== item) return
         focus = null
@@ -374,6 +375,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val first = src.firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
         handOver(item, first)
     }
+
+    private fun titleOf(m: Match) = if (m.goals) m.home.name else "${m.home.name} - ${m.away.name}"
 
     private fun nameOf(c: Channel) = listOf(c.shownName, c.qualityLabel).filter(String::isNotBlank).joinToString(" · ")
 
@@ -418,11 +421,13 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.today.isEmpty())
             return
         }
+        val goals = FootballRepository.goalShow(today)
         val channels = repo.channelsFor(
-            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming,
+            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming + listOfNotNull(goals),
         )
         // Highlights already found only: looking up new ones waits until the page is up.
-        val items = today.map { m ->
+        // The goal show last, like a game kicking off after the others; only with a channel.
+        val items = (today + listOfNotNull(goals?.takeIf { channels[it.id].orEmpty().isNotEmpty() })).map { m ->
             when (m.phase) {
                 Phase.FINISHED -> Item(m, highlights = repo.knownHighlights(m))
                 Phase.OFF -> Item(m)
@@ -439,7 +444,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val together = items.filter {
             it.match.phase == Phase.LIVE ||
                 (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
-        }.sortedBy { it.match.kickoffUtcMillis }
+        }.sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }))
         val heroes = if (together.size >= 2) together else emptyList()
         // The big card's feeds before first paint (its source list); the rest's right after:
         // looking them up is a query per channel, a second or so for a whole matchday.

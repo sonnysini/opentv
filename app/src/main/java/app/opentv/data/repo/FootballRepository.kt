@@ -68,7 +68,10 @@ class FootballRepository(
 ) {
     @Serializable
     data class Team(val id: Long, val name: String) {
-        val crestUrl: String get() = "https://images.fotmob.com/image_resources/logo/teamlogo/$id.png"
+        /** A negative id is a league's: the Serie A logo on [Match.goals]. */
+        val crestUrl: String get() =
+            if (id < 0) "https://images.fotmob.com/image_resources/logo/leaguelogo/${-id}.png"
+            else "https://images.fotmob.com/image_resources/logo/teamlogo/$id.png"
     }
 
     @Serializable
@@ -87,6 +90,11 @@ class FootballRepository(
         val minute: String?,
         /** The matchday ("8"), when FotMob says. */
         val round: String?,
+        /**
+         * Not a game: the goal channel ("Diretta Gol Serie A") through games played together,
+         * shown and watched like one of them. See [goalShow].
+         */
+        val goals: Boolean = false,
     )
 
     /**
@@ -213,26 +221,29 @@ class FootballRepository(
      * - then the channels whose guide names both teams through the game (Zona DAZN, DAZN 1,
      *   Sky Sport…). Club channels ("Inter TV": a radio commentary in the guide), boxing feeds
      *   matched to a DAZN guide by name, replays and timeshift copies are left out;
-     * - last the Serie A goal channels ("DAZN Diretta Gol Serie A", "Diretta Goal"): every game
-     *   at once, and no guide names them.
+     * - for [Match.goals], only the Serie A goal channels ("DAZN Diretta Gol Serie A", "Diretta
+     *   Goal"): every game at once, and no guide names them.
      * Kept on disk until the channel list or the guide changes; the guide is searched once for
      * all the matches not known yet.
      */
     suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
         val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
-        // "#3": entries from before the goal channels are looked up again.
-        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#3"
+        // "#4": entries from before the goal show are looked up again.
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#4"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
-        val missing = matches.filter { key(it) !in kept }
-        val found = if (missing.isEmpty()) emptyMap() else {
+        val missing = matches.filter { key(it) !in kept && !it.goals }
+        val goalShows = matches.filter { key(it) !in kept && it.goals }
+        val found = if (missing.isEmpty() && goalShows.isEmpty()) emptyMap() else {
             val started = System.currentTimeMillis()
+            val goalChannels = if (goalShows.isEmpty()) emptyList() else goalChannels()
             val guide = guideIdsFor(missing)
             // Two passes over the channels for all the matches, not two per match.
-            val named = namedAny(missing.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) } + GOAL_WORDS)
+            val named = namedAny(missing.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) })
             val allIds = guide.values.flatten().distinct()
             val guided = if (allIds.isEmpty()) emptyList()
             else runCatching { channelDao.withGuideIds(allIds) }.getOrElse { emptyList() }
-            missing.associate { key(it) to lookUp(it, guide[it.id].orEmpty(), named, guided) }
+            (missing.associate { key(it) to lookUp(it, guide[it.id].orEmpty(), named, guided) } +
+                goalShows.associate { key(it) to goalChannels })
                 .also { Log.i(TAG, "channels for ${missing.size} matches in ${System.currentTimeMillis() - started} ms") }
         }
         if (found.isNotEmpty() || lock.withLock { disk().stamp } != stamp) lock.withLock {
@@ -306,21 +317,23 @@ class FootballRepository(
             .mapNotNull { (_, variants) -> logical(variants) }
             // The channel with the most feeds first: more ways to get a picture if one is down.
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
-        val goals = named
-            .filter { c ->
-                val n = fold(c.displayName).lowercase()
-                c.isLive() && GOAL_CHANNEL.containsMatchIn(n) && !OTHER_COMPETITION.containsMatchIn(n)
-            }
-            .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
-            .mapNotNull { (_, variants) -> logical(variants) }
-            .sortedBy { it.name }
-        return (listOfNotNull(home, away) + guided + goals).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+        return (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
     }
 
     private fun Channel.isLive() =
         matchedEpgId?.let { TimeShift.decode(it) } == null && !TIMESHIFT.containsMatchIn(displayName)
 
     /** One logical channel out of its feeds: the best quality plays, the player offers the rest. */
+    /** The Serie A goal channels, one entry per logical channel, the one with most feeds first. */
+    private suspend fun goalChannels(): List<MatchChannel> = namedAny(GOAL_WORDS)
+        .filter { c ->
+            val n = fold(c.displayName).lowercase()
+            c.isLive() && GOAL_CHANNEL.containsMatchIn(n) && !OTHER_COMPETITION.containsMatchIn(n)
+        }
+        .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
+        .mapNotNull { (_, variants) -> logical(variants) }
+        .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
+
     private fun logical(variants: List<Channel>): MatchChannel? {
         val best = variants.maxByOrNull { it.qualityRank } ?: return null
         return MatchChannel(best, best.customName?.takeIf { it.isNotBlank() } ?: best.displayName, variants.size)
@@ -488,6 +501,34 @@ class FootballRepository(
     }
 
     companion object {
+        /**
+         * The goal channel as a game of its own: for the first kick-off today that two or more
+         * games share and that isn't over, from that kick-off, live while any of them is.
+         * Null on days with no games played together.
+         */
+        fun goalShow(today: List<Match>): Match? {
+            val slot = today.filter { it.phase != Phase.OFF && !it.goals }
+                .groupBy { it.kickoffUtcMillis }
+                .filterValues { it.size >= 2 && it.any { m -> m.phase == Phase.SCHEDULED || m.phase == Phase.LIVE } }
+                .minByOrNull { it.key } ?: return null
+            val (kickoff, games) = slot
+            val live = games.count { it.phase == Phase.LIVE }
+            val league = Team(-SERIE_A.toLong(), "Serie A")
+            return Match(
+                // One per kick-off: its scans and the feed watched stay apart from another day's.
+                id = -(kickoff / MINUTE),
+                kickoffUtcMillis = kickoff,
+                home = Team(-SERIE_A.toLong(), "Diretta Gol"),
+                away = league,
+                homeScore = null,
+                awayScore = null,
+                phase = if (live > 0) Phase.LIVE else Phase.SCHEDULED,
+                minute = null,
+                round = games.firstNotNullOfOrNull { it.round },
+                goals = true,
+            )
+        }
+
         private const val TAG = "Football"
         private const val SERIE_A = 55
         private const val SERIE_A_CHANNEL = "UCBJeMCIeLQos7wacox4hmLQ"
