@@ -308,7 +308,7 @@ private fun Hero(
     val best = sources.firstOrNull { it.looked && it.usable }
     var shown by remember(item.match.id) { mutableStateOf<Long?>(null) }
     // The feed in focus, else the best: whichever has a picture.
-    val previewId = listOfNotNull(shown, best?.feed?.id).firstOrNull { viewModel.frame(it) != null }
+    val previewId = listOfNotNull(shown, best?.feed?.id).firstOrNull { viewModel.frame(item, it) != null }
     LaunchedEffect(first.match.id, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
 
     Box(
@@ -416,7 +416,7 @@ private fun Hero(
                 }
                 Spacer(Modifier.width(16.dp))
                 Preview(
-                    file = previewId?.let { viewModel.frame(it) },
+                    file = previewId?.let { viewModel.frame(item, it) },
                     label = sources.firstOrNull { it.feed.id == previewId }?.let { "${it.name} · ${ago(it.at)}" },
                     match = m,
                     looks = looks,

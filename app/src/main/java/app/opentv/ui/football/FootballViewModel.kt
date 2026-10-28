@@ -165,39 +165,51 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val all = feedsOf(item)
         val t = teams[item.match.id] ?: return all
         if (t.home.isEmpty() || t.spare.isEmpty()) return all
-        val homePending = all.any { it.id in t.home && store.fresh(it.id) == null }
+        val homePending = all.any { it.id in t.home && store.fresh(item.match.id, it.id) == null }
         val homeWorks = rank(item, all.filter { it.id in t.home }).any { it.looked && it.usable }
         return if (homePending || homeWorks) all.filter { it.id !in t.spare } else all
     }
 
     /**
-     * [item]'s feeds best first: the ones looked at ranked by [AutoScan], then the ones still to
-     * look at in channel order, then the dead and the wrong game. The away team's spare feeds
-     * aren't there unless the home team's all failed.
+     * [item]'s feeds best first: the one last watched, then the ones looked at ranked by
+     * [AutoScan], then the ones still to look at in channel order, then the dead and the wrong game.
+     * The away team's spare feeds aren't there unless the home team's all failed.
      */
     fun sources(item: Item): List<Source> = rank(item, toLook(item))
 
     private fun rank(item: Item, all: List<Channel>): List<Source> {
         val m = item.match
-        val looks = all.mapNotNull { f -> store.fresh(f.id)?.let { f to it.probe } }
+        val looks = all.mapNotNull { f -> store.fresh(m.id, f.id)?.let { f to it.probe } }
         val ranked = AutoScan.rank(looks, m.home.name, m.away.name, channel = { it.groupKey.ifEmpty { "#${it.id}" } })
         val lookedIds = looks.mapTo(HashSet()) { it.first.id }
-        val out = ranked.map { Source(it.item, nameOf(it.item), true, it.probe, it.verdict, store.fresh(it.item.id)?.at) }
+        val out = ranked.map { Source(it.item, nameOf(it.item), true, it.probe, it.verdict, store.fresh(m.id, it.item.id)?.at) }
         val unlooked = all.filter { it.id !in lookedIds }.map { Source(it, nameOf(it), false, null, null) }
-        return out.filter { it.usable } + unlooked + out.filterNot { it.usable }
+        val list = out.filter { it.usable } + unlooked + out.filterNot { it.usable }
+        // The feed watched last was picked over the ranking (or worked): it stays first.
+        val picked = store.picked(m.id) ?: return list
+        val mine = list.firstOrNull { it.feed.id == picked } ?: return list
+        return listOf(mine) + list.filter { it !== mine }
     }
 
-    /** [feedId]'s picture from its last look. */
-    fun frame(feedId: Long): java.io.File? = store.frame(feedId)
+    /** [feedId]'s picture from its last look for [item]. */
+    fun frame(item: Item, feedId: Long): java.io.File? = store.frame(item.match.id, feedId)
 
-    /** Whether every feed of [item] has a fresh look. */
-    fun ready(item: Item): Boolean = toLook(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(it.id) != null } }
+    /**
+     * Whether [item] needs no scan before playing: every feed looked at, or one already watched —
+     * a match's ranking holds for the whole game; only "Scan again" looks afresh.
+     */
+    fun ready(item: Item): Boolean = store.picked(item.match.id)?.let { p -> feedsOf(item).any { it.id == p } } == true ||
+        toLook(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(item.match.id, it.id) != null } }
 
-    /** "Scan again": [item]'s looks dropped, looked at afresh. */
+    /** "Scan again": [item]'s looks dropped, looked at afresh. The feed watched last stays first. */
     fun rescan(item: Item) {
-        store.forget(feedsOf(item).map { it.id })
+        store.forget(item.match.id, feedsOf(item).map { it.id })
         _looks.value++
-        autoWatch(item)
+        focus = item
+        focusStarted = System.currentTimeMillis()
+        publishFocus(item)
+        startWorker()
+        wake.trySend(Unit)
     }
 
     /**
@@ -229,11 +241,30 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Plays [first] of [item]. Channel up/down then moves between the games on now (and about to
+     * start), each from its own first feed; ☰ and Quality go along the playing game's feeds.
+     */
     private fun handOver(item: Item, first: Channel) {
-        val order = sources(item).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(item) }
-        val ordered = listOf(first) + order.filter { it.id != first.id }
-        MatchFeeds.set(ordered.map { it.id }, ordered.associate { it.id to nameOf(it) })
-        PlaybackQueue.items = ordered.map { PlaybackQueue.Item(it.id, nameOf(it), it.logoUrl) }
+        store.pick(item.match.id, first.id)
+        val ui = _ui.value
+        val now = System.currentTimeMillis()
+        val on = (listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming)
+            .distinctBy { it.match.id }
+            .filter {
+                it.match.id == item.match.id || it.match.phase == Phase.LIVE ||
+                    (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
+            }
+            .sortedWith(compareBy({ it.match.kickoffUtcMillis }, { it.match.id }))
+        val games = on.mapNotNull { g ->
+            val order = sources(g).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(g) }
+            val ordered = if (g.match.id == item.match.id) listOf(first) + order.filter { it.id != first.id } else order
+            if (ordered.isEmpty()) return@mapNotNull null
+            MatchFeeds.Game(g.match.id, "${g.match.home.name} - ${g.match.away.name}", ordered.map { it.id }, ordered.associate { it.id to nameOf(it) }) to
+                ordered.first()
+        }.distinctBy { it.second.id } // one feed can't open two games: the queue keys on it
+        MatchFeeds.set(games.map { it.first })
+        PlaybackQueue.items = games.map { (g, lead) -> PlaybackQueue.Item(lead.id, g.title, lead.logoUrl) }
         _autoPlay.value = first
     }
 
@@ -247,13 +278,13 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     val f = focus
                     if (f != null) {
                         val overBudget = System.currentTimeMillis() - focusStarted > SCAN_BUDGET_MILLIS
-                        val next = if (overBudget) null else toLook(f).firstOrNull { store.fresh(it.id) == null }
+                        val next = if (overBudget) null else toLook(f).firstOrNull { store.fresh(f.match.id, it.id) == null }
                         if (next == null) {
                             finishFocus(f)
                             // The player is about to take the connection: no more looks until back.
                             return@launch
                         }
-                        look(next, prober, reader)
+                        look(f, next, prober, reader)
                         if (focus === f) publishFocus(f)
                         continue
                     }
@@ -266,8 +297,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     val (item, feed) = bg
                     val all = toLook(item)
                     val m = item.match
-                    _progress.value = Progress(m.id, "${m.home.name} - ${m.away.name}", all.count { store.fresh(it.id) != null }, all.size)
-                    look(feed, prober, reader)
+                    _progress.value = Progress(m.id, "${m.home.name} - ${m.away.name}", all.count { store.fresh(m.id, it.id) != null }, all.size)
+                    look(item, feed, prober, reader)
                 }
             } finally {
                 reader.close()
@@ -286,13 +317,13 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
             .sortedBy { it.match.kickoffUtcMillis }
         for (item in candidates) {
-            val next = toLook(item).firstOrNull { store.fresh(it.id) == null } ?: continue
+            val next = toLook(item).firstOrNull { store.fresh(item.match.id, it.id) == null } ?: continue
             return item to next
         }
         return null
     }
 
-    private suspend fun look(feed: Channel, prober: StreamProbe, reader: ScoreboardReader) {
+    private suspend fun look(item: Item, feed: Channel, prober: StreamProbe, reader: ScoreboardReader) {
         val catalog = graph.catalogRepository
         val source = graph.sourceRepository.byId(feed.sourceId)
         val url = catalog.resolvePlaybackUrl(feed, source)
@@ -302,7 +333,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val board = text?.let { AutoScan.parseBoard(it) }
         val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board, it.audioHd) }
         android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
-        store.put(feed.id, p, r?.preview)
+        store.put(item.match.id, feed.id, p, r?.preview)
         _looks.value++
     }
 
@@ -311,7 +342,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val m = item.match
         val all = toLook(item)
         val rows = all.map { f ->
-            val e = store.fresh(f.id)
+            val e = store.fresh(m.id, f.id)
             val p = e?.probe
             val verdict = when {
                 e == null -> null

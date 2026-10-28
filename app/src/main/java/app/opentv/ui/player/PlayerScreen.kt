@@ -502,9 +502,10 @@ fun PlayerScreen(
 
     /** Position of the playing channel in [queue], matched by any of its quality variants. */
     fun queueIndex(): Int =
-        // A match's feeds are each other's "variants": only the one picked says where we are.
+        // From the football home the queue is one entry per game: whichever of its feeds plays.
         if (matchFeeds) {
-            queue.indexOfFirst { it.id == listedId }
+            val game = listedId?.let { MatchFeeds.gameOf(it) }
+            queue.indexOfFirst { item -> item.id == listedId || game?.feeds?.contains(item.id) == true }
         } else {
             queue.indexOfFirst { item ->
                 item.id == listedId || item.id == currentId || variants.any { it.id == item.id }
@@ -515,7 +516,11 @@ fun PlayerScreen(
         if (queue.isEmpty()) return
         val cur = queueIndex().let { if (it < 0) 0 else it }
         val next = (cur + delta).coerceIn(0, queue.size - 1)
-        if (next != cur) playChannelId(queue[next].id)
+        if (next == cur) return
+        // A game opens on the feed last watched in it, not the one it was listed with.
+        val target = queue[next].id
+        val lead = if (matchFeeds) MatchFeeds.gameOf(target)?.let { MatchFeeds.leadOf(it) } else null
+        playChannelId(lead ?: target)
     }
 
     fun toggleRecord() {
@@ -549,6 +554,11 @@ fun PlayerScreen(
                     val listed = listedChannel
                     val id = currentId
                     if (listed != null && id != null) WorkingVariants.remember(listed, id)
+                    // A match's feed on screen: the game comes back to it, now and on "Watch now".
+                    if (matchFeeds && id != null) {
+                        MatchFeeds.watched(id)
+                        MatchFeeds.gameOf(id)?.let { app.opentv.ui.football.ScanStore.get(context).pick(it.matchId, id) }
+                    }
                 }
                 is PlayerController.State.Error ->
                     if (holdingPick() && !started) {

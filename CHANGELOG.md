@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.31.0 — 28 October 2026
+
+- **Football: a match's scan holds for the whole game.** Watch now used to look at the feeds again
+  once 20 minutes had passed; now a match is looked at once (before kick-off or as it starts) and
+  plays straight away after that. Scan again still looks afresh.
+- **The feed you watched comes first.** Back on a match, Watch now opens the feed you were on,
+  ahead of the scan's ranking.
+- **Channel up/down moves between the games on now**, each opening on its own feed (the one you
+  watched there, else the best). The match's other feeds are on ☰ and in Quality.
+
 ## 0.30.0 — 28 October 2026
 
 - **Rows for a home-screen launcher.** A launcher signed with the same key can read the channels
