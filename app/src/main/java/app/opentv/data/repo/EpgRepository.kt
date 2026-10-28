@@ -443,10 +443,13 @@ class EpgRepository(
             val providerOwn = channel.epgChannelId?.takeIf { id ->
                 populated(id) && id != base && index.keysOf(id).any { EpgMatcher.splitShift(it).second == shift }
             }
+            // A free guide's own `+1` first, then the base's guide moved later, and only then the
+            // provider's `+1`: providers often ship copies that mix shifted and unshifted times
+            // (Sky Sport F1 +1 listed the same slot twice, an hour apart).
             val newMatch = when {
-                providerOwn != null -> providerOwn
                 own != null -> own.epgId
                 base != null -> TimeShift.encode(base, hours)
+                providerOwn != null -> providerOwn
                 else -> null
             }
             if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)

@@ -16,6 +16,8 @@
     `Disney Plus Animazione` is turned down when the name finds the right guide);
   - a channel filed under a shorter name (`Sky Nature` → `Nature`) is also looked up by its
     full name.
+- **`+1`/`+2` channels prefer their base channel's guide moved later** over the provider's own
+  copy, which can list the same slot twice an hour apart.
 - **A guide id with only finished programmes no longer hides the next one**: the guide row
   moves on to the channel's next candidate.
 - `(540p)`, `(1080i)`, `[Not 24/7]` and `[Geo-blocked]` in channel names are recognised.
