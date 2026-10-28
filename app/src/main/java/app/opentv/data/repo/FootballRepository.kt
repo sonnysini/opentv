@@ -212,21 +212,23 @@ class FootballRepository(
      *   the provider's own feed of that team's game;
      * - then the channels whose guide names both teams through the game (Zona DAZN, DAZN 1,
      *   Sky Sport…). Club channels ("Inter TV": a radio commentary in the guide), boxing feeds
-     *   matched to a DAZN guide by name, replays and timeshift copies are left out.
+     *   matched to a DAZN guide by name, replays and timeshift copies are left out;
+     * - last the Serie A goal channels ("DAZN Diretta Gol Serie A", "Diretta Goal"): every game
+     *   at once, and no guide names them.
      * Kept on disk until the channel list or the guide changes; the guide is searched once for
      * all the matches not known yet.
      */
     suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
         val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
-        // "#2": entries from before [MatchChannel.spare] are looked up again.
-        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#2"
+        // "#3": entries from before the goal channels are looked up again.
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#3"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
         val missing = matches.filter { key(it) !in kept }
         val found = if (missing.isEmpty()) emptyMap() else {
             val started = System.currentTimeMillis()
             val guide = guideIdsFor(missing)
             // Two passes over the channels for all the matches, not two per match.
-            val named = namedAny(missing.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) })
+            val named = namedAny(missing.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) } + GOAL_WORDS)
             val allIds = guide.values.flatten().distinct()
             val guided = if (allIds.isEmpty()) emptyList()
             else runCatching { channelDao.withGuideIds(allIds) }.getOrElse { emptyList() }
@@ -304,7 +306,15 @@ class FootballRepository(
             .mapNotNull { (_, variants) -> logical(variants) }
             // The channel with the most feeds first: more ways to get a picture if one is down.
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
-        return (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+        val goals = named
+            .filter { c ->
+                val n = fold(c.displayName).lowercase()
+                c.isLive() && GOAL_CHANNEL.containsMatchIn(n) && !OTHER_COMPETITION.containsMatchIn(n)
+            }
+            .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
+            .mapNotNull { (_, variants) -> logical(variants) }
+            .sortedBy { it.name }
+        return (listOfNotNull(home, away) + guided + goals).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
     }
 
     private fun Channel.isLive() =
@@ -499,6 +509,12 @@ class FootballRepository(
         /** Guide-matched channels that don't show the game: boxing feeds named like DAZN 1, replays. */
         private val NOT_THE_GAME = Regex("\\b(box|boxe|ufc|differita|replay|serie b)\\b")
         private val RADIO = Regex("\\bradio")
+        /** "DAZN DIRETTA GOL SERIE A", "DIRETTA GOAL": all the round's games, with no guide. */
+        private val GOAL_WORDS = listOf("diretta gol", "diretta goal")
+        private val GOAL_CHANNEL = Regex("\\bdiretta go(a)?l\\b")
+        /** A goal channel of another competition: "DAZN DIRETTA GOL SERIE B / EUROPA LEAGUE". */
+        private val OTHER_COMPETITION =
+            Regex("\\b(serie b|serie c|europa|champions|conference|league|coppa|cup|liga|bundesliga|ligue|premier)\\b")
         private val MARKS = Regex("\\p{M}+")
         private val NON_WORD = Regex("[^a-z0-9]+")
         private val ENTRY = Regex("<entry>.*?</entry>", RegexOption.DOT_MATCHES_ALL)
