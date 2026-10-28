@@ -34,7 +34,16 @@ object EpgMatcher {
         val feedId: Long = 0,
         /** How much guide the id carries (programme count): the tie-break between guides. */
         val weight: Int = 0,
-    )
+    ) {
+        /** [key] split once at build time: the matcher compares these for every channel. */
+        val base: String
+        val shift: String
+        init {
+            val (b, sh) = splitShift(key)
+            base = b
+            shift = sh
+        }
+    }
 
     /** One `<channel>` of one guide, as the index is built from. */
     data class GuideChannel(
@@ -55,6 +64,10 @@ object EpgMatcher {
     ) {
         private val keysById: Map<String, Set<String>> =
             sortedKeys.groupBy({ it.epgId }, { it.key }).mapValues { it.value.toSet() }
+
+        /** Typo candidates by first letter: a typo rarely hits it, and it keeps the scan short. */
+        private val byFirstLetter: Map<Char, List<Alias>> =
+            sortedKeys.filter { it.base.length >= MIN_FUZZY_LENGTH }.groupBy { it.base[0] }
 
         /** Returns the epg id for a provider channel's group key, or null. */
         fun match(groupKey: String): String? = find(groupKey)?.epgId
@@ -78,18 +91,16 @@ object EpgMatcher {
             // is an hour late, and `+2` is a prefix of `+24` without being the same channel.
             val (base, shift) = splitShift(groupKey)
             val hits = sortedKeys.filter { alias ->
-                val (aliasBase, aliasShift) = splitShift(alias.key)
-                alias.key.length >= MIN_KEY_LENGTH && aliasShift == shift &&
-                    (aliasBase.startsWith(base) || base.startsWith(aliasBase))
+                alias.key.length >= MIN_KEY_LENGTH && alias.shift == shift &&
+                    (alias.base.startsWith(base) || base.startsWith(alias.base))
             }
             pickStrict(hits)?.let { return Match(it, Tier.PREFIX) }
 
             // Typo tier: one or two letters off on a long name (`suspence`, `documentaris`),
             // never across numbers, and only when every candidate is the same name.
             if (base.length >= MIN_FUZZY_LENGTH) {
-                val near = sortedKeys.filter { alias ->
-                    val (aliasBase, aliasShift) = splitShift(alias.key)
-                    aliasShift == shift && aliasBase != base && closeSpelling(aliasBase, base)
+                val near = byFirstLetter[base[0]].orEmpty().filter { alias ->
+                    alias.shift == shift && alias.base != base && closeSpelling(alias.base, base)
                 }
                 if (near.map { it.key }.distinct().size == 1) {
                     pickPerGuide(near)?.let { return Match(it, Tier.FUZZY) }
@@ -145,9 +156,11 @@ object EpgMatcher {
     private fun closeSpelling(a: String, b: String): Boolean {
         val shorter = minOf(a.length, b.length)
         if (shorter < MIN_FUZZY_LENGTH) return false
-        if (numbersOf(a) != numbersOf(b)) return false
         val allowed = if (shorter >= LONG_FUZZY_LENGTH) 2 else 1
-        return editDistance(a, b, allowed) <= allowed
+        // Cheapest checks first: this runs for every channel the exact and prefix tiers missed.
+        if (kotlin.math.abs(a.length - b.length) > allowed) return false
+        if (editDistance(a, b, allowed) > allowed) return false
+        return numbersOf(a) == numbersOf(b)
     }
 
     private fun numbersOf(key: String): List<String> = DIGITS.findAll(key).map { it.value }.toList()

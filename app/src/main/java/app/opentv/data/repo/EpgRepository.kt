@@ -329,6 +329,7 @@ class EpgRepository(
      * Returns (channels with a working guide id, total channels).
      */
     suspend fun runMatcher(): Pair<Int, Int> {
+        val startedAt = System.currentTimeMillis()
         // Only ids that actually have programmes count — and only those are matched to. A
         // guide that lists a channel but never fills it (epgshare's empty `TG.NORBA.24.it`)
         // must not win over another guide that does.
@@ -462,7 +463,8 @@ class EpgRepository(
         Log.i(
             TAG,
             "Matcher: $matched of ${channels.size} channels have a working guide " +
-                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo)",
+                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo) " +
+                "in ${System.currentTimeMillis() - startedAt} ms",
         )
         return matched to channels.size
     }
