@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.32.0 — 28 October 2026
+
+- **Football: the goal channel is a game of its own.** When two or more Serie A games kick off
+  together, "Diretta Gol" gets its own card (last in the row, and a tab on the big card when the
+  games are on): Watch now, its feeds best first, scan, channel up/down between it and the games.
+  Its scan doesn't read the scoreboard, which jumps from game to game. It's no longer listed
+  under each match.
+
 ## 0.31.1 — 28 October 2026
 
 - **Football: the Serie A goal channel** ("Diretta Gol Serie A") is listed under every Serie A

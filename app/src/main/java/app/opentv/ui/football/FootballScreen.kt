@@ -860,7 +860,7 @@ private fun MatchCard(item: FootballViewModel.Item, action: String, onHold: () -
         }
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)) {
             Text(
-                "${m.home.name} – ${m.away.name}",
+                if (m.goals) "${m.home.name} ${m.away.name}" else "${m.home.name} – ${m.away.name}",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -969,9 +969,10 @@ private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 private val DAY = DateTimeFormatter.ofPattern("EEE d")
 private val FULL_DAY = DateTimeFormatter.ofPattern("EEEE d MMMM")
 
-/** The big middle text: the score once it's started, the kick-off time before. */
+/** The big middle text: the score once it's started, the kick-off time before; GOL on the goal show. */
 private fun centre(m: Match): String =
-    if (m.homeScore != null && m.awayScore != null) "${m.homeScore}-${m.awayScore}"
+    if (m.goals && m.phase == Phase.LIVE) "GOL"
+    else if (m.homeScore != null && m.awayScore != null) "${m.homeScore}-${m.awayScore}"
     else TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
 
 /** Under the hero's big kick-off time, the day alone; otherwise the same line as the cards. */
