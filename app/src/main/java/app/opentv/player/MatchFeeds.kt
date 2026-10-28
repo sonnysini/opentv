@@ -6,38 +6,60 @@
 package app.opentv.player
 
 /**
- * A match's feeds, best first, handed to the player by the football home: playing one of them, the
- * player falls back, stall-switches and cycles (☰) along this ranking — across channels — instead
- * of the one channel's qualities. Kept until another list is played from, so zapping between the
- * match's feeds stays in it.
+ * The games on now, each with its feeds best first, handed to the player by the football home.
+ * Channel up/down moves between the games ([PlaybackQueue] holds one entry per game); within a
+ * game the player falls back, stall-switches and cycles (☰, Quality) along its ranking — across
+ * channels — instead of one channel's qualities. Kept until another list is played from.
  */
 object MatchFeeds {
-    @Volatile private var ranked: List<Long> = emptyList()
-    @Volatile private var names: Map<Long, String> = emptyMap()
+    data class Game(
+        val matchId: Long,
+        /** "Inter - Milan". */
+        val title: String,
+        /** Best first; numbered by this order in the picker. */
+        val feeds: List<Long>,
+        /** As the football home shows them ("Lazio · FHD · DVS"). */
+        val names: Map<Long, String> = emptyMap(),
+    )
 
-    /** [ids] best first; [names] as the football home shows them ("Lazio · FHD · DVS"). */
-    fun set(ids: List<Long>, names: Map<Long, String> = emptyMap()) {
-        ranked = ids
-        this.names = names
+    @Volatile private var games: List<Game> = emptyList()
+    /** Per game: the feed last watched, where coming back to it starts. */
+    private val lead = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+
+    fun set(games: List<Game>) {
+        this.games = games
+        lead.clear()
+        games.forEach { g -> g.feeds.firstOrNull()?.let { lead[g.matchId] = it } }
     }
 
     fun clear() {
-        ranked = emptyList()
-        names = emptyMap()
+        games = emptyList()
+        lead.clear()
     }
 
-    fun name(channelId: Long): String? = names[channelId]
+    fun games(): List<Game> = games
 
-    /** The whole ranking, best first. */
-    fun ranking(): List<Long> = ranked
+    /** The game [channelId] is a feed of. */
+    fun gameOf(channelId: Long): Game? = games.firstOrNull { channelId in it.feeds }
 
-    /** [channelId]'s 1-based place in the ranking, null when not one of the match's feeds. */
-    fun place(channelId: Long): Int? = ranked.indexOf(channelId).takeIf { it >= 0 }?.plus(1)
+    fun indexOf(channelId: Long): Int = games.indexOfFirst { channelId in it.feeds }
 
-    /** The ranking with [channelId] first, when it is one of the match's feeds. */
+    fun name(channelId: Long): String? = gameOf(channelId)?.names?.get(channelId)
+
+    /** [channelId]'s 1-based place in its game's ranking, null when not a match feed. */
+    fun place(channelId: Long): Int? = gameOf(channelId)?.feeds?.indexOf(channelId)?.takeIf { it >= 0 }?.plus(1)
+
+    /** Its game's ranking with [channelId] first, when it is a match feed. */
     fun forFeed(channelId: Long): List<Long>? {
-        val r = ranked
-        if (channelId !in r) return null
+        val r = gameOf(channelId)?.feeds ?: return null
         return listOf(channelId) + r.filter { it != channelId }
     }
+
+    /** [channelId] is playing: its game starts from it when zapped back to. */
+    fun watched(channelId: Long) {
+        gameOf(channelId)?.let { lead[it.matchId] = channelId }
+    }
+
+    /** Where [game] starts: the feed last watched, else its best. */
+    fun leadOf(game: Game): Long? = lead[game.matchId] ?: game.feeds.firstOrNull()
 }
