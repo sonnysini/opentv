@@ -135,6 +135,12 @@ fun MainScreen(
 
     // Saveable: coming back from the player must land on the tab it was opened from (Football).
     var tab by rememberSaveable { mutableStateOf(homeTab) }
+    // A launcher asked for Football: switch to it; the Football screen consumes the request.
+    val footballRequest by app.opentv.core.FootballRequests.request.collectAsState()
+    LaunchedEffect(footballRequest, visibleTabs) {
+        if (footballRequest == null) return@LaunchedEffect
+        if (Tab.FOOTBALL in visibleTabs) tab = Tab.FOOTBALL else app.opentv.core.FootballRequests.consume()
+    }
 
     // The full-screen live list takes the whole screen, menu included: the rail is gone until LEFT
     // on a row brings it back, and it goes again as soon as focus leaves it.

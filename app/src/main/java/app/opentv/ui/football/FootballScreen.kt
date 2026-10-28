@@ -73,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.opentv.core.FootballRequests
 import app.opentv.R
 import app.opentv.data.model.Channel
 import app.opentv.data.model.shownName
@@ -90,6 +91,9 @@ import java.time.format.DateTimeFormatter
 private val LIVE_RED = Color(0xFFFF6B6B)
 
 /** YouTube on Fire TV, then on Google TV / Android TV. */
+/** How long a launcher's match request waits for the match to show up on the page. */
+private const val REQUEST_WAIT_MILLIS = 20_000L
+
 private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
 
 /**
@@ -170,6 +174,41 @@ fun FootballScreen(
         when {
             item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
             item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> viewModel.autoWatch(item)
+        }
+    }
+    // A launcher's match card: act on it as on a click here, once the match is on the page (its
+    // feeds looked up for Watch). Given up after a while: a match gone from the page plays nothing.
+    val request by FootballRequests.request.collectAsState()
+    LaunchedEffect(request, ui, looks) {
+        val r = request ?: return@LaunchedEffect
+        val all = listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming + ui.lastRound
+        val item = all.firstOrNull { it.match.id == r.matchId }
+        val stale = System.currentTimeMillis() - r.requestedAtMillis > REQUEST_WAIT_MILLIS
+        when {
+            r.action == FootballRequests.Action.OPEN || r.matchId == 0L -> FootballRequests.consume()
+            r.action == FootballRequests.Action.HIGHLIGHTS && (r.highlightsId ?: item?.highlights) != null -> {
+                FootballRequests.consume()
+                val id = r.highlightsId ?: item!!.highlights!!
+                if (item != null) {
+                    openHighlights(item, id)
+                } else {
+                    viewModel.openHighlights(
+                        id,
+                        onStream = { url -> onPlayVideo("yt:$id", url, highlightsTitle) },
+                        onFallback = { openInYouTube(id) },
+                    )
+                }
+            }
+            r.action == FootballRequests.Action.WATCH && item != null && viewModel.feedsOf(item).isNotEmpty() -> {
+                FootballRequests.consume()
+                viewModel.autoWatch(item)
+            }
+            stale || (!ui.loading && ui.failed) -> FootballRequests.consume()
+            // Not there yet: the next load/looks change runs this again; a timer covers a quiet page.
+            else -> {
+                kotlinx.coroutines.delay(REQUEST_WAIT_MILLIS)
+                if (FootballRequests.request.value === r) FootballRequests.consume()
+            }
         }
     }
     val hold: (FootballViewModel.Item) -> Unit = { item ->

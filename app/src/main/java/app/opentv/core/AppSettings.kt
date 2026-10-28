@@ -639,7 +639,19 @@ class AppSettings private constructor(context: Context) {
     /** The last channel played, for boot-to-last-channel. Not a flow — only read once at launch. */
     var lastChannelId: Long
         get() = prefs.getLong(KEY_LAST_CHANNEL, 0L)
-        set(value) { prefs.edit().putLong(KEY_LAST_CHANNEL, value).apply() }
+        set(value) {
+            val recent = (listOf(value) + recentChannelIds.filter { it != value }).take(RECENT_CHANNELS)
+            prefs.edit()
+                .putLong(KEY_LAST_CHANNEL, value)
+                .putString(KEY_RECENT_CHANNELS, recent.joinToString(","))
+                .apply()
+        }
+
+    /** The channels played lately, latest first: what an outside launcher shows as "recent". */
+    val recentChannelIds: List<Long>
+        get() = prefs.getString(KEY_RECENT_CHANNELS, "").orEmpty()
+            .split(',').mapNotNull { it.toLongOrNull() }
+            .ifEmpty { listOf(lastChannelId).filter { it != 0L } }
 
     /**
      * Video scaling in the player, as an [androidx.media3.ui.AspectRatioFrameLayout] RESIZE_MODE_*
@@ -989,6 +1001,8 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_CONTENT_MOVIES = "content_movies"
         private const val KEY_CONTENT_SERIES = "content_series"
         private const val KEY_LAST_CHANNEL = "last_channel_id"
+        private const val KEY_RECENT_CHANNELS = "recent_channel_ids"
+        private const val RECENT_CHANNELS = 12
         private const val KEY_RESIZE_MODE = "player_resize_mode"
         private const val KEY_LANGUAGE = "language_tag"
 
