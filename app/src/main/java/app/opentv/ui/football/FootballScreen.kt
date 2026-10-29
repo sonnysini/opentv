@@ -179,13 +179,14 @@ fun FootballScreen(
     }
     LaunchedEffect(autoPlay) {
         autoPlay?.let {
-            viewModel.autoPlayed()
             val wasPlaying = previewing != null
             previewController.stop()
             previewing = null
             viewModel.setPreviewing(false)
             // The provider counts a connection for a moment after it closes: let the preview's go.
+            // Cleared only after the wait: clearing it changes this effect's key and would cancel it.
             if (wasPlaying) kotlinx.coroutines.delay(PREVIEW_HANDOFF_MILLIS)
+            viewModel.autoPlayed()
             onPlayChannel(it)
         }
     }
