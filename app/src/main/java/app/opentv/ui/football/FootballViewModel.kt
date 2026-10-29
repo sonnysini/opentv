@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class FootballViewModel(app: Application) : AndroidViewModel(app) {
@@ -153,6 +154,16 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             _scan.value = null
             _progress.value = null
         }
+    }
+
+    /**
+     * The top of the page is playing a game: it holds the account's one connection, so no feed is
+     * looked at until it lets go (the screen stops it as soon as a scan shows).
+     */
+    private val previewing = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    fun setPreviewing(on: Boolean) {
+        previewing.value = on
     }
 
     fun feedsOf(item: Item): List<Channel> = feeds[item.match.id].orEmpty()
@@ -356,6 +367,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun look(item: Item, feed: Channel, prober: StreamProbe, reader: ScoreboardReader) {
+        previewing.first { !it }
         val catalog = graph.catalogRepository
         val source = graph.sourceRepository.byId(feed.sourceId)
         val url = catalog.resolvePlaybackUrl(feed, source)

@@ -128,10 +128,11 @@ object AutoScan {
 
     /**
      * The quality part of the score: 50 fps above all, then lines, then bitrate (15 a Mbps, never
-     * enough to beat a step in lines), 5.1, E-AC3, start-up time.
+     * enough to beat a step in lines), 5.1, E-AC3, start-up time. A 60 fps feed goes below every
+     * other one that plays: Italian football is 50 fps, and the 60s seen were a frozen DAZN logo.
      */
     fun quality(p: Probe): Int =
-        (if ((p.fps ?: 0) >= 48) FPS50_BONUS else 0) + p.height / 2 +
+        (if ((p.fps ?: 0) >= FPS60) -FPS60_PENALTY else if ((p.fps ?: 0) >= 48) FPS50_BONUS else 0) + p.height / 2 +
             ((p.kbps ?: 0) / 1000).coerceAtMost(MAX_MBPS) * PER_MBPS +
             (if ((p.audioChannels ?: 0) >= 6) SURROUND_BONUS else 0) +
             (if (p.audioHd) AUDIO_HD_BONUS else 0) - (p.millis / 50).toInt()
@@ -139,6 +140,8 @@ object AutoScan {
     private fun fold(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
     private const val FPS50_BONUS = 1000
+    private const val FPS60 = 55
+    private const val FPS60_PENALTY = 10_000
     private const val SURROUND_BONUS = 50
     private const val AUDIO_HD_BONUS = 20
     private const val CONFIRMED_BONUS = 200

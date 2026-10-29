@@ -28,6 +28,7 @@
     <string name="football_pick_source">Scegli il canale</string>
     <string name="football_choose_source">Scegli fonte</string>
     <string name="football_checked_count">%1$d fonti controllate</string>
+    <string name="football_preview_muted">Anteprima senza audio</string>
     <string name="football_highlights_later">Highlights a breve</string>
     <string name="football_watch">Guarda ora</string>
     <string name="football_live">LIVE</string>
