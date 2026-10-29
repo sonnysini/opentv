@@ -16,6 +16,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
 /**
@@ -150,16 +151,23 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
             if (video < 0 || height == 0) return null
             ex.selectTrack(video)
             // Every video sample in the piece: the first ones give the frame rate, all of them the bitrate.
+            // readSampleData, not sampleSize: that one is API 28 and older Fire OS lacks it. Any
+            // trouble reading sizes costs the bitrate only, never the look.
             val times = ArrayList<Long>()
             var bytes = 0L
+            var sizes = true
+            val buffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
             while (true) {
                 val t = ex.sampleTime
                 if (t < 0) break
                 times += t
-                bytes += ex.sampleSize.coerceAtLeast(0)
+                if (sizes) {
+                    val n = runCatching { buffer.clear(); ex.readSampleData(buffer, 0) }.getOrDefault(-1)
+                    if (n >= 0) bytes += n else sizes = false
+                }
                 if (!ex.advance()) break
             }
-            return Info(width, height, fpsOf(times.take(FPS_SAMPLES)), audio, audioHd, kbpsOf(bytes, times))
+            return Info(width, height, fpsOf(times.take(FPS_SAMPLES)), audio, audioHd, if (sizes) kbpsOf(bytes, times) else null)
         } finally {
             ex.release()
         }
@@ -205,6 +213,8 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         }
 
         private const val MIN_SPAN_US = 500_000L
+        /** Larger than any one frame of these feeds (a 1080p keyframe is a few hundred KB). */
+        private const val SAMPLE_BUFFER_BYTES = 4 * 1024 * 1024
 
         /** Frames per second from sample timestamps (decode order, so sorted first). */
         fun fpsOf(timesUs: List<Long>): Int? {
