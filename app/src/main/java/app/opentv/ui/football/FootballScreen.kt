@@ -260,7 +260,8 @@ fun FootballScreen(
                 // the top of the page under "Watch now": up and down scroll only as far as needed.
                 // The rows keep the TV default sideways.
                 val sideways = LocalBringIntoViewSpec.current
-                CompositionLocalProvider(LocalBringIntoViewSpec provides JustEnough) {
+                val justEnough = remember(density) { JustEnough(with(density) { 16.dp.toPx() }) }
+                CompositionLocalProvider(LocalBringIntoViewSpec provides justEnough) {
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(bottom = 32.dp),
@@ -316,15 +317,16 @@ fun FootballScreen(
     }
 }
 
-/** Scrolls just enough to show the focused item whole, as on a phone. */
+/** Scrolls just enough to show the focused item whole, as on a phone, with [margin] to spare. */
 @OptIn(ExperimentalFoundationApi::class)
-private val JustEnough = object : BringIntoViewSpec {
+private class JustEnough(private val margin: Float) : BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-        val end = offset + size
+        val start = offset - margin
+        val end = offset + size + margin
         return when {
-            offset >= 0f && end <= containerSize -> 0f
-            offset < 0f && end > containerSize -> 0f
-            kotlin.math.abs(offset) < kotlin.math.abs(end - containerSize) -> offset
+            start >= 0f && end <= containerSize -> 0f
+            start < 0f && end > containerSize -> 0f
+            kotlin.math.abs(start) < kotlin.math.abs(end - containerSize) -> start
             else -> end - containerSize
         }
     }
@@ -807,7 +809,14 @@ private fun MatchTile(item: FootballViewModel.Item, corner: String?, onHold: () 
     val m = item.match
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
-    Column(Modifier.width(200.dp)) {
+    // The whole tile takes focus, name included: scrolling brings that into view too.
+    Column(
+        Modifier
+            .width(200.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .onOkHeld(onHold)
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -815,10 +824,7 @@ private fun MatchTile(item: FootballViewModel.Item, corner: String?, onHold: () 
                 .lift(focused, 1.05f)
                 .clip(shape)
                 .split(TeamColors.of(m.home), TeamColors.of(m.away))
-                .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier)
-                .onFocusChanged { focused = it.isFocused }
-                .onOkHeld(onHold)
-                .clickable(interactionSource = null, indication = null, onClick = onClick),
+                .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
         ) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
             Row(
