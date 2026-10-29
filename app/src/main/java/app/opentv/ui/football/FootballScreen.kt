@@ -487,14 +487,14 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
     }
     val fadeWhole = Modifier.drawWithContent {
         drawContent()
-        drawRect(Brush.horizontalGradient(0f to page, 0.1f to page.copy(alpha = 0.6f), 0.26f to Color.Transparent, 0.93f to Color.Transparent, 1f to page))
-        drawRect(Brush.verticalGradient(0f to page, 0.07f to Color.Transparent, 0.76f to Color.Transparent, 1f to page))
+        drawRect(Brush.horizontalGradient(0f to page, 0.12f to page.copy(alpha = 0.6f), 0.34f to Color.Transparent))
+        drawRect(Brush.verticalGradient(0.68f to Color.Transparent, 1f to page))
     }
     Box(modifier.fillMaxWidth().height(HERO_HEIGHT + 60.dp)) {
         if (file != null || player != null) {
-            // The whole 16:9 picture, as broadcast (nothing cut off), in from the edges of the
-            // screen and melting into the page all round.
-            Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 20.dp).fillMaxHeight(0.88f).aspectRatio(16f / 9f).then(fadeWhole)) {
+            // The whole 16:9 picture, as broadcast (nothing cut off), as tall as the top of the
+            // page, melting into the page on the left and below.
+            Box(Modifier.align(Alignment.TopEnd).fillMaxHeight().aspectRatio(16f / 9f).then(fadeWhole)) {
                 if (file != null) AsyncImage(
                     // The same file is rewritten by a new look: key the request on it.
                     model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
@@ -521,7 +521,7 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
             if (player != null) {
                 // Says the sound is off on purpose, not broken.
                 Box(
-                    Modifier.align(Alignment.BottomEnd).padding(end = 44.dp, bottom = 96.dp).size(34.dp)
+                    Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = 76.dp).size(34.dp)
                         .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50)),
                     contentAlignment = Alignment.Center,
                 ) {
