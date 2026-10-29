@@ -10,6 +10,7 @@ import app.opentv.data.db.ChannelDao
 import app.opentv.data.db.ProgrammeDao
 import app.opentv.data.model.Channel
 import app.opentv.data.model.TimeShift
+import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.remote.YouTubeStreams
 import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.Dispatchers
@@ -229,7 +230,7 @@ class FootballRepository(
     suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
         val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
         // "#4": entries from before the goal show are looked up again.
-        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#4"
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#5"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
         val missing = matches.filter { key(it) !in kept && !it.goals }
         val goalShows = matches.filter { key(it) !in kept && it.goals }
@@ -242,7 +243,18 @@ class FootballRepository(
             val allIds = guide.values.flatten().distinct()
             val guided = if (allIds.isEmpty()) emptyList()
             else runCatching { channelDao.withGuideIds(allIds) }.getOrElse { emptyList() }
-            (missing.associate { key(it) to lookUp(it, guide[it.id].orEmpty(), named, guided) } +
+            // By name too: every channel called like the guide channel showing the game, whichever
+            // guide it got matched to ("DAZN 1" from all sources, not just the one tied to DAZN.1.it).
+            val keysById = allIds.associateWith { id -> guideKeysOf(id) }
+            val byKey = keysById.values.flatten().distinct().let { keys ->
+                if (keys.isEmpty()) emptyList()
+                else runCatching { channelDao.withGroupKeys(keys) }.getOrElse { emptyList() }
+            }
+            (missing.associate { m ->
+                val ids = guide[m.id].orEmpty()
+                val keys = ids.flatMapTo(HashSet()) { keysById[it].orEmpty() }
+                key(m) to lookUp(m, ids, keys, named, guided + byKey.filter { it.groupKey in keys })
+            } +
                 goalShows.associate { key(it) to goalChannels })
                 .also { Log.i(TAG, "channels for ${missing.size} matches in ${System.currentTimeMillis() - started} ms") }
         }
@@ -295,7 +307,13 @@ class FootballRepository(
             .getOrElse { Log.w(TAG, "channels", it); emptyList() }
     }
 
-    private fun lookUp(match: Match, guideIds: Set<String>, named: List<Channel>, guidedAll: List<Channel>): List<MatchChannel> {
+    private fun lookUp(
+        match: Match,
+        guideIds: Set<String>,
+        guideKeys: Set<String>,
+        named: List<Channel>,
+        guidedAll: List<Channel>,
+    ): List<MatchChannel> {
         val a = keyword(match.home.name)
         val b = keyword(match.away.name)
         val teams = named.filter { it.displayName.contains(a, ignoreCase = true) || it.displayName.contains(b, ignoreCase = true) }
@@ -306,7 +324,12 @@ class FootballRepository(
         val away = logical(teams.filter { it.first == 1 }.map { it.second })?.let { if (home != null) it.copy(spare = true) else it }
 
         val guided = guidedAll
-            .filter { c -> c.epgOverrideId in guideIds || c.epgChannelId in guideIds || c.matchedEpgId in guideIds }
+            .distinctBy { it.id }
+            .filter { c ->
+                c.epgOverrideId in guideIds || c.epgChannelId in guideIds || c.matchedEpgId in guideIds ||
+                    c.groupKey in guideKeys
+            }
+            .filter { c -> !FOREIGN_PREFIX.containsMatchIn(c.name) }
             .filter { c ->
                 val n = fold(c.displayName).lowercase()
                 c.isLive() && !NOT_THE_GAME.containsMatchIn(n) &&
@@ -318,6 +341,13 @@ class FootballRepository(
             // The channel with the most feeds first: more ways to get a picture if one is down.
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
         return (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+    }
+
+    /** Channel keys of guide channel [id]: its display names', and the id's own ("DAZN.1.it" → `dazn1`). */
+    private suspend fun guideKeysOf(id: String): List<String> {
+        val names = runCatching { channelDao.guideKeys(listOf(id)) }.getOrElse { emptyList() }
+        val own = ChannelNameNormalizer.groupKeyOf(id.substringBeforeLast('.').replace('.', ' '))
+        return (names + own).filter { it.isNotEmpty() }.distinct()
     }
 
     private fun Channel.isLive() =
@@ -550,6 +580,8 @@ class FootballRepository(
         /** Guide-matched channels that don't show the game: boxing feeds named like DAZN 1, replays. */
         private val NOT_THE_GAME = Regex("\\b(box|boxe|ufc|differita|replay|serie b)\\b")
         private val RADIO = Regex("\\bradio")
+        /** Another country's copy of a channel: "LA: DAZN 1", "DE| DAZN 1" (Italian ones say IT or nothing). */
+        private val FOREIGN_PREFIX = Regex("^\\s*(?!IT\\b)[A-Z]{2,3}\\s*[:|]")
         /** "DAZN DIRETTA GOL SERIE A", "DIRETTA GOAL": all the round's games, with no guide. */
         private val GOAL_WORDS = listOf("diretta gol", "diretta goal")
         private val GOAL_CHANNEL = Regex("\\bdiretta go(a)?l\\b")

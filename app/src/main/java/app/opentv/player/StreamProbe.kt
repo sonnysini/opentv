@@ -16,6 +16,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
 /**
@@ -37,6 +38,8 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         val audioHd: Boolean = false,
         /** Time to the video in hand, the stream's start-up cost. */
         val millis: Long,
+        /** Video bitrate in the piece fetched (sample bytes over their time span); null when too short. */
+        val kbps: Int? = null,
         /** The top-left corner of a frame, where the scoreboard is. Null when no frame decoded. */
         val corner: Bitmap?,
         /** The same frame small, for showing what the feed is on. */
@@ -64,6 +67,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
                 audioChannels = info.audioChannels,
                 audioHd = info.audioHd,
                 millis = fetchedAt - t0,
+                kbps = info.kbps,
                 corner = corner,
                 preview = preview,
             )
@@ -120,7 +124,7 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         return lines.lastOrNull { it.isNotEmpty() && !it.startsWith("#") }
     }
 
-    private data class Info(val width: Int, val height: Int, val fps: Int?, val audioChannels: Int?, val audioHd: Boolean)
+    private data class Info(val width: Int, val height: Int, val fps: Int?, val audioChannels: Int?, val audioHd: Boolean, val kbps: Int?)
 
     private fun inspect(file: File): Info? {
         val ex = MediaExtractor()
@@ -146,14 +150,24 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
             }
             if (video < 0 || height == 0) return null
             ex.selectTrack(video)
+            // Every video sample in the piece: the first ones give the frame rate, all of them the bitrate.
+            // readSampleData, not sampleSize: that one is API 28 and older Fire OS lacks it. Any
+            // trouble reading sizes costs the bitrate only, never the look.
             val times = ArrayList<Long>()
-            while (times.size < FPS_SAMPLES) {
+            var bytes = 0L
+            var sizes = true
+            val buffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
+            while (true) {
                 val t = ex.sampleTime
                 if (t < 0) break
                 times += t
+                if (sizes) {
+                    val n = runCatching { buffer.clear(); ex.readSampleData(buffer, 0) }.getOrDefault(-1)
+                    if (n >= 0) bytes += n else sizes = false
+                }
                 if (!ex.advance()) break
             }
-            return Info(width, height, fpsOf(times), audio, audioHd)
+            return Info(width, height, fpsOf(times.take(FPS_SAMPLES)), audio, audioHd, if (sizes) kbpsOf(bytes, times) else null)
         } finally {
             ex.release()
         }
@@ -187,6 +201,20 @@ class StreamProbe(http: OkHttpClient, private val dir: File) {
         private const val PLAYLIST_BYTES = 256_000L
         private const val FPS_SAMPLES = 40
         private const val PREVIEW_WIDTH = 480
+
+        /** Bitrate from [bytes] of video spread over [timesUs]; null under half a second of video. */
+        fun kbpsOf(bytes: Long, timesUs: List<Long>): Int? {
+            if (timesUs.size < 2) return null
+            val span = timesUs.max() - timesUs.min()
+            if (span < MIN_SPAN_US) return null
+            // n samples cover n frame durations, not n - 1.
+            val perFrame = span / (timesUs.size - 1)
+            return (bytes * 8 * 1000 / (span + perFrame)).toInt()
+        }
+
+        private const val MIN_SPAN_US = 500_000L
+        /** Larger than any one frame of these feeds (a 1080p keyframe is a few hundred KB). */
+        private const val SAMPLE_BUFFER_BYTES = 4 * 1024 * 1024
 
         /** Frames per second from sample timestamps (decode order, so sorted first). */
         fun fpsOf(timesUs: List<Long>): Int? {

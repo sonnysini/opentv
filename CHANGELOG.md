@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.35.0 — 29 October 2026
+
+- **Football: every channel the guide says shows the game.** A guide channel showing the match
+  now brings in every channel of yours with its name, from every source — "DAZN 1" from all the
+  provider's sections, not only the one copy the guide got matched to. Other countries' copies
+  ("LA: DAZN 1") stay out. Same channels the scan server finds.
+- **Bitrate measured on the TV too.** The football scan works out each feed's real bitrate from
+  the piece it already fetches (no extra time); the heavier feed wins between feeds alike in frame
+  rate and lines, and the scan screen shows it ("8,0 Mbps").
+- The feed watched last no longer stays first once a later scan finds it dead.
+
 ## 0.34.0 — 29 October 2026
 
 - **Football: rankings from a scan server.** Settings › Playback › Football scan server takes the
