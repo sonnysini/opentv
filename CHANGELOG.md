@@ -9,6 +9,7 @@
 - **Bitrate measured on the TV too.** The football scan works out each feed's real bitrate from
   the piece it already fetches (no extra time); the heavier feed wins between feeds alike in frame
   rate and lines, and the scan screen shows it ("8,0 Mbps").
+- The feed watched last no longer stays first once a later scan finds it dead.
 
 ## 0.34.0 — 29 October 2026
 

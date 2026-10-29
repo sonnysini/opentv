@@ -185,9 +185,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val out = ranked.map { Source(it.item, nameOf(it.item), true, it.probe, it.verdict, store.fresh(m.id, it.item.id)?.at) }
         val unlooked = all.filter { it.id !in lookedIds }.map { Source(it, nameOf(it), false, null, null) }
         val list = out.filter { it.usable } + unlooked + out.filterNot { it.usable }
-        // The feed watched last was picked over the ranking (or worked): it stays first.
+        // The feed watched last was picked over the ranking (or worked): it stays first — unless
+        // a later look found it dead.
         val picked = store.picked(m.id) ?: return list
-        val mine = list.firstOrNull { it.feed.id == picked } ?: return list
+        val mine = list.firstOrNull { it.feed.id == picked && it.usable } ?: return list
         return listOf(mine) + list.filter { it !== mine }
     }
 
