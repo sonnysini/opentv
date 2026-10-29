@@ -9,7 +9,11 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.background
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -115,6 +119,7 @@ private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.andro
  * channel of the user's own lists — then rows of 16:9 tiles: the other live games, today's
  * (finished ones play their YouTube highlights), each coming day's, the last round.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FootballScreen(
     onPlayChannel: (Channel) -> Unit,
@@ -251,6 +256,11 @@ fun FootballScreen(
             ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() && ui.lastRound.isEmpty() -> Message(stringResource(R.string.football_none))
             else -> {
                 if (heroItem != null) Backdrop(backdrop, heroItem.match, looks, Modifier.alpha(fade))
+                // TV's default keeps the focused item a third of the way down, which would cut off
+                // the top of the page under "Watch now": up and down scroll only as far as needed.
+                // The rows keep the TV default sideways.
+                val sideways = LocalBringIntoViewSpec.current
+                CompositionLocalProvider(LocalBringIntoViewSpec provides JustEnough) {
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(bottom = 32.dp),
@@ -273,8 +283,13 @@ fun FootballScreen(
                         )
                     }
                     rowList.forEach { (title, items) ->
-                        item(key = "row:$title") { MatchRow(title, items, viewModel, progress, looks, open, hold) }
+                        item(key = "row:$title") {
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
+                                MatchRow(title, items, viewModel, progress, looks, open, hold)
+                            }
+                        }
                     }
+                }
                 }
             }
         }
@@ -297,6 +312,20 @@ fun FootballScreen(
                     Text(stringResource(R.string.football_highlights_loading), style = MaterialTheme.typography.titleMedium)
                 }
             }
+        }
+    }
+}
+
+/** Scrolls just enough to show the focused item whole, as on a phone. */
+@OptIn(ExperimentalFoundationApi::class)
+private val JustEnough = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val end = offset + size
+        return when {
+            offset >= 0f && end <= containerSize -> 0f
+            offset < 0f && end > containerSize -> 0f
+            kotlin.math.abs(offset) < kotlin.math.abs(end - containerSize) -> offset
+            else -> end - containerSize
         }
     }
 }
