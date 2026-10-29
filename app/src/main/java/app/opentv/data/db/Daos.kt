@@ -189,6 +189,14 @@ interface ChannelDao {
     )
     suspend fun withGuideIds(guideIds: List<String>): List<Channel>
 
+    /** What the guide calls [guideIds], as channel keys: "DAZN.1.it" named "DAZN 1" is `dazn1`. */
+    @Query("SELECT DISTINCT normalizedKey FROM epg_channels WHERE epgId IN (:guideIds) AND normalizedKey != ''")
+    suspend fun guideKeys(guideIds: List<String>): List<String>
+
+    /** Visible channels of any of [keys], every source and quality. */
+    @Query("SELECT * FROM channels WHERE hidden = 0 AND groupKey IN (:keys) ORDER BY qualityRank DESC, displayName")
+    suspend fun withGroupKeys(keys: List<String>): List<Channel>
+
     /** Free-form channel lookup: the football home asks for all of its teams in one pass. */
     @RawQuery(observedEntities = [Channel::class])
     suspend fun query(query: SupportSQLiteQuery): List<Channel>

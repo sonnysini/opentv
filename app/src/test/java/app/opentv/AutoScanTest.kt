@@ -152,4 +152,15 @@ class AutoScanTest {
         assertThat(AutoScan.quality(p(720, 50, 30000))).isLessThan(AutoScan.quality(p(1080, 50, 500)))
         assertThat(AutoScan.quality(p(1080, 25, 30000))).isLessThan(AutoScan.quality(p(720, 50, 500)))
     }
+
+    @Test
+    fun `bitrate from the samples fetched`() {
+        // 50 frames at 50 fps (1 s of video), 1 MB in all: 8 Mbps.
+        val times = (0 until 50).map { it * 20_000L }
+        assertThat(StreamProbe.kbpsOf(1_000_000, times)).isEqualTo(8000)
+        // Decode order doesn't matter.
+        assertThat(StreamProbe.kbpsOf(1_000_000, times.reversed())).isEqualTo(8000)
+        // Under half a second: no figure.
+        assertThat(StreamProbe.kbpsOf(1_000_000, times.take(10))).isNull()
+    }
 }

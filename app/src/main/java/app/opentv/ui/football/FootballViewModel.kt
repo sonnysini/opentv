@@ -363,7 +363,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val text = if (item.match.goals) null else r?.corner?.let { reader.read(it) }
         r?.corner?.recycle()
         val board = text?.let { AutoScan.parseBoard(it) }
-        val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board, it.audioHd) }
+        val p = r?.let { AutoScan.Probe(it.height, it.fps, it.audioChannels, it.millis, board, it.audioHd, it.kbps) }
         android.util.Log.i(TAG, "${feed.shownName} ${feed.qualityLabel}: ${p?.let(::detail) ?: "dead"} | ocr=${text?.take(80)} | board=$board")
         store.put(item.match.id, feed.id, p, r?.preview)
         _looks.value++
@@ -414,6 +414,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private fun detail(p: AutoScan.Probe) = listOfNotNull(
         FeedLabel.resolution(p.height),
         p.fps?.let { "$it fps" },
+        p.kbps?.let { String.format(java.util.Locale.ITALY, "%.1f Mbps", it / 1000.0) },
         "Audio HD".takeIf { p.audioHd },
         p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
         String.format(java.util.Locale.ITALY, "%.1f s", p.millis / 1000.0),
@@ -527,6 +528,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val per = item.channels.map { mc ->
             mc to catalog.variants(mc.channel).sortedByDescending { it.qualityRank }
                 .filterNot { SD.containsMatchIn(it.qualityLabel) }
+                // Another country's copy under the same name ("LA: DAZN 1"): not the Italian feed.
+                .filterNot { FOREIGN_PREFIX.containsMatchIn(it.name) }
         }
         val out = per.flatMap { it.second }.distinctBy { it.id }.take(MAX_FEEDS)
         val spare = per.filter { it.first.spare }.flatMap { p -> p.second.map { it.id } }.toSet()
@@ -549,6 +552,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         const val IDLE_MILLIS = 30_000L
         const val TABS_AHEAD_MILLIS = 15 * 60_000L
         val SD = Regex("\\bSD\\b", RegexOption.IGNORE_CASE)
+        val FOREIGN_PREFIX = Regex("^\\s*(?!IT\\b)[A-Z]{2,3}\\s*[:|]")
     }
 
     private suspend fun finished(m: Match) = Item(m, highlights = repo.highlightsFor(m))
