@@ -9,7 +9,24 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.background
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,10 +114,12 @@ private const val REQUEST_WAIT_MILLIS = 20_000L
 private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
 
 /**
- * The football home: the match on now (or next) big at the top with "Watch now" already focused —
- * OK and it plays on the best channel of the user's own lists — then rows for the other live games,
- * today's (finished ones play their YouTube highlights) and the fixtures coming up.
+ * The football home, streaming-app style: the match on now (or next) over the whole top of the
+ * page, its best feed's picture behind, "Watch now" already focused — OK and it plays on the best
+ * channel of the user's own lists — then rows of 16:9 tiles: the other live games, today's
+ * (finished ones play their YouTube highlights), each coming day's, the last round.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FootballScreen(
     onPlayChannel: (Channel) -> Unit,
@@ -214,43 +233,64 @@ fun FootballScreen(
     val hold: (FootballViewModel.Item) -> Unit = { item ->
         if (item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty()) picking = item
     }
-    // What a card says under the teams, the scan's state included.
-    val cardAction: @Composable (FootballViewModel.Item) -> String = { item -> action(item, viewModel, progress, looks) }
+    // The game the top of the page is about: the first live (or next) one, or the tab picked.
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val heroItem = ui.hero?.let { first -> ui.heroes.firstOrNull { it.match.id == selectedId } ?: ui.heroes.firstOrNull() ?: first }
+    val heroBest = remember(heroItem, looks) { heroItem?.let { h -> viewModel.sources(h).firstOrNull { it.looked && it.usable } } }
+    val backdrop = heroItem?.let { h -> heroBest?.feed?.id?.let { viewModel.frame(h, it) } }
+    val rowList = rows(ui)
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    // The backdrop belongs to the top of the page: it fades out as the rows scroll up over it.
+    val fade by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 0f
+            else 1f - (listState.firstVisibleItemScrollOffset / with(density) { HERO_HEIGHT.toPx() }).coerceIn(0f, 1f)
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         when {
             ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             ui.failed -> Message(stringResource(R.string.football_unavailable))
             ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() && ui.lastRound.isEmpty() -> Message(stringResource(R.string.football_none))
-            else -> LazyColumn(
-                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                ui.hero?.let { hero ->
-                    item(key = "hero") {
+            else -> {
+                if (heroItem != null) Backdrop(backdrop, heroItem.match, looks, Modifier.alpha(fade))
+                // TV's default keeps the focused item a third of the way down, which would cut off
+                // the top of the page under "Watch now": up and down scroll only as far as needed.
+                // The rows keep the TV default sideways.
+                val sideways = LocalBringIntoViewSpec.current
+                val justEnough = remember(density) { JustEnough(with(density) { 16.dp.toPx() }) }
+                CompositionLocalProvider(LocalBringIntoViewSpec provides justEnough) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    if (heroItem != null) item(key = "hero") {
+                        val scope = rememberCoroutineScope()
                         Hero(
+                            modifier = Modifier.onFocusChanged { if (it.hasFocus) scope.launch { listState.animateScrollToItem(0) } },
                             tabs = ui.heroes,
-                            first = hero,
+                            item = heroItem,
+                            firstId = ui.hero!!.match.id,
+                            best = heroBest,
                             viewModel = viewModel,
                             looks = looks,
                             progress = progress,
-                            onPlay = { item, feed -> viewModel.play(item, feed) },
+                            onSelect = { selectedId = it },
+                            onPick = { picking = heroItem },
                         )
                     }
+                    rowList.forEach { (title, items) ->
+                        item(key = "row:$title") {
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
+                                MatchRow(title, items, viewModel, progress, looks, open, hold)
+                            }
+                        }
+                    }
                 }
-                if (ui.live.isNotEmpty()) item(key = "live") {
-                    MatchRow(stringResource(R.string.football_live_row), ui.live, open, hold, cardAction, hint = true)
-                }
-                if (ui.today.isNotEmpty()) {
-                    val h = ui.live.isEmpty() && ui.today.any { it.match.phase != Phase.FINISHED }
-                    item(key = "today") { MatchRow(stringResource(R.string.football_today), ui.today, open, hold, cardAction, hint = h) }
-                }
-                if (ui.upcoming.isNotEmpty()) item(key = "upcoming") {
-                    MatchRow(stringResource(R.string.football_upcoming), ui.upcoming, open, hold, cardAction)
-                }
-                if (ui.lastRound.isNotEmpty()) item(key = "last_round") {
-                    MatchRow(stringResource(R.string.football_last_round), ui.lastRound, open, hold, cardAction)
                 }
             }
         }
@@ -277,6 +317,34 @@ fun FootballScreen(
     }
 }
 
+/** Scrolls just enough to show the focused item whole, as on a phone, with [margin] to spare. */
+@OptIn(ExperimentalFoundationApi::class)
+private class JustEnough(private val margin: Float) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val start = offset - margin
+        val end = offset + size + margin
+        return when {
+            start >= 0f && end <= containerSize -> 0f
+            start < 0f && end > containerSize -> 0f
+            kotlin.math.abs(start) < kotlin.math.abs(end - containerSize) -> start
+            else -> end - containerSize
+        }
+    }
+}
+
+/** The rows under the top of the page: on now, today, each coming day, the last round. */
+@Composable
+private fun rows(ui: FootballViewModel.UiState): List<Pair<String, List<FootballViewModel.Item>>> {
+    val out = mutableListOf<Pair<String, List<FootballViewModel.Item>>>()
+    if (ui.live.isNotEmpty()) out += stringResource(R.string.football_live_row) to ui.live
+    if (ui.today.isNotEmpty()) out += stringResource(R.string.football_today) to ui.today
+    ui.upcoming.groupBy { localDay(it.match) }.forEach { (day, items) ->
+        out += DAY_TITLE.format(day).replaceFirstChar { it.uppercase() } to items
+    }
+    if (ui.lastRound.isNotEmpty()) out += stringResource(R.string.football_last_round) to ui.lastRound
+    return out
+}
+
 @Composable
 private fun Message(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -284,164 +352,180 @@ private fun Message(text: String) {
     }
 }
 
-// ---- Hero ---------------------------------------------------------------------------------------
+// ---- Top of the page ----------------------------------------------------------------------------
+
+private val HERO_HEIGHT = 318.dp
+
+private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 
 /**
- * The big card: the teams with "Watch now" under them, the match's feeds best first beside, and
- * a picture of the feed in focus (or the best one). Games on together come as tabs along the top.
+ * Behind the top of the page, streaming-app style: the best feed's picture from its look over the
+ * right of the screen, fading into the page to the left and below. Before any look, the two teams'
+ * colours with their crests faint.
  */
 @Composable
-private fun Hero(
-    tabs: List<FootballViewModel.Item>,
-    first: FootballViewModel.Item,
-    viewModel: FootballViewModel,
-    looks: Int,
-    progress: FootballViewModel.Progress?,
-    onPlay: (FootballViewModel.Item, Channel) -> Unit,
-) {
-    var selectedId by rememberSaveable { mutableStateOf(first.match.id) }
-    val item = tabs.firstOrNull { it.match.id == selectedId } ?: tabs.firstOrNull() ?: first
-    val m = item.match
-    val watch = remember { FocusRequester() }
-    val feeds = viewModel.feedsOf(item)
-    val sources = remember(item, looks) { viewModel.sources(item) }
-    val best = sources.firstOrNull { it.looked && it.usable }
-    var shown by remember(item.match.id) { mutableStateOf<Long?>(null) }
-    // The feed in focus, else the best: whichever has a picture.
-    val previewId = listOfNotNull(shown, best?.feed?.id).firstOrNull { viewModel.frame(item, it) != null }
-    LaunchedEffect(first.match.id, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
-
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(262.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(Color(0xFF16261B), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface),
-                ),
-            ),
-    ) {
-        // Room along the bottom for the scan's bar.
-        Row(Modifier.fillMaxSize().padding(start = 24.dp, end = 18.dp, top = 14.dp, bottom = 26.dp)) {
-            Column(Modifier.width(330.dp)) {
-                if (tabs.size >= 2) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(tabs, key = { it.match.id }) { t ->
-                            MatchTab(t, selected = t.match.id == item.match.id) { selectedId = t.match.id }
-                        }
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (m.phase == Phase.LIVE) {
-                            LiveBadge()
-                            Spacer(Modifier.width(10.dp))
-                        }
-                        Text(
-                            m.round?.let { stringResource(R.string.football_round, it) } ?: "Serie A",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+private fun Backdrop(file: java.io.File?, match: Match, looks: Int, modifier: Modifier = Modifier) {
+    val page = MaterialTheme.colorScheme.background
+    // Faded into the page inside the picture itself: no edge where it starts.
+    val fadeOut = Modifier.drawWithContent {
+        drawContent()
+        drawRect(Brush.horizontalGradient(0f to page, 0.45f to page.copy(alpha = 0.35f), 1f to Color.Transparent))
+        drawRect(Brush.verticalGradient(0.5f to Color.Transparent, 1f to page))
+    }
+    Box(modifier.fillMaxWidth().height(HERO_HEIGHT + 60.dp)) {
+        if (file != null) {
+            AsyncImage(
+                // The same file is rewritten by a new look: key the request on it.
+                model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
+                    .memoryCacheKey("${file.path}#${file.lastModified()}#$looks").build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth(0.75f).fillMaxHeight().then(fadeOut),
+            )
+        } else {
+            Box(Modifier.align(Alignment.TopEnd).fillMaxWidth(0.6f).fillMaxHeight().then(fadeOut)) {
+                Box(Modifier.fillMaxSize().alpha(0.4f).split(TeamColors.of(match.home), TeamColors.of(match.away))) {
+                    Row(Modifier.fillMaxSize().padding(start = 80.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.alpha(0.35f)) { Crest(match.home, 120) }
+                        if (!match.goals) Box(Modifier.alpha(0.35f)) { Crest(match.away, 120) }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    HeroTeam(m.home)
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            centre(m),
-                            fontSize = if (m.phase == Phase.SCHEDULED) 32.sp else 40.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            heroStatus(m),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (m.phase == Phase.LIVE) LIVE_RED else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    HeroTeam(m.away)
-                }
-                Spacer(Modifier.weight(1f))
-                if (feeds.isEmpty()) {
-                    Text(
-                        stringResource(if (m.phase == Phase.LIVE) R.string.football_no_channel else R.string.football_channels_soon),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    val sub = when {
-                        best != null -> stringResource(R.string.football_ready, best.name) +
-                            (best.probe?.let { " · " + quality(it) } ?: "") + " · " + ago(best.at)
-                        progress?.matchId == m.id -> stringResource(R.string.football_scanning_short, progress.done, progress.total)
-                        else -> stringResource(R.string.football_auto_hint)
-                    }
-                    WatchButton(Modifier.focusRequester(watch), sub) { viewModel.autoWatch(item) }
-                }
-            }
-            if (feeds.isNotEmpty()) {
-                Spacer(Modifier.width(20.dp))
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            stringResource(R.string.football_or_watch_on) + " · " + stringResource(R.string.football_best_first),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        SmallButton(stringResource(R.string.football_rescan)) { viewModel.rescan(item) }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    // Back at the top once focus leaves: the best feeds are what the card shows.
-                    val listState = rememberLazyListState()
-                    val scope = rememberCoroutineScope()
-                    LazyColumn(
-                        state = listState,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.onFocusChanged {
-                            if (!it.hasFocus) {
-                                shown = null
-                                scope.launch { listState.scrollToItem(0) }
-                            }
-                        },
-                    ) {
-                        items(sources.size) { i ->
-                            val s = sources[i]
-                            SourceRow(s, place = i + 1, onFocus = { shown = s.feed.id }) { onPlay(item, s.feed) }
-                        }
-                    }
-                }
-                Spacer(Modifier.width(16.dp))
-                Preview(
-                    file = previewId?.let { viewModel.frame(item, it) },
-                    label = sources.firstOrNull { it.feed.id == previewId }?.let { "${it.name} · ${ago(it.at)}" },
-                    match = m,
-                    looks = looks,
-                    modifier = Modifier.width(230.dp).align(Alignment.CenterVertically),
-                )
-            }
-        }
-        // Looking at feeds by itself: a thin bar along the bottom, and which game.
-        progress?.let { p ->
-            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
-                Text(
-                    stringResource(R.string.football_scanning_bar, p.title, p.done, p.total),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                LinearProgressIndicator(
-                    progress = { if (p.total == 0) 0f else p.done / p.total.toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
-                )
             }
         }
     }
 }
 
-/** A game on the big card's tabs: crests, score, minute. Focus selects it. */
+/**
+ * The game on now (or next), big: round and time, the crests, the teams in tall capitals, one line
+ * on the feed that will play, then "Watch now" (focused) and "Pick source". Games on together come
+ * as tabs above.
+ */
+@Composable
+private fun Hero(
+    modifier: Modifier = Modifier,
+    tabs: List<FootballViewModel.Item>,
+    item: FootballViewModel.Item,
+    firstId: Long,
+    best: FootballViewModel.Source?,
+    viewModel: FootballViewModel,
+    looks: Int,
+    progress: FootballViewModel.Progress?,
+    onSelect: (Long) -> Unit,
+    onPick: () -> Unit,
+) {
+    val m = item.match
+    val watch = remember { FocusRequester() }
+    val feeds = viewModel.feedsOf(item)
+    val checked = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
+    LaunchedEffect(firstId, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
+
+    Column(modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)) {
+        if (tabs.size >= 2) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+                items(tabs, key = { it.match.id }) { t ->
+                    MatchTab(t, selected = t.match.id == m.id) { onSelect(t.match.id) }
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (m.phase == Phase.LIVE) {
+                LiveBadge(m.minute)
+                Spacer(Modifier.width(12.dp))
+            }
+            Text(
+                kicker(m),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 2.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Crest(m.home, 52)
+            if (!m.goals) Crest(m.away, 52)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            title(m),
+            fontFamily = Oswald,
+            fontWeight = FontWeight.Bold,
+            fontSize = 46.sp,
+            lineHeight = 50.sp,
+            color = Color.White,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(0.72f),
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val meta = MaterialTheme.typography.bodyLarge
+            val faint = Color.White.copy(alpha = 0.8f)
+            when {
+                feeds.isEmpty() -> Text(
+                    stringResource(if (m.phase == Phase.LIVE) R.string.football_no_channel else R.string.football_channels_soon),
+                    style = meta, color = faint,
+                )
+                progress?.matchId == m.id -> Text(
+                    stringResource(R.string.football_auto_scanning) + " " + progress.done + "/" + progress.total,
+                    style = meta, color = faint,
+                )
+                best != null -> {
+                    Text(FeedLabel.split(best.feed.shownName, best.feed.qualityLabel).name, style = meta, color = faint, maxLines = 1)
+                    best.probe?.let { Tag(compact(it)) }
+                    Dot()
+                    Text(stringResource(R.string.football_checked_count, checked), style = meta, color = faint)
+                }
+                else -> Text(stringResource(R.string.football_auto_hint), style = meta, color = faint)
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        if (feeds.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                HeroButton("⚡ " + stringResource(R.string.football_watch), Modifier.focusRequester(watch)) { viewModel.autoWatch(item) }
+                HeroButton(stringResource(R.string.football_choose_source), onClick = onPick)
+                HeroButton("↻", onClick = { viewModel.rescan(item) })
+            }
+        }
+        // Looking at another game's feeds by itself: a thin line, out of the way.
+        progress?.takeIf { it.matchId != m.id }?.let { p ->
+            Spacer(Modifier.height(14.dp))
+            Text(
+                stringResource(R.string.football_scanning_bar, p.title, p.done, p.total),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(
+                progress = { if (p.total == 0) 0f else p.done / p.total.toFloat() },
+                modifier = Modifier.width(320.dp).padding(top = 4.dp).height(2.dp).clip(RoundedCornerShape(1.dp)),
+            )
+        }
+    }
+}
+
+/** Streaming-app button: translucent grey, white with black text in focus. */
+@Composable
+private fun HeroButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        text,
+        fontSize = 17.sp,
+        fontWeight = FontWeight.Bold,
+        color = if (focused) Color.Black else Color.White,
+        maxLines = 1,
+        modifier = modifier
+            .lift(focused, 1.06f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (focused) Color.White else Color(0x736E7672))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 11.dp),
+    )
+}
+
+/** A game on the top of the page's tabs: crests, score, minute. Focus selects it. */
 @Composable
 private fun MatchTab(item: FootballViewModel.Item, selected: Boolean, onSelect: () -> Unit) {
     val m = item.match
@@ -449,24 +533,41 @@ private fun MatchTab(item: FootballViewModel.Item, selected: Boolean, onSelect: 
     Row(
         Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF26352E) else MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (selected && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+            .background(if (focused) Color.White else if (selected) Color(0x996E7672) else Color(0x4D6E7672))
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onSelect()
             }
             .clickable(interactionSource = null, indication = null, onClick = onSelect)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        if (m.phase == Phase.LIVE) Text("●", color = LIVE_RED, fontSize = 10.sp)
-        Spacer(Modifier.width(4.dp))
-        Crest(m.home, 16)
-        Text(" ${centre(m)} ", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = fg)
-        Crest(m.away, 16)
-        if (m.phase == Phase.LIVE) m.minute?.let { Text(" $it", fontSize = 11.sp, color = fg) }
+        val fg = if (focused) Color.Black else Color.White
+        if (m.phase == Phase.LIVE) Text("● ", color = LIVE_RED, fontSize = 10.sp)
+        Crest(m.home, 18)
+        Text(" ${centre(m)} ", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = fg)
+        if (!m.goals) Crest(m.away, 18)
+        if (m.phase == Phase.LIVE) m.minute?.let { Text(" $it", fontSize = 12.sp, color = fg) }
     }
+}
+
+/** "1080p50" in a thin outline. */
+@Composable
+private fun Tag(text: String) {
+    Text(
+        text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color.White,
+        modifier = Modifier
+            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
+}
+
+@Composable
+private fun Dot() {
+    Box(Modifier.size(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.5f)))
 }
 
 /**
@@ -577,48 +678,6 @@ private fun Badge(text: String, focused: Boolean, accent: Boolean = false, dashe
     )
 }
 
-/** The feed's picture from its look; before any, the two crests faint. */
-@Composable
-private fun Preview(file: java.io.File?, label: String?, match: Match, looks: Int, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .height(130.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black.copy(alpha = 0.35f))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
-    ) {
-        if (file != null) {
-            AsyncImage(
-                // The same file is rewritten by a new look: key the request on it.
-                model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
-                    .memoryCacheKey("${file.path}#${file.lastModified()}#$looks").build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-            if (label != null) {
-                Text(
-                    "● " + stringResource(R.string.football_preview) + " · " + label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-            }
-        } else {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.alpha(0.18f)) { Crest(match.home, 80) }
-                Box(Modifier.alpha(0.18f)) { Crest(match.away, 80) }
-            }
-        }
-    }
-}
-
 /** Hold OK on a card: the match's feeds, best first, to pick one by hand. */
 @Composable
 private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewModel, looks: Int, onPick: (Channel) -> Unit) {
@@ -658,58 +717,6 @@ private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewMo
             }
         }
     }
-}
-
-@Composable
-private fun HeroTeam(team: Team) {
-    Column(Modifier.width(96.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Crest(team, 60)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            team.name,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun WatchButton(modifier: Modifier = Modifier, sub: String, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier
-            .fillMaxWidth()
-            .focusLift(focused)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
-    ) {
-        val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        Text("⚡ " + stringResource(R.string.football_watch), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = fg)
-        Text(sub, style = MaterialTheme.typography.bodySmall, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun SmallButton(text: String, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
 }
 
 /** The feeds being looked at, then their ranking, before the best one opens. */
@@ -767,155 +774,143 @@ private fun ScanLine(row: FootballViewModel.ScanRow) {
 private fun MatchRow(
     title: String,
     items: List<FootballViewModel.Item>,
+    viewModel: FootballViewModel,
+    progress: FootballViewModel.Progress?,
+    looks: Int,
     onOpen: (FootballViewModel.Item) -> Unit,
     onHold: (FootballViewModel.Item) -> Unit,
-    action: @Composable (FootballViewModel.Item) -> String,
-    /** Say what OK and holding OK do, under the row. */
-    hint: Boolean = false,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp),
+            modifier = Modifier.padding(start = 48.dp, bottom = 4.dp),
         )
         LazyRow(
-            contentPadding = PaddingValues(vertical = 6.dp, horizontal = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 48.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(items, key = { it.match.id }) { item -> MatchCard(item, action(item), onHold = { onHold(item) }) { onOpen(item) } }
-        }
-        if (hint) {
-            Text(
-                stringResource(R.string.football_hold_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
-            )
+            items(items, key = { it.match.id }) { item ->
+                MatchTile(item, corner(item, viewModel, progress, looks), onHold = { onHold(item) }) { onOpen(item) }
+            }
         }
     }
 }
 
+/**
+ * A game as a 16:9 tile: the two teams' colours split on a slant with their crests big, the time
+ * (or LIVE minute, or Highlights) on a chip top left, how many feeds are ready bottom right; the
+ * teams (and score) under it.
+ */
 @Composable
-private fun MatchCard(item: FootballViewModel.Item, action: String, onHold: () -> Unit, onClick: () -> Unit) {
+private fun MatchTile(item: FootballViewModel.Item, corner: String?, onHold: () -> Unit, onClick: () -> Unit) {
     val m = item.match
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(8.dp)
+    // The whole tile takes focus, name included: scrolling brings that into view too.
     Column(
         Modifier
-            .width(190.dp)
-            .focusLift(focused)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surface)
-            .then(
-                if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape)
-                else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape),
-            )
+            .width(200.dp)
             .onFocusChanged { focused = it.isFocused }
             .onOkHeld(onHold)
             .clickable(interactionSource = null, indication = null, onClick = onClick),
     ) {
-        val thumb = item.highlights
-        if (m.phase == Phase.FINISHED && thumb != null) {
-            Box(Modifier.fillMaxWidth().height(72.dp)) {
-                AsyncImage(
-                    model = "https://i.ytimg.com/vi/$thumb/mqdefault.jpg",
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Row(
-                    Modifier.align(Alignment.Center).clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Crest(m.home, 22)
-                    Text(
-                        "  ${centre(m)}  ",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
-                    )
-                    Crest(m.away, 22)
-                }
-            }
-        } else {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(112.dp)
+                .lift(focused, 1.05f)
+                .clip(shape)
+                .split(TeamColors.of(m.home), TeamColors.of(m.away))
+                .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
+        ) {
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
             Row(
-                Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 14.dp),
+                Modifier.fillMaxSize().padding(horizontal = 22.dp),
+                horizontalArrangement = if (m.goals) Arrangement.Center else Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Crest(m.home, 44)
+                Crest(m.home, 52)
+                if (!m.goals) Crest(m.away, 52)
+            }
+            Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))
+            corner?.let {
                 Text(
-                    centre(m),
-                    fontSize = if (m.phase == Phase.SCHEDULED) 20.sp else 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (m.phase == Phase.FINISHED) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
+                    it,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(7.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
-                Crest(m.away, 44)
             }
         }
-        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)) {
-            Text(
-                if (m.goals) "${m.home.name} ${m.away.name}" else "${m.home.name} – ${m.away.name}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                status(m, withDay = true),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (m.phase == Phase.LIVE) LIVE_RED else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                action,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (action.startsWith("⚡")) FontWeight.Bold else null,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Text(
+            name(m),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 7.dp),
+        )
+        tileStatus(m)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun action(item: FootballViewModel.Item, viewModel: FootballViewModel, progress: FootballViewModel.Progress?, looks: Int): String = when {
-    item.match.phase == Phase.FINISHED ->
-        if (item.highlights != null) "▶ " + stringResource(R.string.football_highlights)
-        else stringResource(R.string.football_highlights_soon)
-    item.match.phase == Phase.OFF -> "—"
-    viewModel.feedsOf(item).isNotEmpty() -> {
-        val usable = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
-        "⚡ " + stringResource(R.string.football_watch) + when {
-            progress?.matchId == item.match.id -> " · " + stringResource(R.string.football_scanning_short, progress.done, progress.total)
-            usable > 0 -> " · " + stringResource(R.string.football_ready_count, usable)
-            else -> ""
-        }
-    }
-    else -> stringResource(R.string.football_channels_soon)
+private fun Chip(text: String, live: Boolean, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = Color.White,
+        maxLines = 1,
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (live) Color(0xFFE50914) else Color.Black.copy(alpha = 0.65f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
-/** "1080p · 50 fps · 5.1" */
-private fun quality(p: AutoScan.Probe): String = listOfNotNull(
-    FeedLabel.resolution(p.height),
-    p.fps?.let { "$it fps" },
-    "Audio HD".takeIf { p.audioHd },
-    p.audioChannels?.takeIf { it >= 6 }?.let { "5.1" },
-).joinToString(" · ")
-
-/** How long ago a feed was looked at: "4 min ago". */
+/** Bottom right of a tile: the scan on it ("12/30"), else how many feeds are ready ("⚡ 17"). */
 @Composable
-private fun ago(at: Long?): String {
-    val min = at?.let { ((System.currentTimeMillis() - it) / 60_000L).toInt() } ?: return ""
-    return if (min < 1) stringResource(R.string.football_just_now) else stringResource(R.string.football_minutes_ago, min)
+private fun corner(item: FootballViewModel.Item, viewModel: FootballViewModel, progress: FootballViewModel.Progress?, looks: Int): String? {
+    if (item.match.phase == Phase.FINISHED || item.match.phase == Phase.OFF) return null
+    if (viewModel.feedsOf(item).isEmpty()) return null
+    if (progress?.matchId == item.match.id) return "${progress.done}/${progress.total}"
+    val usable = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
+    return if (usable > 0) "⚡ $usable" else null
+}
+
+/** Paints the box in two colours split on a slant: home left, away right. */
+private fun Modifier.split(home: Color, away: Color): Modifier = drawBehind {
+    drawRect(away)
+    val path = androidx.compose.ui.graphics.Path().apply {
+        moveTo(0f, 0f)
+        lineTo(size.width * 0.58f, 0f)
+        lineTo(size.width * 0.42f, size.height)
+        lineTo(0f, size.height)
+        close()
+    }
+    drawPath(path, home)
+}
+
+/** Grows a little in focus, whatever the app's style. */
+private fun Modifier.lift(focused: Boolean, to: Float): Modifier = composed {
+    val scale by animateFloatAsState(if (focused) to else 1f, tween(150), label = "lift")
+    graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
 }
 
 /**
@@ -955,6 +950,17 @@ private fun LiveBadge() {
 }
 
 @Composable
+private fun LiveBadge(minute: String?) {
+    Text(
+        listOfNotNull(stringResource(R.string.football_live), minute).joinToString(" "),
+        fontSize = 13.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = Color.White,
+        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFFE50914)).padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
 private fun Crest(team: Team, size: Int) {
     AsyncImage(
         model = team.crestUrl,
@@ -967,35 +973,74 @@ private fun Crest(team: Team, size: Int) {
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 private val DAY = DateTimeFormatter.ofPattern("EEE d")
-private val FULL_DAY = DateTimeFormatter.ofPattern("EEEE d MMMM")
+private val DAY_TITLE = DateTimeFormatter.ofPattern("EEEE d")
 
-/** The big middle text: the score once it's started, the kick-off time before; GOL on the goal show. */
+private fun localDay(m: Match): LocalDate = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+
+/** The score once it's started, the kick-off time before; GOL on the goal show. */
 private fun centre(m: Match): String =
     if (m.goals && m.phase == Phase.LIVE) "GOL"
     else if (m.homeScore != null && m.awayScore != null) "${m.homeScore}-${m.awayScore}"
     else TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
 
-/** Under the hero's big kick-off time, the day alone; otherwise the same line as the cards. */
+/** Over the big title: "SERIE A · 9ª GIORNATA · OGGI 18:30". */
 @Composable
-private fun heroStatus(m: Match): String {
-    if (m.phase != Phase.SCHEDULED) return status(m)
+private fun kicker(m: Match): String {
     val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
-    return if (at.toLocalDate() == LocalDate.now()) stringResource(R.string.football_today)
-    else FULL_DAY.format(at).replaceFirstChar { it.uppercase() }
+    val round = m.round?.let { stringResource(R.string.football_round, it) } ?: "SERIE A"
+    val when_ = when (m.phase) {
+        Phase.SCHEDULED ->
+            if (at.toLocalDate() == LocalDate.now()) stringResource(R.string.football_today) + " " + TIME.format(at)
+            else DAY_TITLE.format(at) + " " + TIME.format(at)
+        Phase.FINISHED -> stringResource(R.string.football_full_time)
+        else -> null
+    }
+    return listOfNotNull(round, when_?.uppercase()).joinToString(" · ")
 }
 
-@Composable
-private fun status(m: Match, withDay: Boolean = false): String {
-    val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
-    val time = TIME.format(at)
-    return when (m.phase) {
-        Phase.LIVE -> m.minute ?: stringResource(R.string.football_live)
-        Phase.FINISHED ->
-            if (withDay && at.toLocalDate() != LocalDate.now()) stringResource(R.string.football_full_time) + " · " + DAY.format(at).replaceFirstChar { it.uppercase() }
-            else stringResource(R.string.football_full_time) + " · " + time
-        Phase.OFF -> "—"
-        Phase.SCHEDULED ->
-            if (withDay && at.toLocalDate() != LocalDate.now()) DAY.format(at).replaceFirstChar { it.uppercase() } + " · " + time
-            else stringResource(R.string.football_kickoff, time)
+/** The big title: "SASSUOLO vs LAZIO", "SASSUOLO 1 – 0 LAZIO" once it's on. */
+private fun title(m: Match): AnnotatedString = buildAnnotatedString {
+    if (m.goals) {
+        append(m.home.name.uppercase())
+        return@buildAnnotatedString
     }
+    append(m.home.name.uppercase())
+    if (m.homeScore != null && m.awayScore != null) {
+        append("  ${m.homeScore} – ${m.awayScore}  ")
+    } else {
+        withStyle(SpanStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 30.sp)) { append("  vs  ") }
+    }
+    append(m.away.name.uppercase())
+}
+
+/** Under a tile: the teams, with the score once it's over. */
+private fun name(m: Match): String = when {
+    m.goals -> m.home.name
+    m.phase == Phase.FINISHED && m.homeScore != null && m.awayScore != null -> "${m.home.name} ${m.homeScore} – ${m.awayScore} ${m.away.name}"
+    else -> "${m.home.name} – ${m.away.name}"
+}
+
+/** The tile's chip: kick-off time, LIVE minute, Highlights. */
+@Composable
+private fun chip(m: Match, highlights: String?): String = when (m.phase) {
+    Phase.SCHEDULED -> TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
+    Phase.LIVE -> if (m.goals) stringResource(R.string.football_live) else m.minute ?: stringResource(R.string.football_live)
+    Phase.FINISHED -> if (highlights != null) "▶ " + stringResource(R.string.football_highlights) else stringResource(R.string.football_highlights_later)
+    Phase.OFF -> "—"
+}
+
+/** The line under a finished tile: "Finale", "Finale · Dom 25". */
+@Composable
+private fun tileStatus(m: Match): String? {
+    if (m.phase != Phase.FINISHED) return null
+    val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
+    val full = stringResource(R.string.football_full_time)
+    return if (at.toLocalDate() == LocalDate.now()) full else full + " · " + DAY.format(at).replaceFirstChar { it.uppercase() }
+}
+
+/** "1080p50", "720p" */
+private fun compact(p: AutoScan.Probe): String {
+    val res = FeedLabel.resolution(p.height)
+    val fps = p.fps?.takeIf { it >= 48 }?.let { if (it >= 56) 60 else 50 }
+    return if (fps != null && res.endsWith("p")) "$res$fps" else res
 }
