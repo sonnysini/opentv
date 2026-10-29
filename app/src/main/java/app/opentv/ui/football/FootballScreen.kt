@@ -258,7 +258,9 @@ fun FootballScreen(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     if (heroItem != null) item(key = "hero") {
+                        val scope = rememberCoroutineScope()
                         Hero(
+                            modifier = Modifier.onFocusChanged { if (it.hasFocus) scope.launch { listState.animateScrollToItem(0) } },
                             tabs = ui.heroes,
                             item = heroItem,
                             firstId = ui.hero!!.match.id,
@@ -333,20 +335,13 @@ private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 @Composable
 private fun Backdrop(file: java.io.File?, match: Match, looks: Int, modifier: Modifier = Modifier) {
     val page = MaterialTheme.colorScheme.background
-    Box(
-        modifier
-            .fillMaxWidth()
-            .height(HERO_HEIGHT + 60.dp)
-            .drawWithContent {
-                drawContent()
-                drawRect(
-                    Brush.horizontalGradient(
-                        0f to page, 0.25f to page.copy(alpha = 0.9f), 0.62f to page.copy(alpha = 0.25f), 1f to Color.Transparent,
-                    ),
-                )
-                drawRect(Brush.verticalGradient(0.55f to Color.Transparent, 1f to page))
-            },
-    ) {
+    // Faded into the page inside the picture itself: no edge where it starts.
+    val fadeOut = Modifier.drawWithContent {
+        drawContent()
+        drawRect(Brush.horizontalGradient(0f to page, 0.45f to page.copy(alpha = 0.35f), 1f to Color.Transparent))
+        drawRect(Brush.verticalGradient(0.5f to Color.Transparent, 1f to page))
+    }
+    Box(modifier.fillMaxWidth().height(HERO_HEIGHT + 60.dp)) {
         if (file != null) {
             AsyncImage(
                 // The same file is rewritten by a new look: key the request on it.
@@ -354,13 +349,15 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, modifier: Mo
                     .memoryCacheKey("${file.path}#${file.lastModified()}#$looks").build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth(0.78f).fillMaxHeight(),
+                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth(0.75f).fillMaxHeight().then(fadeOut),
             )
         } else {
-            Box(Modifier.align(Alignment.TopEnd).fillMaxWidth(0.62f).fillMaxHeight().alpha(0.55f).split(TeamColors.of(match.home), TeamColors.of(match.away))) {
-                Row(Modifier.fillMaxSize().padding(start = 120.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.alpha(0.35f)) { Crest(match.home, 120) }
-                    if (!match.goals) Box(Modifier.alpha(0.35f)) { Crest(match.away, 120) }
+            Box(Modifier.align(Alignment.TopEnd).fillMaxWidth(0.6f).fillMaxHeight().then(fadeOut)) {
+                Box(Modifier.fillMaxSize().alpha(0.4f).split(TeamColors.of(match.home), TeamColors.of(match.away))) {
+                    Row(Modifier.fillMaxSize().padding(start = 80.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.alpha(0.35f)) { Crest(match.home, 120) }
+                        if (!match.goals) Box(Modifier.alpha(0.35f)) { Crest(match.away, 120) }
+                    }
                 }
             }
         }
@@ -374,6 +371,7 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, modifier: Mo
  */
 @Composable
 private fun Hero(
+    modifier: Modifier = Modifier,
     tabs: List<FootballViewModel.Item>,
     item: FootballViewModel.Item,
     firstId: Long,
@@ -390,7 +388,7 @@ private fun Hero(
     val checked = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
     LaunchedEffect(firstId, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
 
-    Column(Modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)) {
+    Column(modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)) {
         if (tabs.size >= 2) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
                 items(tabs, key = { it.match.id }) { t ->
