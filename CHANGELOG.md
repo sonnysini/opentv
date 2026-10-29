@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.33.0 — 29 October 2026
+
+- **Football: a new look, streaming-app style.** The match on now (or next) fills the top of the
+  page: its best feed's picture behind (the two teams' colours before any scan), the teams in tall
+  capitals, one line on the feed that will play, and "Watch now", "Pick source" and ↻ buttons. The
+  source list moved into "Pick source". Games are 16:9 tiles in the two teams' colours with the
+  time, LIVE minute or Highlights on a chip and the feeds ready in a corner; coming games are
+  grouped by day. Up and down scroll only as far as needed, so the top of the page shows whole.
+
 ## 0.32.0 — 28 October 2026
 
 - **Football: the goal channel is a game of its own.** When two or more Serie A games kick off
