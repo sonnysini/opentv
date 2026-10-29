@@ -8,7 +8,22 @@ package app.opentv.ui.football
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Toast
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import androidx.compose.ui.viewinterop.AndroidView
+import app.opentv.core.ServiceLocator
+import app.opentv.core.findActivity
+import app.opentv.player.PlayerController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -110,6 +125,11 @@ private val LIVE_RED = Color(0xFFFF6B6B)
 /** YouTube on Fire TV, then on Google TV / Android TV. */
 /** How long a launcher's match request waits for the match to show up on the page. */
 private const val REQUEST_WAIT_MILLIS = 20_000L
+/** How long before kick-off the top of the page starts playing the game's best feed. */
+private const val PREVIEW_AHEAD_MILLIS = 15 * 60_000L
+/** The preview holds the account's one connection: after this long untouched, back to the still. */
+private const val PREVIEW_MAX_MILLIS = 3 * 60_000L
+private const val PREVIEW_HANDOFF_MILLIS = 700L
 
 private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
 
@@ -134,19 +154,57 @@ fun FootballScreen(
     val progress by viewModel.progress.collectAsState()
     // Re-read the feeds' looks whenever one lands.
     val looks by viewModel.looks.collectAsState()
+    val context = LocalContext.current
+    // ---- Live preview ------------------------------------------------------------------------
+    // One muted player for the top of the page, as the guide's: stopped before the full-screen
+    // player opens and whenever the screen goes, so the box never decodes twice and the account's
+    // one connection is free for the player.
+    val graph = remember { ServiceLocator.get(context) }
+    val previewSetting by graph.settings.guidePreviewVideo.collectAsState()
+    val recordings by graph.recordingRepository.observeActive().collectAsState(initial = emptyList())
+    val previewScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    val previewController = remember {
+        PlayerController(context, previewScope, graph.httpClient, subtitlesEnabled = false, preview = true)
+            .also { it.player.volume = 0f }
+    }
+    // The feed playing at the top, null when none.
+    var previewing by remember { mutableStateOf<Long?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            previewController.release()
+            previewScope.cancel()
+            viewModel.setPreviewing(false)
+        }
+    }
     LaunchedEffect(autoPlay) {
         autoPlay?.let {
             viewModel.autoPlayed()
+            val wasPlaying = previewing != null
+            previewController.stop()
+            previewing = null
+            viewModel.setPreviewing(false)
+            // The provider counts a connection for a moment after it closes: let the preview's go.
+            if (wasPlaying) kotlinx.coroutines.delay(PREVIEW_HANDOFF_MILLIS)
             onPlayChannel(it)
         }
     }
     // Feeds get looked at only while this screen is up: the player needs the one connection.
     val lifecycleOwner = LocalLifecycleOwner.current
+    var resumed by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> viewModel.setActive(true)
-                Lifecycle.Event.ON_PAUSE -> viewModel.setActive(false)
+                Lifecycle.Event.ON_RESUME -> {
+                    resumed = true
+                    viewModel.setActive(true)
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    resumed = false
+                    previewController.stop()
+                    previewing = null
+                    viewModel.setPreviewing(false)
+                    viewModel.setActive(false)
+                }
                 else -> Unit
             }
         }
@@ -161,7 +219,6 @@ fun FootballScreen(
     // Hold OK on a card: its feeds to pick from by hand.
     var picking by remember { mutableStateOf<FootballViewModel.Item?>(null) }
     BackHandler(enabled = picking != null) { picking = null }
-    val context = LocalContext.current
     val noYoutube = stringResource(R.string.football_no_youtube)
     val openInYouTube: (String) -> Unit = { id ->
         // Straight into a YouTube app: on Fire TV a bare link also matches Silk and Music, and
@@ -238,6 +295,52 @@ fun FootballScreen(
     val heroItem = ui.hero?.let { first -> ui.heroes.firstOrNull { it.match.id == selectedId } ?: ui.heroes.firstOrNull() ?: first }
     val heroBest = remember(heroItem, looks) { heroItem?.let { h -> viewModel.sources(h).firstOrNull { it.looked && it.usable } } }
     val backdrop = heroItem?.let { h -> heroBest?.feed?.id?.let { viewModel.frame(h, it) } }
+    // The game itself instead of its still, muted: once it's on (or about to be), its best feed
+    // known, nothing else using the connection (no scan, no recording), "Watch now" in focus.
+    var heroFocused by remember { mutableStateOf(false) }
+    // Bumped by moving within the top of the page: restarts the preview's time limit.
+    var heroTouched by remember { mutableStateOf(0) }
+    val previewFeed = heroBest?.feed?.takeIf {
+        val m = heroItem?.match ?: return@takeIf false
+        previewSetting && resumed && heroFocused && recordings.isEmpty() &&
+            scan == null && progress == null && picking == null && opening == null &&
+            (m.phase == Phase.LIVE || (m.phase == Phase.SCHEDULED && m.kickoffUtcMillis - System.currentTimeMillis() <= PREVIEW_AHEAD_MILLIS))
+    }
+    val previewOn = previewing != null
+    fun stopPreview() {
+        previewController.stop()
+        previewing = null
+        viewModel.setPreviewing(false)
+    }
+    LaunchedEffect(previewFeed?.id, heroTouched) {
+        val feed = previewFeed
+        if (feed == null) {
+            stopPreview()
+            return@LaunchedEffect
+        }
+        // Back into the top of the page with the game on: it carries on, only the time limit restarts.
+        if (previewing != feed.id) {
+            viewModel.setPreviewing(true)
+            previewing = feed.id
+            previewController.play(
+                PlayerController.Request(
+                    url = feed.streamUrl,
+                    title = feed.shownName,
+                    userAgent = graph.sourceRepository.byId(feed.sourceId)?.userAgent ?: "OpenTV/0.1 (Android)",
+                    isLive = true,
+                ),
+                debounce = true,
+            )
+        }
+        kotlinx.coroutines.delay(PREVIEW_MAX_MILLIS)
+        stopPreview()
+    }
+    // The box's screensaver would fire over a game playing at the top of the page.
+    DisposableEffect(previewOn) {
+        val window = context.findActivity()?.window
+        if (previewOn) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
     val rowList = rows(ui)
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -255,7 +358,7 @@ fun FootballScreen(
             ui.failed -> Message(stringResource(R.string.football_unavailable))
             ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() && ui.lastRound.isEmpty() -> Message(stringResource(R.string.football_none))
             else -> {
-                if (heroItem != null) Backdrop(backdrop, heroItem.match, looks, Modifier.alpha(fade))
+                if (heroItem != null) Backdrop(backdrop, heroItem.match, looks, if (previewOn) previewController.player else null, Modifier.alpha(fade))
                 // TV's default keeps the focused item a third of the way down, which would cut off
                 // the top of the page under "Watch now": up and down scroll only as far as needed.
                 // The rows keep the TV default sideways.
@@ -271,7 +374,13 @@ fun FootballScreen(
                     if (heroItem != null) item(key = "hero") {
                         val scope = rememberCoroutineScope()
                         Hero(
-                            modifier = Modifier.onFocusChanged { if (it.hasFocus) scope.launch { listState.animateScrollToItem(0) } },
+                            modifier = Modifier.onFocusChanged {
+                                heroFocused = it.hasFocus
+                                if (it.hasFocus) {
+                                    heroTouched++
+                                    scope.launch { listState.animateScrollToItem(0) }
+                                }
+                            },
                             tabs = ui.heroes,
                             item = heroItem,
                             firstId = ui.hero!!.match.id,
@@ -363,8 +472,9 @@ private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
  * right of the screen, fading into the page to the left and below. Before any look, the two teams'
  * colours with their crests faint.
  */
+@OptIn(UnstableApi::class)
 @Composable
-private fun Backdrop(file: java.io.File?, match: Match, looks: Int, modifier: Modifier = Modifier) {
+private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoPlayer?, modifier: Modifier = Modifier) {
     val page = MaterialTheme.colorScheme.background
     // Faded into the page inside the picture itself: no edge where it starts.
     val fadeOut = Modifier.drawWithContent {
@@ -373,15 +483,49 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, modifier: Mo
         drawRect(Brush.verticalGradient(0.5f to Color.Transparent, 1f to page))
     }
     Box(modifier.fillMaxWidth().height(HERO_HEIGHT + 60.dp)) {
-        if (file != null) {
-            AsyncImage(
-                // The same file is rewritten by a new look: key the request on it.
-                model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
-                    .memoryCacheKey("${file.path}#${file.lastModified()}#$looks").build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth(0.75f).fillMaxHeight().then(fadeOut),
-            )
+        if (file != null || player != null) {
+            Box(Modifier.align(Alignment.TopEnd).fillMaxWidth(0.75f).fillMaxHeight().then(fadeOut)) {
+                if (file != null) AsyncImage(
+                    // The same file is rewritten by a new look: key the request on it.
+                    model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
+                        .memoryCacheKey("${file.path}#${file.lastModified()}#$looks").build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // The game playing over its still, filling the space like the still; the still
+                // shows through until the first frame, and stays if the feed won't play.
+                if (player != null) AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            useController = false
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            this.player = player
+                            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                        }
+                    },
+                    update = { it.player = player },
+                    onRelease = { it.player = null },
+                )
+            }
+            if (player != null) {
+                // Says the sound is off on purpose, not broken.
+                Box(
+                    Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = 76.dp).size(34.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.VolumeOff,
+                        contentDescription = stringResource(R.string.football_preview_muted),
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
         } else {
             Box(Modifier.align(Alignment.TopEnd).fillMaxWidth(0.6f).fillMaxHeight().then(fadeOut)) {
                 Box(Modifier.fillMaxSize().alpha(0.4f).split(TeamColors.of(match.home), TeamColors.of(match.away))) {

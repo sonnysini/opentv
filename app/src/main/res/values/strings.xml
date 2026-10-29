@@ -36,6 +36,7 @@
     <string name="football_pick_source">Pick the channel</string>
     <string name="football_choose_source">Pick source</string>
     <string name="football_checked_count">%1$d sources checked</string>
+    <string name="football_preview_muted">Preview, sound off</string>
     <string name="football_highlights_later">Highlights soon</string>
     <string name="football_watch">Watch now</string>
     <string name="football_live">LIVE</string>
