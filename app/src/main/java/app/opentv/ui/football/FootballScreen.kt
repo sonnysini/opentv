@@ -10,8 +10,9 @@ import android.content.Intent
 import android.net.Uri
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import android.widget.Toast
-import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -472,7 +473,7 @@ private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
  * right of the screen, fading into the page to the left and below. Before any look, the two teams'
  * colours with their crests faint.
  */
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoPlayer?, modifier: Modifier = Modifier) {
     val page = MaterialTheme.colorScheme.background
@@ -519,7 +520,7 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
                     contentAlignment = Alignment.Center,
                 ) {
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.VolumeOff,
+                        Icons.AutoMirrored.Filled.VolumeOff,
                         contentDescription = stringResource(R.string.football_preview_muted),
                         tint = Color.White,
                         modifier = Modifier.size(18.dp),
