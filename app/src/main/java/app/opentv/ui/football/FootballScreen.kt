@@ -15,7 +15,6 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import android.widget.Toast
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
 import app.opentv.core.ServiceLocator
@@ -34,6 +33,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -497,12 +497,9 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
                 // The game playing over its still, filling the space like the still; the still
                 // shows through until the first frame, and stays if the feed won't play.
                 if (player != null) AndroidView(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().clipToBounds(),
                     factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            useController = false
-                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        (android.view.LayoutInflater.from(ctx).inflate(R.layout.football_preview, null) as PlayerView).apply {
                             setBackgroundColor(android.graphics.Color.TRANSPARENT)
                             this.player = player
                             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
