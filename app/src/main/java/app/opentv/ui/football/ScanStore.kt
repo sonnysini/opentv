@@ -60,6 +60,8 @@ class ScanStore private constructor(private val dir: File) {
         val cur = entries[key]
         if (cur != null && cur.at >= at) return
         entries[key] = Entry(at, probe, server = true)
+        // A feed picked before the server's newer ranking doesn't jump ahead of it.
+        picks[matchId]?.let { (_, pickedAt) -> if (pickedAt < at) picks.remove(matchId) }
     }
 
     /** Whether the scan server has looked at [matchId] lately: its ranking stands, no scan on the TV. */
