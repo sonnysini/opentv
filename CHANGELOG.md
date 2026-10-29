@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.2 — 29 October 2026
+
+- **Football: the game at the top bigger.** The live preview (and the still before it) is again
+  as tall as the top of the page, against the right edge, melting into the page on the left and
+  below — still the whole 16:9 picture, nothing cut off.
+
 ## 0.36.1 — 29 October 2026
 
 - **Football: the game at the top of the page whole.** The live preview (and the still before it)
