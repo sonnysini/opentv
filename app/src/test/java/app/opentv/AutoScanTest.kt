@@ -141,4 +141,15 @@ class AutoScanTest {
         const val DARK = 0xFF102040.toInt()
         const val LIGHT = 0xFFF0F0F0.toInt()
     }
+
+    @Test
+    fun `bitrate breaks ties between equal feeds, never beats a step in lines or 50 fps`() {
+        fun p(h: Int, fps: Int, kbps: Int?) = AutoScan.Probe(h, fps, 2, 500, null, kbps = kbps)
+        val heavy = AutoScan.quality(p(1080, 50, 8000))
+        val light = AutoScan.quality(p(1080, 50, 4000))
+        assertThat(heavy).isGreaterThan(light)
+        assertThat(AutoScan.quality(p(1080, 50, null))).isLessThan(light)
+        assertThat(AutoScan.quality(p(720, 50, 30000))).isLessThan(AutoScan.quality(p(1080, 50, 500)))
+        assertThat(AutoScan.quality(p(1080, 25, 30000))).isLessThan(AutoScan.quality(p(720, 50, 500)))
+    }
 }

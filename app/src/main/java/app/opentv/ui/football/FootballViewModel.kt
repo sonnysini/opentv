@@ -199,7 +199,20 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
      * a match's ranking holds for the whole game; only "Scan again" looks afresh.
      */
     fun ready(item: Item): Boolean = store.picked(item.match.id)?.let { p -> feedsOf(item).any { it.id == p } } == true ||
-        toLook(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(item.match.id, it.id) != null } }
+        toLook(item).let { fs -> fs.isNotEmpty() && fs.all { store.fresh(item.match.id, it.id) != null } } ||
+        byServer(item)
+
+    /** The scan server ranked [item] and found a feed that plays: its ranking stands, no scan here. */
+    private fun byServer(item: Item): Boolean =
+        store.fromServer(item.match.id) && sources(item).any { it.looked && it.usable }
+
+    /** Reads the scan server's rankings (when one is set) into the looks. */
+    private suspend fun syncServer() {
+        val url = graph.settings.scanServerUrl.value
+        if (url.isBlank()) return
+        val server = ServerScans.fetch(graph.httpClient, url) ?: return
+        if (ServerScans.apply(server, feeds, store).isNotEmpty()) _looks.value++
+    }
 
     /** "Scan again": [item]'s looks dropped, looked at afresh. The feed watched last stays first. */
     fun rescan(item: Item) {
@@ -220,10 +233,26 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         if (feedsOf(item).isEmpty()) return
         // Every feed looked at lately: straight to the best, no scan screen.
         if (ready(item)) {
-            val best = sources(item).firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
-            play(item, best)
+            playBest(item)
             return
         }
+        // The scan server may have ranked it since the page was read.
+        if (graph.settings.scanServerUrl.value.isNotBlank()) {
+            viewModelScope.launch {
+                syncServer()
+                if (ready(item)) playBest(item) else scanFor(item)
+            }
+            return
+        }
+        scanFor(item)
+    }
+
+    private fun playBest(item: Item) {
+        val best = sources(item).firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
+        play(item, best)
+    }
+
+    private fun scanFor(item: Item) {
         focus = item
         focusStarted = System.currentTimeMillis()
         publishFocus(item)
@@ -317,6 +346,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
             .sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }))
         for (item in candidates) {
+            // Ranked by the scan server: the connection stays free for the player.
+            if (byServer(item)) continue
             val next = toLook(item).firstOrNull { store.fresh(item.match.id, it.id) == null } ?: continue
             return item to next
         }
@@ -450,6 +481,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // looking them up is a query per channel, a second or so for a whole matchday.
         val first = (listOfNotNull(hero) + heroes).distinctBy { it.match.id }
         feeds = feeds + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsFor(it) }
+        // Before the worker wakes: what the scan server ranked needs no look here.
+        syncServer()
         // The worker may have found nothing to look at yet (Calcio opened before the first load):
         // wake it now, not at the end of its idle wait.
         wake.trySend(Unit)
@@ -471,6 +504,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                 val id = item.match.id
                 id to ((if (id in firstIds) known[id] else null) ?: feedsFor(item))
             }
+        syncServer()
         wake.trySend(Unit)
         // The cards re-read their feeds along with the looks.
         _looks.value++

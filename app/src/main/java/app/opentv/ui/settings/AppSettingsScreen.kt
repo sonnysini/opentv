@@ -387,6 +387,10 @@ fun PlaybackSettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
 
         SleepTimerSection()
+
+        // Last: on Fire TV a text field opens the keyboard as soon as it takes focus.
+        Spacer(Modifier.height(16.dp))
+        ScanServerRow(settings)
     }
 }
 

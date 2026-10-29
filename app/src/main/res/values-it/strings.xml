@@ -325,6 +325,11 @@
     <string name="logo_pack_title">Pacchetto loghi</string>
     <string name="logo_pack_desc">L\'indirizzo di un index.json con i tuoi loghi (per esempio gli stemmi delle squadre), per i canali che nomina. Più comodo dalla pagina del telefono.</string>
     <string name="logo_pack_url">Indirizzo pacchetto loghi</string>
+    <string name="scan_server_title">Server scansioni calcio</string>
+    <string name="scan_server_desc">Facoltativo. Un server che controlla tutte le fonti delle partite in arrivo e le mette in classifica: Guarda ora parte subito con la migliore, senza scansione sulla TV.</string>
+    <string name="scan_server_url">Indirizzo server scansioni</string>
+    <string name="scan_server_save">Salva</string>
+    <string name="scan_server_saved">Salvato</string>
     <string name="logo_pack_load">Carica</string>
     <string name="logo_pack_loaded">%1$d nomi nel pacchetto</string>
     <string name="logo_pack_failed">Pacchetto non caricato: %1$s</string>

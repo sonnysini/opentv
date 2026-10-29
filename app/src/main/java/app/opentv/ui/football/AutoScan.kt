@@ -32,6 +32,8 @@ object AutoScan {
         val board: Board?,
         /** E-AC3 (Dolby Digital Plus) audio: rare on these feeds, a little better than plain AC3/AAC. */
         val audioHd: Boolean = false,
+        /** Video bitrate actually received, when measured (the scan server does): more is a better picture. */
+        val kbps: Int? = null,
     )
 
     data class Ranked<T>(val item: T, val probe: Probe?, val verdict: Verdict, val score: Int)
@@ -124,9 +126,13 @@ object AutoScan {
         )
     }
 
-    /** The quality part of the score: 50 fps above all, then lines, 5.1, E-AC3, start-up time. */
+    /**
+     * The quality part of the score: 50 fps above all, then lines, then bitrate (15 a Mbps, never
+     * enough to beat a step in lines), 5.1, E-AC3, start-up time.
+     */
     fun quality(p: Probe): Int =
         (if ((p.fps ?: 0) >= 48) FPS50_BONUS else 0) + p.height / 2 +
+            ((p.kbps ?: 0) / 1000).coerceAtMost(MAX_MBPS) * PER_MBPS +
             (if ((p.audioChannels ?: 0) >= 6) SURROUND_BONUS else 0) +
             (if (p.audioHd) AUDIO_HD_BONUS else 0) - (p.millis / 50).toInt()
 
@@ -136,4 +142,6 @@ object AutoScan {
     private const val SURROUND_BONUS = 50
     private const val AUDIO_HD_BONUS = 20
     private const val CONFIRMED_BONUS = 200
+    private const val PER_MBPS = 15
+    private const val MAX_MBPS = 10
 }
