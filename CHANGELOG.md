@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.1 — 29 October 2026
+
+- **Football: the game at the top of the page whole.** The live preview (and the still before it)
+  now shows the full 16:9 picture as broadcast, as tall as the top of the page and melting into it
+  on the left and below, instead of zoomed in with the top and sides cut off.
+
 ## 0.36.0 — 29 October 2026
 
 - **Football: the game plays at the top of the page.** Once a game is on (or a quarter of an hour

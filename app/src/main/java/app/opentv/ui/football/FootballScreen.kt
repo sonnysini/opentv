@@ -31,6 +31,7 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.draw.clipToBounds
@@ -484,9 +485,16 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
         drawRect(Brush.horizontalGradient(0f to page, 0.45f to page.copy(alpha = 0.35f), 1f to Color.Transparent))
         drawRect(Brush.verticalGradient(0.5f to Color.Transparent, 1f to page))
     }
+    val fadeWhole = Modifier.drawWithContent {
+        drawContent()
+        drawRect(Brush.horizontalGradient(0f to page, 0.12f to page.copy(alpha = 0.6f), 0.34f to Color.Transparent))
+        drawRect(Brush.verticalGradient(0.68f to Color.Transparent, 1f to page))
+    }
     Box(modifier.fillMaxWidth().height(HERO_HEIGHT + 60.dp)) {
         if (file != null || player != null) {
-            Box(Modifier.align(Alignment.TopEnd).fillMaxWidth(0.75f).fillMaxHeight().then(fadeOut)) {
+            // The whole 16:9 picture, as broadcast (nothing cut off), as tall as the top of the
+            // page, melting into the page on the left and below.
+            Box(Modifier.align(Alignment.TopEnd).fillMaxHeight().aspectRatio(16f / 9f).then(fadeWhole)) {
                 if (file != null) AsyncImage(
                     // The same file is rewritten by a new look: key the request on it.
                     model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
