@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.36.0 — 29 October 2026
+
+- **Football: the game plays at the top of the page.** Once a game is on (or a quarter of an hour
+  from kick-off) and its best feed is known, the top of the football home plays it, muted, in place
+  of the still — with "Watch now" in focus, nothing being scanned and no recording running. It stops
+  when you move down to the rows or open a feed, and after three minutes untouched, so the
+  account's one connection isn't held. Off together with the guide's video preview in Settings.
+- **60 fps feeds go last.** Italian football is broadcast at 50 fps; the 60 fps feeds seen were a
+  frozen DAZN logo. They now rank below every other feed that plays, on the TV and on the scan
+  server, and stay in "Pick source" to choose by hand.
+
 ## 0.35.0 — 29 October 2026
 
 - **Football: every channel the guide says shows the game.** A guide channel showing the match
