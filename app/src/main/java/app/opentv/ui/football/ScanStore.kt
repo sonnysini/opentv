@@ -20,8 +20,8 @@ import java.util.concurrent.ConcurrentHashMap
  * feed, along with the feed last watched for the match ([picked]), which goes first from then on.
  */
 class ScanStore private constructor(private val dir: File) {
-    /** A look at one feed: [probe] null when it gave nothing. */
-    data class Entry(val at: Long, val probe: AutoScan.Probe?)
+    /** A look at one feed: [probe] null when it gave nothing; [server] when the scan server made it. */
+    data class Entry(val at: Long, val probe: AutoScan.Probe?, val server: Boolean = false)
 
     private data class Key(val matchId: Long, val feedId: Long)
 
@@ -53,6 +53,22 @@ class ScanStore private constructor(private val dir: File) {
         }
         save()
     }
+
+    /** A look made by the scan server at [at]: kept unless a newer one of the TV's own is there. */
+    fun putServer(matchId: Long, feedId: Long, probe: AutoScan.Probe?, at: Long) {
+        val key = Key(matchId, feedId)
+        val cur = entries[key]
+        if (cur != null && cur.at >= at) return
+        entries[key] = Entry(at, probe, server = true)
+        // A feed picked before the server's newer ranking doesn't jump ahead of it.
+        picks[matchId]?.let { (_, pickedAt) -> if (pickedAt < at) picks.remove(matchId) }
+    }
+
+    /** Whether the scan server has looked at [matchId] lately: its ranking stands, no scan on the TV. */
+    fun fromServer(matchId: Long, now: Long = System.currentTimeMillis()): Boolean =
+        entries.any { (k, e) -> k.matchId == matchId && e.server && now - e.at < TTL_MILLIS }
+
+    fun flush() = save()
 
     /** The feed's picture from its last look, if fresh and one was decoded. */
     fun frame(matchId: Long, feedId: Long): File? =
@@ -87,11 +103,13 @@ class ScanStore private constructor(private val dir: File) {
                     put("m", k.matchId)
                     put("id", k.feedId)
                     put("at", e.at)
+                    if (e.server) put("srv", true)
                     e.probe?.let { p ->
                         put("h", p.height)
                         p.fps?.let { put("fps", it) }
                         p.audioChannels?.let { put("ch", it) }
                         if (p.audioHd) put("eac3", true)
+                        p.kbps?.let { put("kbps", it) }
                         put("ms", p.millis)
                         p.board?.let { put("board", JSONArray(it.codes)) }
                     }
@@ -131,11 +149,12 @@ class ScanStore private constructor(private val dir: File) {
                         millis = o.getLong("ms"),
                         board = o.optJSONArray("board")?.let { b -> AutoScan.Board((0 until b.length()).map { b.getString(it) }) },
                         audioHd = o.optBoolean("eac3"),
+                        kbps = if (o.has("kbps")) o.getInt("kbps") else null,
                     )
                 } else {
                     null
                 }
-                entries[Key(o.getLong("m"), o.getLong("id"))] = Entry(at, probe)
+                entries[Key(o.getLong("m"), o.getLong("id"))] = Entry(at, probe, o.optBoolean("srv"))
             }
             val picked = root.optJSONArray("picks") ?: JSONArray()
             for (i in 0 until picked.length()) {

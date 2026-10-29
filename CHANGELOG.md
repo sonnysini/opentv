@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.34.0 — 29 October 2026
+
+- **Football: rankings from a scan server.** Settings › Playback › Football scan server takes the
+  address of a server that, before each kick-off, looks at every feed of the games about to start
+  (while the TV is off and the account's one connection is free) and ranks them. The football home
+  reads it: "Watch now" then plays the best feed at once, with no scan on the TV, and nothing is
+  looked at in the background for a game the server has ranked. Feeds are matched by the
+  provider's stream id, or by the provider's channel name on another of its servers. Without a
+  server, or when it has nothing for a game, the TV scans as before.
+- **Bitrate in the ranking.** When a feed's bitrate is known (the scan server measures it), the
+  heavier feed wins between feeds alike in frame rate and lines.
+
 ## 0.33.0 — 29 October 2026
 
 - **Football: a new look, streaming-app style.** The match on now (or next) fills the top of the

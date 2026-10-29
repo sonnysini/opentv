@@ -357,6 +357,11 @@
     <string name="logo_pack_title">Logo pack</string>
     <string name="logo_pack_desc">The address of an index.json listing your own logos (team crests, say), for the channels it names. Easier to set from the phone page.</string>
     <string name="logo_pack_url">Logo pack address</string>
+    <string name="scan_server_title">Football scan server</string>
+    <string name="scan_server_desc">Optional. A server that checks every feed of the games about to start and ranks them: Watch now then plays the best one at once, with no scan on the TV.</string>
+    <string name="scan_server_url">Scan server address</string>
+    <string name="scan_server_save">Save</string>
+    <string name="scan_server_saved">Saved</string>
     <string name="logo_pack_load">Load</string>
     <string name="logo_pack_loaded">%1$d names in the pack</string>
     <string name="logo_pack_failed">Could not load the pack: %1$s</string>
