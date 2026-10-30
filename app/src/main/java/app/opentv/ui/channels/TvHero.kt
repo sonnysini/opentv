@@ -92,12 +92,19 @@ fun TvHero(
     val item = items[index]
     val height by animateDpAsState(if (expanded) EXPANDED_HEIGHT else STRIP_HEIGHT, label = "heroHeight")
 
-    // Turns over every few seconds; any step by hand starts the count again.
+    // Turns over every few seconds; any step by hand starts the count again. Held while the button
+    // has focus, so OK plays the programme on screen, not the one that slid in meanwhile.
+    var held by remember { mutableStateOf(false) }
     val turn = remember { Animatable(0f) }
-    LaunchedEffect(index, items.size) {
-        turn.snapTo(0f)
-        if (items.size < 2) return@LaunchedEffect
-        turn.animateTo(1f, tween(TURN_MILLIS, easing = LinearEasing))
+    val counted = remember { intArrayOf(-1) }
+    LaunchedEffect(index, items.size, held) {
+        if (counted[0] != index) {
+            counted[0] = index
+            turn.snapTo(0f)
+        }
+        if (held || items.size < 2) return@LaunchedEffect
+        val left = ((1f - turn.value) * TURN_MILLIS).toInt().coerceAtLeast(1)
+        turn.animateTo(1f, tween(left, easing = LinearEasing))
         index = (index + 1) % items.size
     }
 
@@ -158,6 +165,7 @@ fun TvHero(
             onClick = { onWatch(item) },
             onLeft = { if (index > 0) index-- else onExitLeft() },
             onRight = { index = (index + 1) % items.size },
+            onFocus = { held = it },
             modifier = if (expanded) Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 40.dp)
             else Modifier.align(Alignment.CenterStart).padding(start = 32.dp + STRIP_TEXT_WIDTH + 20.dp),
         )
@@ -185,8 +193,11 @@ private fun Backdrop(item: Highlight, modifier: Modifier) {
                 },
         ) {
             val url = shown.imageUrl
-            if (url != null) {
+            // Some stills are refused or missing: the fallback below then, not a blank.
+            var failed by remember(url) { mutableStateOf(false) }
+            if (url != null && !failed) {
                 AsyncImage(
+                    onError = { failed = true },
                     model = remember(url) {
                         ImageRequest.Builder(context).data(url).apply {
                             TvHighlightsRepository.IMAGE_HEADERS.forEach { (k, v) -> addHeader(k, v) }
@@ -276,6 +287,7 @@ private fun WatchButton(
     onClick: () -> Unit,
     onLeft: () -> Unit,
     onRight: () -> Unit,
+    onFocus: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -290,7 +302,10 @@ private fun WatchButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(8.dp))
             .background(if (focused) Color.White else Color(0x736E7672))
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                onFocus(it.isFocused)
+            }
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
