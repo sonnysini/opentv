@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.37.0 — 30 October 2026
+
+- **Live TV: tonight's big programmes across the top.** The full-screen channel list opens with a
+  carousel of tonight's prime-time highlights from the TV guide (films, shows, series — no sport or
+  news), one card per channel you have, moving on by itself with dots below. OK on a card opens
+  that channel; going down into the list shrinks the carousel to a strip, UP from the first channel
+  brings it back. When a programme's still won't load, the channel's logo stands in.
+- **Live TV: tabs above the groups.** Groups are now gathered under tabs — ★, Italy, Football,
+  Sport, Entertainment, Cinema, Kids, Music, Abroad (one shelf per country, biggest first, hidden
+  with "Italian only") and All. Group names are drawn as tall capitals with the brand small above.
+  Time-shifted channels (+1, +2, +3) sit together in their own group inside each tab, with the
+  guide shifted to match. Your merges and ordering from the phone page still win. The last tab you
+  used is the one that opens next time.
+
 ## 0.36.2 — 29 October 2026
 
 - **Football: the game at the top bigger.** The live preview (and the still before it) is again
