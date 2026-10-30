@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.1 — 30 October 2026
+
+- **Live TV: the menu stays beside the list.** The full-screen channel list keeps the navigation
+  menu as a slim strip of icons down the left, as on the other pages; LEFT from the groups opens
+  it with its labels, RIGHT goes straight back to the group you were on.
+- **Live TV: rows show only what's on now.** What follows is in the guide and the player.
+
 ## 0.37.0 — 30 October 2026
 
 - **Live TV: tonight's big programmes across the top.** The full-screen channel list opens with a

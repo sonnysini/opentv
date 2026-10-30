@@ -226,7 +226,6 @@
     <string name="live_channel_count">%1$d canali</string>
     <string name="live_groups_recent">Recenti</string>
     <string name="live_groups_all">Tutti i gruppi</string>
-    <string name="live_up_next">A seguire: %1$s</string>
     <string name="live_merge_action">Unisci a…</string>
     <string name="logo_picker_action">Cambia logo</string>
     <string name="logo_picker_title">Logo di %1$s</string>

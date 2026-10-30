@@ -245,7 +245,6 @@
     <string name="live_channel_count">%1$d channels</string>
     <string name="live_groups_recent">Recent</string>
     <string name="live_groups_all">All groups</string>
-    <string name="live_up_next">Up next: %1$s</string>
     <string name="live_merge_action">Merge with…</string>
     <string name="logo_picker_action">Change logo</string>
     <string name="logo_picker_title">Logo for %1$s</string>

@@ -61,6 +61,11 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -119,7 +124,6 @@ fun MainScreen(
     val liveEnabled by settings.liveEnabled.collectAsState()
     val moviesEnabled by settings.moviesEnabled.collectAsState()
     val seriesEnabled by settings.seriesEnabled.collectAsState()
-    val channelLayout by settings.channelLayout.collectAsState()
     val visibleTabs = remember(liveEnabled, moviesEnabled, seriesEnabled) {
         buildList {
             if (liveEnabled) add(Tab.LIVE)
@@ -142,11 +146,13 @@ fun MainScreen(
         if (Tab.FOOTBALL in visibleTabs) tab = Tab.FOOTBALL else app.opentv.core.FootballRequests.consume()
     }
 
-    // The full-screen live list takes the whole screen, menu included: the rail is gone until LEFT
-    // on a row brings it back, and it goes again as soon as focus leaves it.
+    // The rail stays as an icon strip beside the full-screen live list too, as on every other tab;
+    // LEFT out of the list (or Back from the groups) moves focus into it, which opens it.
     var navRevealed by remember { mutableStateOf(false) }
-    val navHidden = tab == Tab.LIVE && channelLayout == AppSettings.ChannelLayout.FULLSCREEN && !navRevealed
     val navFocus = remember { FocusRequester() }
+    // RIGHT out of the rail on Live TV: back into the groups, not onto whatever sits nearest the
+    // menu item (the top's button). Set by the full-screen list while it's on screen.
+    var liveNavExit by remember { mutableStateOf<(() -> Boolean)?>(null) }
     LaunchedEffect(navRevealed) {
         if (navRevealed) {
             delay(50)
@@ -189,7 +195,7 @@ fun MainScreen(
     // of it and leave a sliver poking out — so they live side by side and never collide.
     Column(Modifier.fillMaxSize()) {
       Row(Modifier.weight(1f).fillMaxWidth()) {
-        if (!navHidden) NavRail(
+        NavRail(
             tabs = visibleTabs,
             current = tab,
             // Keep the rail while it holds focus — picking Live from it mustn't pull it out from
@@ -197,6 +203,7 @@ fun MainScreen(
             onSelect = { tab = it; navRevealed = true },
             currentFocus = navFocus,
             onFocusLeft = { navRevealed = false },
+            onRight = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onOpenProfiles = onOpenProfiles,
@@ -214,6 +221,7 @@ fun MainScreen(
                     onRefresh = onRefresh,
                     onPlayCatchup = onPlayCatchup,
                     onRevealNav = { navRevealed = true },
+                    registerNavExit = { liveNavExit = it },
                 )
                 Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(
                     onPlayChannel = onPlayChannel,
@@ -305,6 +313,8 @@ private fun NavRail(
     currentFocus: FocusRequester? = null,
     // Focus has moved out of the rail (after having been in it).
     onFocusLeft: () -> Unit = {},
+    // RIGHT out of the rail: true if the page took focus itself.
+    onRight: () -> Boolean = { false },
 ) {
     // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
@@ -332,6 +342,7 @@ private fun NavRail(
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
             .onFocusChanged { expanded = it.hasFocus }
+            .onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onRight() }
             .focusGroup()
             .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),

@@ -23,9 +23,6 @@ import app.opentv.data.parser.CategoryMacro.Macro
 import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_ALL
 import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_FAVOURITES
 import app.opentv.ui.LiveMacros
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -54,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -135,6 +133,8 @@ fun FullscreenLive(
     onRefocusDone: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
+    // Gets what RIGHT out of the navigation menu should do: back into the groups.
+    registerNavExit: ((() -> Boolean)?) -> Unit = {},
     // Tonight's big programmes for the top of the page; none, no top.
     highlights: List<TvHighlightsRepository.Highlight> = emptyList(),
     onWatchHighlight: (TvHighlightsRepository.Highlight) -> Unit = {},
@@ -224,6 +224,11 @@ fun FullscreenLive(
     // DOWN from any tab goes into the groups, even from a tab that sits above the channels.
     val groupsFocus = remember { FocusRequester() }
 
+    // LEFT reaches the menu only from the groups, so RIGHT goes straight back to them.
+    DisposableEffect(Unit) {
+        registerNavExit { groupsOpen = true; runCatching { groupsFocus.requestFocus() }.isSuccess }
+        onDispose { registerNavExit(null) }
+    }
     // The top is big while focus is on it or on the groups, a strip while the channels have it.
     var heroFocused by remember { mutableStateOf(false) }
     // The top's button is the first thing on screen that can take focus, so at start it may get it
@@ -867,15 +872,10 @@ private fun FullscreenChannelRow(
                 overflow = TextOverflow.Ellipsis,
             )
             val nowProg = row.now
-            val nextProg = row.next
             Spacer(Modifier.height(2.dp))
-            val upNext = nextProg?.let { stringResource(R.string.live_up_next, slot(it.startUtcMillis, it.endUtcMillis, it.title)) }
-            val dim = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            // Only what's on now: what follows is in the guide and the player.
             Text(
-                text = buildAnnotatedString {
-                    append(nowProg?.let { slot(it.startUtcMillis, it.endUtcMillis, it.title) } ?: stringResource(R.string.guide_no_info))
-                    if (upNext != null) withStyle(SpanStyle(color = dim)) { append("     "); append(upNext) }
-                },
+                text = nowProg?.let { slot(it.startUtcMillis, it.endUtcMillis, it.title) } ?: stringResource(R.string.guide_no_info),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
