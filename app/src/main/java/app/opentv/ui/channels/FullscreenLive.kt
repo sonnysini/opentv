@@ -377,9 +377,13 @@ private fun GroupsList(
     // among the entries, focus sits on the first one (Favourites) only because nothing else is
     // there yet, so following it would throw the remembered group away.
     val hasSelection = entries.any { it.selected }
+    // Once focus has moved on from where it first landed, it is the user moving: follow it even
+    // when the current group isn't in this list (picked under another tab).
+    var firstFocused by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(focusedKey, open, hasSelection) {
         val entry = entries.firstOrNull { it.key == focusedKey } ?: return@LaunchedEffect
-        if (!open || entry.selected || !hasSelection) return@LaunchedEffect
+        if (firstFocused == null) firstFocused = entry.key
+        if (!open || entry.selected || (!hasSelection && entry.key == firstFocused)) return@LaunchedEffect
         delay(GROUP_FOLLOW_DELAY_MILLIS)
         entry.pick()
     }
