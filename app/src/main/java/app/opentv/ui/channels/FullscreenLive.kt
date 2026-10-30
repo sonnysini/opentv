@@ -5,8 +5,24 @@
  */
 package app.opentv.ui.channels
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
+import app.opentv.data.parser.CategoryMacro
+import app.opentv.data.parser.CategoryMacro.Macro
+import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_ALL
+import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_FAVOURITES
+import app.opentv.ui.LiveMacros
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -67,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import app.opentv.R
 import app.opentv.data.parser.GroupBadge
 import app.opentv.data.model.shownName
+import app.opentv.data.repo.TvHighlightsRepository
 import app.opentv.ui.ChannelsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,10 +92,11 @@ import kotlinx.coroutines.delay
 import app.opentv.ui.theme.focusLift
 
 /**
- * Live TV on one screen, TiviMate-style: the groups down the left, the current group's channels
- * filling the rest with what's on now (and next) against each one. While you browse the channels
- * the groups shrink to a strip of badges; LEFT (or Back, or ☰) widens them again, and moving
- * through them swaps the channels beside them. RIGHT or OK goes back into the channels; LEFT or
+ * Live TV on one screen: tonight's big programmes across the top ([TvHero]), the groups down the
+ * left, the current group's channels filling the rest with what's on now (and next) against each
+ * one. While you browse the channels the groups stay in sight but out of reach and the top shrinks
+ * to a strip; LEFT (or Back, or ☰) goes back into the groups, and moving through them swaps the
+ * channels beside them. UP from the top of either list reaches the programmes. RIGHT or OK goes back into the channels; LEFT or
  * Back from the groups asks the host to reveal the app's navigation menu.
  */
 @Composable
@@ -96,6 +114,10 @@ fun FullscreenLive(
     // Channels per group (group key, "all", "fav") and the groups last watched from, newest first.
     groupCounts: Map<String, Int>,
     recentGroups: List<String>,
+    // The tabs above the groups with their entries, and the open one ("fav", "all" or a tab name).
+    tabs: Map<Macro, List<LiveMacros.Entry>>,
+    selectedTab: String,
+    onSelectTab: (String) -> Unit,
     nowMillis: Long,
     onSelectCategory: (String?) -> Unit,
     onSelectFavourites: () -> Unit,
@@ -113,6 +135,9 @@ fun FullscreenLive(
     onRefocusDone: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
+    // Tonight's big programmes for the top of the page; none, no top.
+    highlights: List<TvHighlightsRepository.Highlight> = emptyList(),
+    onWatchHighlight: (TvHighlightsRepository.Highlight) -> Unit = {},
 ) {
     // Opens on the groups, so the list starts wide and the user picks a group first.
     var groupsOpen by rememberSaveable { mutableStateOf(true) }
@@ -161,14 +186,56 @@ fun FullscreenLive(
 
     val favouritesLabel = stringResource(R.string.guide_favourites)
     val allLabel = stringResource(R.string.guide_all_channels)
-    val title = when {
-        favouritesOnly -> favouritesLabel
-        selectedCategory == null -> allLabel
-        else -> categories.firstOrNull { selectedCategory in it.memberKeys }?.let { g ->
-            GroupBadge.of(g.rawName).label
-        } ?: ""
+    val onPick: (String?) -> Unit = { key ->
+        awaitingRows = rows
+        onSelectCategory(key)
     }
+    val onPickFavourites = {
+        awaitingRows = rows
+        onSelectFavourites()
+    }
+    val flat = rememberLiveGroupEntries(
+        categories, selectedCategory, favouritesOnly, groupCounts, recentGroups,
+        favouritesLabel, allLabel, onPick, onPickFavourites,
+    )
+    val tabEntries = rememberTabEntries(tabs, selectedTab, selectedCategory, favouritesOnly, onPick)
+    val split = remember(flat) {
+        flat.map { e -> CategoryMacro.kicker(e.label).let { (kicker, name) -> e.copy(kicker = kicker, label = name) } }
+    }
+    val entries = when (selectedTab) {
+        LAST_GROUP_ALL -> split
+        // Favourites and the groups last watched from.
+        LAST_GROUP_FAVOURITES -> split.takeWhile { it.key != "all" }
+        // Until the tabs are in, nothing: the flat list would take the focus (and the pick) meant for the tab.
+        else -> tabEntries ?: if (tabs.isEmpty()) emptyList() else split
+    }
+    val title = when {
+        favouritesOnly -> favouritesLabel.removePrefix("★").trim()
+        selectedCategory == null -> allLabel
+        // Wherever the current group was picked, the tab's name for it (a country without its code).
+        else -> tabs.values.asSequence().flatten().firstOrNull { it.key == selectedCategory && it.shift == 0 }?.let { e ->
+            if (e.key.startsWith("c:")) e.name else listOfNotNull(e.kicker, e.name).joinToString(" ")
+        } ?: (tabEntries ?: split).firstOrNull { it.selected }?.let { e ->
+            listOfNotNull(e.kicker, e.label).joinToString(" ")
+        } ?: categories.firstOrNull { selectedCategory in it.memberKeys }?.let { g -> GroupBadge.of(g.rawName).label } ?: ""
+    }
+    // While a tab has focus the groups below follow it but leave focus where it is.
+    var tabsFocused by remember { mutableStateOf(false) }
+    // DOWN from any tab goes into the groups, even from a tab that sits above the channels.
+    val groupsFocus = remember { FocusRequester() }
 
+    // The top is big while focus is on it or on the groups, a strip while the channels have it.
+    var heroFocused by remember { mutableStateOf(false) }
+    // The top's button is the first thing on screen that can take focus, so at start it may get it
+    // before the groups do: until the first key press, hand it to the groups.
+    var keyPressed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        repeat(20) {
+            delay(150)
+            if (keyPressed) return@LaunchedEffect
+            if (heroFocused && groupsOpen) runCatching { groupsFocus.requestFocus() }
+        }
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -176,6 +243,7 @@ fun FullscreenLive(
             .onFocusChanged { focusInside = it.hasFocus }
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                keyPressed = true
                 // The user moved on before the regrouped list came back: don't yank focus later.
                 if (refocus != null) onRefocusDone()
                 when (e.key) {
@@ -183,32 +251,45 @@ fun FullscreenLive(
                     Key.DirectionLeft -> if (needsHolder) { groupsOpen = true; true } else false
                     else -> false
                 }
-            }
-            .padding(horizontal = 32.dp, vertical = 20.dp),
+            },
     ) {
+        TvHero(
+            items = highlights,
+            expanded = heroFocused || groupsOpen,
+            nowMillis = nowMillis,
+            onWatch = onWatchHighlight,
+            onExitLeft = onExitLeft,
+            modifier = Modifier.onFocusChanged { heroFocused = it.hasFocus },
+        )
+        Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty()) 20.dp else 4.dp, bottom = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            LiveTabs(
+                tabs = tabs.keys,
+                selected = selectedTab,
+                focusable = groupsOpen,
+                onSelect = onSelectTab,
+                onExitLeft = onExitLeft,
+                below = groupsFocus,
+                modifier = Modifier.weight(1f).onFocusChanged { tabsFocused = it.hasFocus },
+            )
+            Spacer(Modifier.width(24.dp))
             Text(
                 title,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.widthIn(max = 360.dp),
             )
             if (rows.isNotEmpty() && awaitingRows == null) {
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
                     stringResource(R.string.live_channel_count, rows.size),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
-            Spacer(Modifier.weight(1f).width(24.dp))
-            Text(
-                stringResource(if (groupsOpen) R.string.live_menu_hint_categories else R.string.live_menu_hint),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         if (mergingName != null) {
             Spacer(Modifier.height(8.dp))
@@ -228,28 +309,19 @@ fun FullscreenLive(
         Spacer(Modifier.height(12.dp))
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            val groupsWidth by animateDpAsState(if (groupsOpen) 340.dp else 104.dp, label = "groupsWidth")
-            Box(Modifier.width(groupsWidth).fillMaxHeight()) {
-                GroupsList(
-                    open = groupsOpen,
-                    categories = categories,
-                    selectedCategory = selectedCategory,
-                    favouritesOnly = favouritesOnly,
-                    counts = groupCounts,
-                    recentGroups = recentGroups,
-                    favouritesLabel = favouritesLabel,
-                    allLabel = allLabel,
-                    onSelectCategory = { key ->
-                        awaitingRows = rows
-                        onSelectCategory(key)
-                    },
-                    onSelectFavourites = {
-                        awaitingRows = rows
-                        onSelectFavourites()
-                    },
-                    onEnter = { groupsOpen = false },
-                    onLeft = onExitLeft,
-                )
+            val groupsWidth = 320.dp
+            Box(Modifier.width(groupsWidth).fillMaxHeight().focusRequester(groupsFocus).focusGroup()) {
+                // A new tab, a new list: it opens on the tab's current group, or picks the first.
+                androidx.compose.runtime.key(selectedTab, tabs.isEmpty()) {
+                    GroupsList(
+                        open = groupsOpen,
+                        takesFocus = groupsOpen && !tabsFocused && !heroFocused,
+                        entries = entries,
+                        pickFirst = selectedTab != LAST_GROUP_ALL && selectedTab != LAST_GROUP_FAVOURITES,
+                        onEnter = { groupsOpen = false },
+                        onLeft = onExitLeft,
+                    )
+                }
             }
             Spacer(Modifier.width(20.dp))
             Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -266,7 +338,11 @@ fun FullscreenLive(
                     refocus = refocus,
                     onRefocusDone = onRefocusDone,
                     nowMillis = nowMillis,
-                    onFocusRow = onFocusRow,
+                    onFocusRow = {
+                        // Down from the top lands here straight, groups open or not.
+                        groupsOpen = false
+                        onFocusRow(it)
+                    },
                     onPlay = onPlay,
                     onLongPress = onLongPress,
                     onLeft = { groupsOpen = true },
@@ -274,45 +350,47 @@ fun FullscreenLive(
                 )
             }
         }
+        }
     }
 }
 
 /**
- * The groups column: Favourites, the groups last watched from, then every group. Open, it is a
- * list of badges, names and channel counts that you move through — the channels beside it follow
+ * The groups column: the open tab's groups, or (★ and All) Favourites, the groups last watched
+ * from and every group. Open, it is a list of names and channel counts that you move through — the channels beside it follow
  * the focused group after a short pause, so holding a direction doesn't rebuild every group on
- * the way. Closed, it is a strip of badges that can't take focus, the current group marked.
+ * the way. Closed, the same list can't take focus, the current group marked.
  */
 @Composable
 private fun GroupsList(
     open: Boolean,
-    categories: List<ChannelsViewModel.CategoryGroup>,
-    selectedCategory: String?,
-    favouritesOnly: Boolean,
-    counts: Map<String, Int>,
-    recentGroups: List<String>,
-    favouritesLabel: String,
-    allLabel: String,
-    onSelectCategory: (String?) -> Unit,
-    onSelectFavourites: () -> Unit,
+    // Open but with focus up on the tabs or the top: drawn live, focus left where it is.
+    takesFocus: Boolean,
+    entries: List<LiveGroupEntry>,
+    // A tab: when none of its entries is the current group, the first becomes it.
+    pickFirst: Boolean,
     onEnter: () -> Unit,
     onLeft: () -> Unit,
 ) {
-    val entries = rememberLiveGroupEntries(
-        categories, selectedCategory, favouritesOnly, counts, recentGroups,
-        favouritesLabel, allLabel, onSelectCategory, onSelectFavourites,
-    )
     // The pick behind the focused group, run after a pause unless focus moves on first.
     var focusedKey by remember { mutableStateOf<String?>(null) }
     // At start-up the categories arrive after the list is drawn: until the remembered group is
     // among the entries, focus sits on the first one (Favourites) only because nothing else is
     // there yet, so following it would throw the remembered group away.
     val hasSelection = entries.any { it.selected }
+    // Once focus has moved on from where it first landed, it is the user moving: follow it even
+    // when the current group isn't in this list (picked under another tab).
+    var firstFocused by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(focusedKey, open, hasSelection) {
         val entry = entries.firstOrNull { it.key == focusedKey } ?: return@LaunchedEffect
-        if (!open || entry.selected || !hasSelection) return@LaunchedEffect
+        if (firstFocused == null) firstFocused = entry.key
+        if (!open || entry.selected || (!hasSelection && entry.key == firstFocused)) return@LaunchedEffect
         delay(GROUP_FOLLOW_DELAY_MILLIS)
         entry.pick()
+    }
+    LaunchedEffect(pickFirst, hasSelection, entries.isEmpty()) {
+        if (!pickFirst || hasSelection || entries.isEmpty()) return@LaunchedEffect
+        delay(GROUP_FOLLOW_DELAY_MILLIS)
+        entries.first().pick()
     }
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     // Once the remembered group shows up, move focus onto it (once — later picks follow focus).
@@ -320,18 +398,18 @@ private fun GroupsList(
     FocusedList(
         count = entries.size,
         startIndex = selectedIndex,
-        active = open,
+        active = takesFocus,
         activeIndex = selectedIndex,
-        jumpTo = selectedIndex.takeIf { open && hasSelection && !landed },
+        jumpTo = selectedIndex.takeIf { takesFocus && hasSelection && !landed },
         jumpVersion = hasSelection,
         onJumped = { if (hasSelection) landed = true },
     ) { index, requester ->
         val entry = entries[index]
         Column {
-            entry.section?.let { GroupsHeader(it, open) }
+            entry.section?.let { GroupsHeader(it, true) }
             CategoryEntry(
                 label = entry.label,
-                badge = entry.badge,
+                kicker = entry.kicker,
                 selected = entry.selected,
                 count = entry.count,
                 open = open,
@@ -522,13 +600,17 @@ private fun FocusedList(
     }
 }
 
+/**
+ * One group: the broadcaster (or country code) small above, the name in tall capitals, the count
+ * on the right. The current group sits on a lighter ground with an accent down its left edge.
+ */
 @Composable
 private fun CategoryEntry(
     label: String,
-    badge: GroupBadge.Badge?,
+    kicker: String?,
     selected: Boolean,
     count: Int?,
-    // Open: badge, name and count, focusable. Closed: the badge alone, which can't take focus.
+    // Closed: drawn the same, but can't take focus.
     open: Boolean,
     modifier: Modifier,
     onFocused: () -> Unit,
@@ -547,44 +629,190 @@ private fun CategoryEntry(
             .fillMaxWidth()
             .focusLift(focused)
             .clip(shape)
-            .background(
-                when {
-                    focused -> MaterialTheme.colorScheme.primaryContainer
-                    selected -> MaterialTheme.colorScheme.surfaceVariant
-                    else -> MaterialTheme.colorScheme.surface
-                },
-            )
-            .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .background(if (focused || selected) GroupSelected else MaterialTheme.colorScheme.surface)
+            .then(if (focused) Modifier.border(2.dp, Accent, shape) else Modifier)
+            .drawBehind { if (selected) drawRect(Accent, size = Size(3.dp.toPx(), size.height)) }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
             .clickable(interactionSource = null, indication = null, onClick = onEnter)
-            .padding(horizontal = if (open) 12.dp else 8.dp, vertical = 8.dp),
+            .heightIn(min = 52.dp)
+            .padding(start = 16.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Without a badge a closed strip still needs something to tell the groups apart.
-        GroupBadgeSlot(badge, label, initialsIfBlank = !open, modifier = Modifier.size(width = 80.dp, height = 40.dp))
-        if (open) {
-            Spacer(Modifier.width(14.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (count != null) {
-                Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            if (kicker != null) {
                 Text(
-                    "$count",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    kicker.uppercase(),
+                    color = Accent,
+                    fontFamily = Oswald,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 10.sp,
+                    letterSpacing = 2.5.sp,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            Text(
+                label.uppercase(),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontFamily = Oswald,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 18.sp,
+                letterSpacing = 1.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (count != null) {
+            Spacer(Modifier.width(10.dp))
+            if (selected) {
+                Box(Modifier.size(5.dp).clip(CircleShape).background(Accent))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                "%,d".format(Locale.ITALIAN, count),
+                color = if (focused || selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                fontFamily = Oswald,
+                fontWeight = FontWeight.Light,
+                fontSize = 17.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * The tabs across the top of the groups: ★, the kinds of channel the list has, All. Moving onto a
+ * tab opens it after a short pause (holding a direction doesn't open every tab on the way); LEFT
+ * from the first one reveals the app's menu.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun LiveTabs(
+    tabs: Set<Macro>,
+    selected: String,
+    focusable: Boolean,
+    onSelect: (String) -> Unit,
+    onExitLeft: () -> Unit,
+    below: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val keys = buildList {
+        add(LAST_GROUP_FAVOURITES)
+        LiveMacros.TABS.filter { it in tabs }.forEach { add(it.name) }
+        add(LAST_GROUP_ALL)
+    }
+    var focusedKey by remember { mutableStateOf<String?>(null) }
+    val select by rememberUpdatedState(onSelect)
+    LaunchedEffect(focusedKey) {
+        val key = focusedKey ?: return@LaunchedEffect
+        if (key == selected) return@LaunchedEffect
+        delay(TAB_FOLLOW_DELAY_MILLIS)
+        select(key)
+    }
+    val requesters = remember(keys) { keys.associateWith { FocusRequester() } }
+    Row(
+        modifier
+            // Coming up from the groups lands on the open tab, not on whichever sits above.
+            .focusProperties { enter = { if (focusable) requesters[selected] ?: FocusRequester.Default else FocusRequester.Default } }
+            .focusGroup()
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        keys.forEachIndexed { index, key ->
+            var focused by remember { mutableStateOf(false) }
+            val isSelected = key == selected
+            Column(
+                Modifier
+                    .focusRequester(requesters.getValue(key))
+                    .focusProperties {
+                        canFocus = focusable
+                        down = below
+                    }
+                    .onPreviewKeyEvent { e ->
+                        if (focused && index == 0 && e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft) {
+                            onExitLeft(); true
+                        } else false
+                    }
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        if (it.isFocused) focusedKey = key
+                    }
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (focused) GroupSelected else Color.Transparent)
+                    .clickable(interactionSource = null, indication = null) { select(key) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    tabLabel(key).uppercase(),
+                    color = when {
+                        focused || isSelected -> MaterialTheme.colorScheme.onSurface
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    fontFamily = Oswald,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 18.sp,
+                    letterSpacing = 1.5.sp,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    Modifier
+                        .width(28.dp)
+                        .height(2.dp)
+                        .background(if (isSelected) Accent else Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun tabLabel(key: String): String = when (key) {
+    LAST_GROUP_FAVOURITES -> "★"
+    LAST_GROUP_ALL -> stringResource(R.string.live_tab_all)
+    Macro.ITALY.name -> stringResource(R.string.live_tab_italy)
+    Macro.FOOTBALL.name -> stringResource(R.string.live_tab_football)
+    Macro.SPORT.name -> stringResource(R.string.live_tab_sport)
+    Macro.ENTERTAINMENT.name -> stringResource(R.string.live_tab_entertainment)
+    Macro.CINEMA.name -> stringResource(R.string.live_tab_cinema)
+    Macro.KIDS.name -> stringResource(R.string.live_tab_kids)
+    Macro.MUSIC.name -> stringResource(R.string.live_tab_music)
+    Macro.ABROAD.name -> stringResource(R.string.live_tab_abroad)
+    else -> key
+}
+
+/** The open tab's entries as the groups list draws them; null when [tab] isn't one of [tabs]. */
+@Composable
+private fun rememberTabEntries(
+    tabs: Map<Macro, List<LiveMacros.Entry>>,
+    tab: String,
+    selectedCategory: String?,
+    favouritesOnly: Boolean,
+    onPick: (String?) -> Unit,
+): List<LiveGroupEntry>? {
+    val pick by rememberUpdatedState(onPick)
+    val shiftKicker = stringResource(R.string.live_shift_kicker)
+    val oneHour = stringResource(R.string.live_shift_one)
+    val hours = stringResource(R.string.live_shift_many)
+    return remember(tabs, tab, selectedCategory, favouritesOnly, shiftKicker, oneHour, hours) {
+        val macro = runCatching { Macro.valueOf(tab) }.getOrNull() ?: return@remember null
+        val list = tabs[macro] ?: return@remember null
+        // A group picked from All or the player is the same group here.
+        val matched = list.firstOrNull { it.key == selectedCategory }
+            ?: list.firstOrNull { it.shift == 0 && selectedCategory != null && selectedCategory in it.memberKeys }
+        list.map { e ->
+            LiveGroupEntry(
+                key = "tab-" + e.key,
+                label = if (e.shift > 0) (if (e.shift == 1) oneHour else hours.format(e.shift)) else e.name,
+                kicker = if (e.shift > 0) shiftKicker else e.kicker,
+                selected = !favouritesOnly && e === matched,
+                count = e.count,
+            ) { pick(e.key) }
         }
     }
 }
@@ -731,3 +959,12 @@ private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 // How long the focus rests on a group before the channels beside it switch to that group.
 private const val GROUP_FOLLOW_DELAY_MILLIS = 400L
+private const val TAB_FOLLOW_DELAY_MILLIS = 300L
+
+private val Accent = Color(0xFF57D9C5)
+private val GroupSelected = Color(0xFF2A2F2D)
+private val Oswald = FontFamily(
+    Font(R.font.oswald_light, FontWeight.Light),
+    Font(R.font.oswald_regular, FontWeight.Normal),
+    Font(R.font.oswald_bold, FontWeight.Bold),
+)

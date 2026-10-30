@@ -138,6 +138,8 @@ fun HomeScreen(
     val categories by viewModel.visibleCategoryGroups.collectAsState()
     val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsState()
     val groupCounts by viewModel.groupCounts.collectAsState()
+    val liveTabs by viewModel.liveTabs.collectAsState()
+    val selectedTab by viewModel.selectedTab.collectAsState()
     val recentLiveGroups by viewModel.recentLiveGroups.collectAsState()
     val showRecentGroups by viewModel.showRecentGroups.collectAsState()
     val recentGroups = if (showRecentGroups) recentLiveGroups else emptyList()
@@ -325,11 +327,27 @@ fun HomeScreen(
     // would leave an empty list after a restart — fall back to All once the categories are in.
     LaunchedEffect(categories, selectedCategory) {
         val key = selectedCategory ?: return@LaunchedEffect
-        if (categories.isNotEmpty() && categories.none { key in it.memberKeys }) viewModel.selectCategory(null)
+        if (categories.isEmpty()) return@LaunchedEffect
+        // A tab's entry (group, country, "+1") is gone when it no longer resolves.
+        val gone = if (app.opentv.ui.LiveMacros.plainKey(key) != key) app.opentv.ui.LiveMacros.resolve(key, categories) == null
+        else categories.none { key in it.memberKeys }
+        if (gone) viewModel.selectCategory(null)
+    }
+
+    // Tonight's big programmes for the top of the full-screen list, read again every few minutes
+    // (the repository keeps them half an hour; the ones over drop off).
+    val highlights by androidx.compose.runtime.produceState(emptyList<app.opentv.data.repo.TvHighlightsRepository.Highlight>(), fullscreen) {
+        if (!fullscreen) return@produceState
+        while (true) {
+            value = graph.tvHighlightsRepository.tonight()
+            delay(HIGHLIGHTS_REFRESH_MILLIS)
+        }
     }
 
     if (fullscreen) {
         FullscreenLive(
+            highlights = highlights,
+            onWatchHighlight = { requestLive(it.channel) },
             rows = rows,
             categories = fullscreenCategories,
             selectedCategory = selectedCategory,
@@ -339,6 +357,9 @@ fun HomeScreen(
             fallbackKey = { lastWatched(it)?.key },
             groupCounts = groupCounts,
             recentGroups = recentGroups,
+            tabs = liveTabs,
+            selectedTab = selectedTab,
+            onSelectTab = viewModel::selectTab,
             nowMillis = nowMillis,
             onSelectCategory = viewModel::selectCategory,
             onSelectFavourites = viewModel::selectFavourites,
@@ -1252,3 +1273,5 @@ private fun EmptyState(onAddSource: () -> Unit) {
 private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 private fun formatTime(utcMillis: Long): String = timeFormat.format(Date(utcMillis))
+
+private const val HIGHLIGHTS_REFRESH_MILLIS = 5 * 60_000L

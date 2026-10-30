@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Same as the platform default (system CAs, cleartext allowed for the many plain-HTTP IPTV panels),
+  plus one root for the TV guide behind the top of the live page: its servers chain up to Sectigo's
+  2021 root (R46), which boxes on Android 9 and older don't carry.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config>
+        <domain includeSubdomains="true">sky.it</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/sectigo_public_server_root_r46" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
