@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clipToBounds
@@ -22,8 +23,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
@@ -403,7 +402,7 @@ private fun GroupsList(
     // Once the remembered group shows up, move focus onto it (once — later picks follow focus).
     var landed by remember { mutableStateOf(false) }
     val glide = remember { Glide() }
-    LaunchedEffect(glide.key, glide.targetTop, glide.targetHeight, glide.listFocused) { glide.follow() }
+    LaunchedEffect(glide.key, glide.listFocused) { glide.follow() }
     Box(
         Modifier
             .fillMaxSize()
@@ -444,12 +443,13 @@ private fun GroupsList(
     Spacer(
         Modifier.fillMaxSize().drawBehind {
             if (!glide.visible || glide.key == null) return@drawBehind
-            val top = glide.top.value - glide.origin
+            val top = glide.top - glide.origin
+            val height = glide.height
             val radius = CornerRadius(10.dp.toPx())
-            drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, glide.height.value), radius)
+            drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, height), radius)
             val stroke = 2.dp.toPx()
             drawRoundRect(
-                Accent, Offset(stroke / 2, top + stroke / 2), Size(size.width - stroke, glide.height.value - stroke),
+                Accent, Offset(stroke / 2, top + stroke / 2), Size(size.width - stroke, height - stroke),
                 CornerRadius(radius.x - stroke / 2), style = Stroke(stroke),
             )
         },
@@ -460,7 +460,7 @@ private fun GroupsList(
 /**
  * Where the groups' focus box is and where it is heading. A move to another group slides there in
  * [GLIDE_MILLIS] — about as long as the channels take to follow, so the wait reads as the box
- * travelling; the same group moving (the list scrolling) keeps it on the group.
+ * travelling. The target is read live, so the list scrolling under the box doesn't restart it.
  */
 private class Glide {
     var origin by mutableFloatStateOf(0f)
@@ -468,36 +468,43 @@ private class Glide {
     var key by mutableStateOf<String?>(null)
     var targetTop by mutableFloatStateOf(0f)
     var targetHeight by mutableFloatStateOf(0f)
-    val top = Animatable(0f)
-    val height = Animatable(0f)
+    private val progress = Animatable(1f)
+    private var fromTop = 0f
+    private var fromHeight = 0f
+    private var shownKey: String? = null
     // Moving from one group to the next, the list is out of focus for a frame: only a real exit
     // (the channels, the tabs) hides the box and makes the next entry land without a slide.
     var visible by mutableStateOf(false)
-    private var movedAt = 0L
+
+    val top: Float get() = fromTop + (targetTop - fromTop) * FastOutSlowInEasing.transform(progress.value)
+    val height: Float get() = fromHeight + (targetHeight - fromHeight) * FastOutSlowInEasing.transform(progress.value)
 
     fun place(key: String, top: Float, height: Float) {
-        if (key != this.key) movedAt = android.os.SystemClock.uptimeMillis()
         this.key = key
         targetTop = top
         targetHeight = height
     }
 
-    suspend fun follow() = coroutineScope {
-        if (!listFocused || key == null) {
+    suspend fun follow() {
+        val to = key
+        if (!listFocused || to == null) {
             delay(GLIDE_EXIT_MILLIS)
             visible = false
-            return@coroutineScope
+            shownKey = null
+            return
         }
-        val left = GLIDE_MILLIS - (android.os.SystemClock.uptimeMillis() - movedAt)
-        if (!visible || left <= 0) {
-            visible = true
-            top.snapTo(targetTop)
-            height.snapTo(targetHeight)
-            return@coroutineScope
+        if (to == shownKey) return
+        val slide = visible && shownKey != null
+        shownKey = to
+        visible = true
+        if (!slide) {
+            progress.snapTo(1f)
+            return
         }
-        val spec = tween<Float>(left.toInt(), easing = FastOutSlowInEasing)
-        launch { top.animateTo(targetTop, spec) }
-        launch { height.animateTo(targetHeight, spec) }
+        fromTop = top
+        fromHeight = height
+        progress.snapTo(0f)
+        progress.animateTo(1f, tween(GLIDE_MILLIS.toInt(), easing = LinearEasing))
     }
 }
 
