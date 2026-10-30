@@ -221,6 +221,8 @@ fun FullscreenLive(
     }
     // While a tab has focus the groups below follow it but leave focus where it is.
     var tabsFocused by remember { mutableStateOf(false) }
+    // DOWN from any tab goes into the groups, even from a tab that sits above the channels.
+    val groupsFocus = remember { FocusRequester() }
 
     // The top is big while focus is on it or on the groups, a strip while the channels have it.
     var heroFocused by remember { mutableStateOf(false) }
@@ -256,6 +258,7 @@ fun FullscreenLive(
                 focusable = groupsOpen,
                 onSelect = onSelectTab,
                 onExitLeft = onExitLeft,
+                below = groupsFocus,
                 modifier = Modifier.weight(1f).onFocusChanged { tabsFocused = it.hasFocus },
             )
             Spacer(Modifier.width(24.dp))
@@ -296,7 +299,7 @@ fun FullscreenLive(
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
             val groupsWidth = 320.dp
-            Box(Modifier.width(groupsWidth).fillMaxHeight()) {
+            Box(Modifier.width(groupsWidth).fillMaxHeight().focusRequester(groupsFocus).focusGroup()) {
                 // A new tab, a new list: it opens on the tab's current group, or picks the first.
                 androidx.compose.runtime.key(selectedTab, tabs.isEmpty()) {
                     GroupsList(
@@ -678,6 +681,7 @@ private fun LiveTabs(
     focusable: Boolean,
     onSelect: (String) -> Unit,
     onExitLeft: () -> Unit,
+    below: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val keys = buildList {
@@ -709,7 +713,10 @@ private fun LiveTabs(
             Column(
                 Modifier
                     .focusRequester(requesters.getValue(key))
-                    .focusProperties { canFocus = focusable }
+                    .focusProperties {
+                        canFocus = focusable
+                        down = below
+                    }
                     .onPreviewKeyEvent { e ->
                         if (focused && index == 0 && e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft) {
                             onExitLeft(); true
