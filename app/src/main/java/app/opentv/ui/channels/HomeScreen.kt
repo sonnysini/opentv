@@ -327,7 +327,11 @@ fun HomeScreen(
     // would leave an empty list after a restart — fall back to All once the categories are in.
     LaunchedEffect(categories, selectedCategory) {
         val key = selectedCategory ?: return@LaunchedEffect
-        if (categories.isNotEmpty() && categories.none { key in it.memberKeys }) viewModel.selectCategory(null)
+        if (categories.isEmpty()) return@LaunchedEffect
+        // A tab's entry (group, country, "+1") is gone when it no longer resolves.
+        val gone = if (app.opentv.ui.LiveMacros.plainKey(key) != key) app.opentv.ui.LiveMacros.resolve(key, categories) == null
+        else categories.none { key in it.memberKeys }
+        if (gone) viewModel.selectCategory(null)
     }
 
     // Tonight's big programmes for the top of the full-screen list, read again every few minutes
