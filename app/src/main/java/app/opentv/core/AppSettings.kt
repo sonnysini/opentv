@@ -327,6 +327,11 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getString(KEY_LAST_LIVE_GROUP, null)
         set(value) { prefs.edit().putString(KEY_LAST_LIVE_GROUP, value).apply() }
 
+    /** The tab last open above the live groups — "fav", "all" or a tab name — read once at start-up. */
+    var lastLiveTab: String?
+        get() = prefs.getString(KEY_LAST_LIVE_TAB, null)
+        set(value) { prefs.edit().putString(KEY_LAST_LIVE_TAB, value).apply() }
+
     /** The live groups last watched from, newest first ("fav"/"all"/group key) — the list's "Recent". */
     private val _recentLiveGroups = pref {
         prefs.getString(KEY_RECENT_LIVE_GROUPS, null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
@@ -991,6 +996,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_APP_STYLE = "app_style"
         private const val KEY_CHANNEL_LAYOUT = "channel_layout"
         private const val KEY_LAST_LIVE_GROUP = "last_live_group"
+        private const val KEY_LAST_LIVE_TAB = "last_live_tab"
         private const val KEY_RECENT_LIVE_GROUPS = "recent_live_groups"
         private const val RECENT_LIVE_GROUPS_MAX = 3
         private const val KEY_SUBTITLES = "subtitles_enabled"

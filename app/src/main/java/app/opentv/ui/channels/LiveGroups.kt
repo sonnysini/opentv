@@ -31,6 +31,8 @@ data class LiveGroupEntry(
     val selected: Boolean = false,
     val count: Int? = null,
     val badge: GroupBadge.Badge? = null,
+    // The broadcaster or country above the name, small (the full-screen list's tabs).
+    val kicker: String? = null,
     // A section title ("Recent", "All groups") drawn above this group, in the same list item
     // so every item can take focus.
     val section: String? = null,

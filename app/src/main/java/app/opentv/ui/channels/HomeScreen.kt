@@ -138,6 +138,8 @@ fun HomeScreen(
     val categories by viewModel.visibleCategoryGroups.collectAsState()
     val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsState()
     val groupCounts by viewModel.groupCounts.collectAsState()
+    val liveTabs by viewModel.liveTabs.collectAsState()
+    val selectedTab by viewModel.selectedTab.collectAsState()
     val recentLiveGroups by viewModel.recentLiveGroups.collectAsState()
     val showRecentGroups by viewModel.showRecentGroups.collectAsState()
     val recentGroups = if (showRecentGroups) recentLiveGroups else emptyList()
@@ -351,6 +353,9 @@ fun HomeScreen(
             fallbackKey = { lastWatched(it)?.key },
             groupCounts = groupCounts,
             recentGroups = recentGroups,
+            tabs = liveTabs,
+            selectedTab = selectedTab,
+            onSelectTab = viewModel::selectTab,
             nowMillis = nowMillis,
             onSelectCategory = viewModel::selectCategory,
             onSelectFavourites = viewModel::selectFavourites,

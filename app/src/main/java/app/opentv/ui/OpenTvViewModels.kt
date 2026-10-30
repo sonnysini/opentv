@@ -16,6 +16,7 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.EpgFeed
 import app.opentv.data.model.LiveStreamFormat
 import app.opentv.data.model.Movie
+import app.opentv.data.parser.CategoryMacro.Macro
 import app.opentv.data.model.PlaybackPosition
 import app.opentv.data.model.Profile
 import app.opentv.data.model.Programme
@@ -358,7 +359,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     fun markGroupWatched() {
         val group = when {
             favouritesOnly.value -> LAST_GROUP_FAVOURITES
-            else -> selectedCategory.value ?: LAST_GROUP_ALL
+            // A country or a "+1" entry of a tab isn't a group the "Recent" list can show.
+            else -> selectedCategory.value?.let { LiveMacros.plainKey(it) ?: return } ?: LAST_GROUP_ALL
         }
         settings.addRecentLiveGroup(group)
     }
@@ -374,6 +376,24 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                 if (settings.hiddenUnlocked.value) groups else groups.filter { g -> g.memberKeys.none { it in hidden } }
             },
         )
+
+    /** The tab open above the groups: [LAST_GROUP_FAVOURITES], [LAST_GROUP_ALL] or a [Macro] name. */
+    val selectedTab = MutableStateFlow(settings.lastLiveTab ?: Macro.ITALY.name)
+
+    fun selectTab(tab: String) {
+        selectedTab.value = tab
+        settings.lastLiveTab = tab
+    }
+
+    /** Each tab's entries (see [LiveMacros]) with their channel counts; tabs with none are left out. */
+    val liveTabs: StateFlow<Map<Macro, List<LiveMacros.Entry>>> =
+        combine(visibleCategoryGroups, graph.catalogRepository.observeCategoryChannelKeys()) { groups, keys ->
+            val byCategory = HashMap<String, MutableSet<String>>()
+            for (k in keys) byCategory.getOrPut(k.categoryId) { HashSet() } += k.groupKey.ifEmpty { "#" + k.categoryId }
+            LiveMacros.build(groups, byCategory)
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
      * One row on screen = one *logical* channel.
@@ -442,6 +462,8 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         val favs: Boolean,
         val query: String,
         val hiddenIds: Set<String>,
+        /** A tab entry's timeshift: 0 = live channels only, N = only those N hours behind; null = all. */
+        val shift: Int? = null,
     )
 
     /**
@@ -522,8 +544,9 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         // remembered group would resolve to nothing and build "All" for a moment instead.
         combine(selectedCategory, favouritesOnly, query, foldedCategories, hiddenCategoryIds) {
                 category, favs, q, groups, hidden ->
-            val group = category?.let { key -> groups.firstOrNull { key in it.memberKeys } }
-            RowsKey(category, group?.key, group?.ids, favs, q, hidden)
+            val pick = category?.let { LiveMacros.resolve(it, groups) }
+            val group = if (pick != null) null else category?.let { key -> groups.firstOrNull { key in it.memberKeys } }
+            RowsKey(category, pick?.groupKey ?: group?.key, pick?.ids ?: group?.ids, favs, q, hidden, pick?.shift)
         }
             .combine(selectedSource) { key, source -> key to source }
             .flatMapLatest { (key, source) ->
@@ -551,13 +574,15 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                     val visible =
                         if (key.hiddenIds.isEmpty()) scoped
                         else scoped.filter { it.categoryId !in key.hiddenIds }
+                    // A tab entry lists its live channels, or only those running N hours behind.
+                    val shifted = key.shift?.let { hours -> visible.filter { LiveMacros.shiftOf(it.groupKey) == hours } } ?: visible
                     // Show the size-aware loading bar for the FIRST guide build only (start-up).
                     // After that the guide is built and flicking between categories is cheap, so
                     // don't flash a loading line on every tap — that bar was only ever meant for
                     // the one-time heavy load, and leaking it per-category read as a stuck "100%".
                     val firstBuild = !guideBuilt
-                    if (firstBuild) StatusBus.set(sizeMessage(visible.size), 0f)
-                    val built = buildRows(visible, byEpgChannel.orEmpty(), now, reportProgress = firstBuild)
+                    if (firstBuild) StatusBus.set(sizeMessage(shifted.size), 0f)
+                    val built = buildRows(shifted, byEpgChannel.orEmpty(), now, reportProgress = firstBuild)
                     // The order the user set for this group from the phone page, if any.
                     val order = if (key.favs || key.query.isNotBlank()) null else key.groupKey?.let(channelOrder::get)
                     val rows = if (order == null) built else LiveLayout.ordered(built, order) { listOf(it.orderKey) }
