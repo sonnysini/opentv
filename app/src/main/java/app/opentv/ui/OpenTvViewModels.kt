@@ -575,7 +575,15 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                         if (key.hiddenIds.isEmpty()) scoped
                         else scoped.filter { it.categoryId !in key.hiddenIds }
                     // A tab entry lists its live channels, or only those running N hours behind.
-                    val shifted = key.shift?.let { hours -> visible.filter { LiveMacros.shiftOf(it.groupKey) == hours } } ?: visible
+                    val shifted = (key.shift?.let { hours -> visible.filter { LiveMacros.shiftOf(it.groupKey) == hours } } ?: visible)
+                        .let { list ->
+                            // A tab's shelf joins several categories: each keeps its own order, the first one first.
+                            val ids = key.categoryIds
+                            if (key.shift == null || ids == null || ids.size < 2) list
+                            else ids.withIndex().associate { it.value to it.index }.let { rank ->
+                                list.sortedBy { rank[it.categoryId] ?: Int.MAX_VALUE }
+                            }
+                        }
                     // Show the size-aware loading bar for the FIRST guide build only (start-up).
                     // After that the guide is built and flicking between categories is cheap, so
                     // don't flash a loading line on every tap — that bar was only ever meant for
