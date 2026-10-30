@@ -76,6 +76,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.opentv.R
@@ -229,8 +232,10 @@ fun FullscreenLive(
         registerNavExit { groupsOpen = true; runCatching { groupsFocus.requestFocus() }.isSuccess }
         onDispose { registerNavExit(null) }
     }
-    // The top is big while focus is on it or on the groups, a strip while the channels have it.
+    // The top shows at start; the channels fold it away, and only going up to the tabs brings it back.
     var heroFocused by remember { mutableStateOf(false) }
+    var heroShown by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(tabsFocused, heroFocused) { if (tabsFocused || heroFocused) heroShown = true }
     // The top's button is the first thing on screen that can take focus, so at start it may get it
     // before the groups do: until the first key press, hand it to the groups.
     var keyPressed by remember { mutableStateOf(false) }
@@ -260,13 +265,13 @@ fun FullscreenLive(
     ) {
         TvHero(
             items = highlights,
-            expanded = heroFocused || groupsOpen,
+            expanded = heroShown || heroFocused || tabsFocused,
             nowMillis = nowMillis,
             onWatch = onWatchHighlight,
             onExitLeft = onExitLeft,
             modifier = Modifier.onFocusChanged { heroFocused = it.hasFocus },
         )
-        Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty()) 20.dp else 4.dp, bottom = 20.dp)) {
+        Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty() || !(heroShown || heroFocused || tabsFocused)) 20.dp else 4.dp, bottom = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             LiveTabs(
                 tabs = tabs.keys,
@@ -346,6 +351,7 @@ fun FullscreenLive(
                     onFocusRow = {
                         // Down from the top lands here straight, groups open or not.
                         groupsOpen = false
+                        heroShown = false
                         onFocusRow(it)
                     },
                     onPlay = onPlay,
@@ -606,7 +612,7 @@ private fun FocusedList(
 }
 
 /**
- * One group: the broadcaster (or country code) small above, the name in tall capitals, the count
+ * One group: the broadcaster (or country code) in the accent before the name, in tall capitals, the count
  * on the right. The current group sits on a lighter ground with an accent down its left edge.
  */
 @Composable
@@ -626,7 +632,9 @@ private fun CategoryEntry(
     val shape = RoundedCornerShape(10.dp)
     Row(
         modifier
-            .focusProperties { canFocus = open }
+            // Closing keeps the focused group focusable until the channels have taken the focus:
+            // dropped at once, it fell to the navigation menu, which flashed open on the way.
+            .focusProperties { canFocus = open || focused }
             .leftReveals({ focused }, onLeft)
             .onPreviewKeyEvent { e ->
                 if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { onEnter(); true } else false
@@ -642,34 +650,28 @@ private fun CategoryEntry(
                 if (it.isFocused) onFocused()
             }
             .clickable(interactionSource = null, indication = null, onClick = onEnter)
-            .heightIn(min = 52.dp)
+            .heightIn(min = 44.dp)
             .padding(start = 16.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            if (kicker != null) {
-                Text(
-                    kicker.uppercase(),
-                    color = Accent,
-                    fontFamily = Oswald,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 10.sp,
-                    letterSpacing = 2.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                label.uppercase(),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontFamily = Oswald,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                fontSize = 18.sp,
-                letterSpacing = 1.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        // The broadcaster in the accent, then the name, on one line: "SKY INTRATTENIMENTO".
+        Text(
+            buildAnnotatedString {
+                if (kicker != null) {
+                    withStyle(SpanStyle(color = Accent)) { append(kicker.uppercase()) }
+                    append(' ')
+                }
+                append(label.uppercase())
+            },
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = Oswald,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 18.sp,
+            letterSpacing = 1.5.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         if (count != null) {
             Spacer(Modifier.width(10.dp))
             if (selected) {

@@ -341,7 +341,7 @@ private fun NavRail(
             .width(width)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
-            .onFocusChanged { expanded = it.hasFocus }
+            .onFocusChanged { expanded = it.hasFocus; android.util.Log.d("FocusProbe", "rail hasFocus=${it.hasFocus}") }
             .onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onRight() }
             .focusGroup()
             .padding(vertical = 16.dp),
