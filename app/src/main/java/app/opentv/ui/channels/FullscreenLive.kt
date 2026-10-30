@@ -11,6 +11,19 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
@@ -94,7 +107,8 @@ import app.opentv.ui.theme.focusLift
  * left, the current group's channels filling the rest with what's on now (and next) against each
  * one. While you browse the channels the groups stay in sight but out of reach and the top shrinks
  * to a strip; LEFT (or Back, or ☰) goes back into the groups, and moving through them swaps the
- * channels beside them. UP from the top of either list reaches the programmes. RIGHT or OK goes back into the channels; LEFT or
+ * channels beside them. UP from the top of either list reaches the tabs, and from the tabs the programmes;
+ * DOWN goes back the same way. RIGHT or OK goes back into the channels; LEFT or
  * Back from the groups asks the host to reveal the app's navigation menu.
  */
 @Composable
@@ -213,6 +227,12 @@ fun FullscreenLive(
     var tabsFocused by remember { mutableStateOf(false) }
     // DOWN from any tab goes into the groups, even from a tab that sits above the channels.
     val groupsFocus = remember { FocusRequester() }
+    // The fixed way up and down the page: "Watch on …" ↔ tabs ↔ groups (or the first channel).
+    // Left to the geometry, a quick press while the top was folding skipped the tabs.
+    val tabsFocus = remember { FocusRequester() }
+    val heroFocus = remember { FocusRequester() }
+    // UP from the channels reaches the tabs: from there the way down is into the groups.
+    LaunchedEffect(tabsFocused) { if (tabsFocused) groupsOpen = true }
 
     // LEFT reaches the menu only from the groups, so RIGHT goes straight back to them.
     DisposableEffect(Unit) {
@@ -256,6 +276,8 @@ fun FullscreenLive(
             nowMillis = nowMillis,
             onWatch = onWatchHighlight,
             onExitLeft = onExitLeft,
+            buttonFocus = heroFocus,
+            below = tabsFocus,
             modifier = Modifier.onFocusChanged { heroFocused = it.hasFocus },
         )
         Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty() || !(heroShown || heroFocused || tabsFocused)) 20.dp else 4.dp, bottom = 20.dp)) {
@@ -263,9 +285,10 @@ fun FullscreenLive(
             LiveTabs(
                 tabs = tabs.keys,
                 selected = selectedTab,
-                focusable = groupsOpen,
+                requester = tabsFocus,
                 onSelect = onSelectTab,
                 onExitLeft = onExitLeft,
+                above = heroFocus.takeIf { highlights.isNotEmpty() },
                 below = groupsFocus,
                 modifier = Modifier.weight(1f).onFocusChanged { tabsFocused = it.hasFocus },
             )
@@ -299,6 +322,7 @@ fun FullscreenLive(
                         pickFirst = selectedTab != LAST_GROUP_ALL && selectedTab != LAST_GROUP_FAVOURITES,
                         onEnter = { groupsOpen = false },
                         onLeft = onExitLeft,
+                        above = tabsFocus,
                     )
                 }
             }
@@ -326,6 +350,7 @@ fun FullscreenLive(
                     onPlay = onPlay,
                     onLongPress = onLongPress,
                     onLeft = { groupsOpen = true },
+                    above = tabsFocus,
                     emptyContent = emptyContent,
                 )
             }
@@ -350,6 +375,8 @@ private fun GroupsList(
     pickFirst: Boolean,
     onEnter: () -> Unit,
     onLeft: () -> Unit,
+    // UP from the first group.
+    above: FocusRequester,
 ) {
     // The pick behind the focused group, run after a pause unless focus moves on first.
     var focusedKey by remember { mutableStateOf<String?>(null) }
@@ -375,6 +402,15 @@ private fun GroupsList(
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     // Once the remembered group shows up, move focus onto it (once — later picks follow focus).
     var landed by remember { mutableStateOf(false) }
+    val glide = remember { Glide() }
+    LaunchedEffect(glide.key, glide.targetTop, glide.targetHeight, glide.listFocused) { glide.follow() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onGloballyPositioned { glide.origin = it.positionInRoot().y }
+            .onFocusChanged { glide.listFocused = it.hasFocus },
+    ) {
     FocusedList(
         count = entries.size,
         startIndex = selectedIndex,
@@ -393,8 +429,9 @@ private fun GroupsList(
                 selected = entry.selected,
                 count = entry.count,
                 open = open,
-                modifier = requester,
+                modifier = if (index == 0) requester.focusProperties { up = above } else requester,
                 onFocused = { focusedKey = entry.key },
+                onPlaced = { top, height -> glide.place(entry.key, top, height) },
                 onLeft = onLeft,
                 onEnter = {
                     if (!entry.selected) entry.pick()
@@ -402,6 +439,59 @@ private fun GroupsList(
                 },
             )
         }
+    }
+    // The focus box, drawn once over the list so it can slide from group to group.
+    Spacer(
+        Modifier.fillMaxSize().drawBehind {
+            if (!glide.listFocused || glide.key == null) return@drawBehind
+            val top = glide.top.value - glide.origin
+            val radius = CornerRadius(10.dp.toPx())
+            drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, glide.height.value), radius)
+            val stroke = 2.dp.toPx()
+            drawRoundRect(
+                Accent, Offset(stroke / 2, top + stroke / 2), Size(size.width - stroke, glide.height.value - stroke),
+                CornerRadius(radius.x - stroke / 2), style = Stroke(stroke),
+            )
+        },
+    )
+    }
+}
+
+/**
+ * Where the groups' focus box is and where it is heading. A move to another group slides there in
+ * [GLIDE_MILLIS] — about as long as the channels take to follow, so the wait reads as the box
+ * travelling; the same group moving (the list scrolling) keeps it on the group.
+ */
+private class Glide {
+    var origin by mutableFloatStateOf(0f)
+    var listFocused by mutableStateOf(false)
+    var key by mutableStateOf<String?>(null)
+    var targetTop by mutableFloatStateOf(0f)
+    var targetHeight by mutableFloatStateOf(0f)
+    val top = Animatable(0f)
+    val height = Animatable(0f)
+    private var shown = false
+    private var movedAt = 0L
+
+    fun place(key: String, top: Float, height: Float) {
+        if (key != this.key) movedAt = android.os.SystemClock.uptimeMillis()
+        this.key = key
+        targetTop = top
+        targetHeight = height
+    }
+
+    suspend fun follow() = coroutineScope {
+        if (!listFocused || key == null) { shown = false; return@coroutineScope }
+        val left = GLIDE_MILLIS - (android.os.SystemClock.uptimeMillis() - movedAt)
+        if (!shown || left <= 0) {
+            shown = true
+            top.snapTo(targetTop)
+            height.snapTo(targetHeight)
+            return@coroutineScope
+        }
+        val spec = tween<Float>(left.toInt(), easing = FastOutSlowInEasing)
+        launch { top.animateTo(targetTop, spec) }
+        launch { height.animateTo(targetHeight, spec) }
     }
 }
 
@@ -442,6 +532,8 @@ private fun ChannelsPane(
     onPlay: (ChannelsViewModel.Row) -> Unit,
     onLongPress: (ChannelsViewModel.Row) -> Unit,
     onLeft: () -> Unit,
+    // UP from the first channel.
+    above: FocusRequester,
     emptyContent: @Composable () -> Unit,
 ) {
     when {
@@ -486,7 +578,7 @@ private fun ChannelsPane(
                     FullscreenChannelRow(
                         row = row,
                         nowMillis = nowMillis,
-                        modifier = requester,
+                        modifier = if (index == 0) requester.focusProperties { up = above } else requester,
                         onFocus = { onFocusRow(row) },
                         onPlay = { onPlay(row) },
                         onLongPress = { onLongPress(row) },
@@ -594,10 +686,14 @@ private fun CategoryEntry(
     open: Boolean,
     modifier: Modifier,
     onFocused: () -> Unit,
+    // Where the row sits on screen while focused, for the sliding focus box.
+    onPlaced: (top: Float, height: Float) -> Unit,
     onLeft: () -> Unit,
     onEnter: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val report = { c: LayoutCoordinates -> onPlaced(c.positionInRoot().y, c.size.height.toFloat()) }
     val shape = RoundedCornerShape(10.dp)
     Row(
         modifier
@@ -609,14 +705,17 @@ private fun CategoryEntry(
                 if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { onEnter(); true } else false
             }
             .fillMaxWidth()
-            .focusLift(focused)
+            .onGloballyPositioned { placed[0] = it; if (focused) report(it) }
             .clip(shape)
-            .background(if (focused || selected) GroupSelected else MaterialTheme.colorScheme.surface)
-            .then(if (focused) Modifier.border(2.dp, Accent, shape) else Modifier)
+            // The focus itself is the box sliding over the list (see [Glide]).
+            .background(if (selected) GroupSelected else MaterialTheme.colorScheme.surface)
             .drawBehind { if (selected) drawRect(Accent, size = Size(3.dp.toPx(), size.height)) }
             .onFocusChanged {
                 focused = it.isFocused
-                if (it.isFocused) onFocused()
+                if (it.isFocused) {
+                    onFocused()
+                    placed[0]?.takeIf { c -> c.isAttached }?.let(report)
+                }
             }
             .clickable(interactionSource = null, indication = null, onClick = onEnter)
             .heightIn(min = 44.dp)
@@ -665,9 +764,11 @@ private fun CategoryEntry(
 private fun LiveTabs(
     tabs: Set<Macro>,
     selected: String,
-    focusable: Boolean,
+    requester: FocusRequester,
     onSelect: (String) -> Unit,
     onExitLeft: () -> Unit,
+    // UP: the top's button, when there is a top.
+    above: FocusRequester?,
     below: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -688,7 +789,8 @@ private fun LiveTabs(
     Row(
         modifier
             // Coming up from the groups lands on the open tab, not on whichever sits above.
-            .focusProperties { enter = { if (focusable) requesters[selected] ?: FocusRequester.Default else FocusRequester.Default } }
+            .focusRequester(requester)
+            .focusProperties { enter = { requesters[selected] ?: FocusRequester.Default } }
             .focusGroup()
             .horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
@@ -701,7 +803,7 @@ private fun LiveTabs(
                 Modifier
                     .focusRequester(requesters.getValue(key))
                     .focusProperties {
-                        canFocus = focusable
+                        above?.let { up = it }
                         down = below
                     }
                     .onPreviewKeyEvent { e ->
@@ -925,7 +1027,10 @@ private fun Modifier.longPressOk(isRowFocused: () -> Boolean, onLongPress: () ->
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 // How long the focus rests on a group before the channels beside it switch to that group.
-private const val GROUP_FOLLOW_DELAY_MILLIS = 400L
+private const val GROUP_FOLLOW_DELAY_MILLIS = 120L
+// The groups' focus box slides for as long as the channels wait to follow.
+private const val GLIDE_MILLIS = GROUP_FOLLOW_DELAY_MILLIS
+private val GlideFill = Color.White.copy(alpha = 0.11f)
 private const val TAB_FOLLOW_DELAY_MILLIS = 300L
 
 private val Accent = Color(0xFF57D9C5)
