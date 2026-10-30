@@ -6,6 +6,7 @@
 package app.opentv.ui
 
 import app.opentv.data.model.TimeShift
+import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.CategoryMacro
 import app.opentv.data.parser.CategoryMacro.Macro
 import app.opentv.data.parser.GroupBadge
@@ -64,7 +65,9 @@ object LiveMacros {
             tabIds.getOrPut(macro) { mutableListOf() } += g.ids
             val list = out.getOrPut(macro) { mutableListOf() }
             val label = GroupBadge.of(g.rawName, external = false).label
-            val shelf = if (macro == Macro.ABROAD) "c:" + sorted.country else CategoryMacro.shelfKey(label)
+            // One shelf per name once feed tags are gone: "Sky Calcio SAT" is "Sky Calcio (Hermes)".
+            val shelf = if (macro == Macro.ABROAD) "c:" + sorted.country
+            else CategoryMacro.shelfKey(label).let { plain -> CategoryFamily.of(plain).key.ifEmpty { plain } }
             val at = shelves[macro to shelf]
             if (at != null) {
                 val joined = list[at]
@@ -94,6 +97,8 @@ object LiveMacros {
                 }
                 e.copy(count = live.size)
             }.filter { (it.count ?: 0) > 0 }
+                // Countries biggest first; groups keep the provider's (or the user's) order.
+                .let { list -> if (macro == Macro.ABROAD) list.sortedByDescending { it.count } else list }
             val ids = tabIds[macro].orEmpty()
             val sections = shifted.map { (hours, keys) ->
                 Entry("s:${macro.name}:$hours", null, "+$hours", ids, emptySet(), hours, keys.size)

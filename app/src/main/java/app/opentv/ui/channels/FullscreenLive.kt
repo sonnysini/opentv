@@ -6,6 +6,7 @@
 package app.opentv.ui.channels
 
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -211,7 +212,10 @@ fun FullscreenLive(
     val title = when {
         favouritesOnly -> favouritesLabel.removePrefix("★").trim()
         selectedCategory == null -> allLabel
-        else -> (tabEntries ?: split).firstOrNull { it.selected }?.let { e ->
+        // Wherever the current group was picked, the tab's name for it (a country without its code).
+        else -> tabs.values.asSequence().flatten().firstOrNull { it.key == selectedCategory && it.shift == 0 }?.let { e ->
+            if (e.key.startsWith("c:")) e.name else listOfNotNull(e.kicker, e.name).joinToString(" ")
+        } ?: (tabEntries ?: split).firstOrNull { it.selected }?.let { e ->
             listOfNotNull(e.kicker, e.label).joinToString(" ")
         } ?: categories.firstOrNull { selectedCategory in it.memberKeys }?.let { g -> GroupBadge.of(g.rawName).label } ?: ""
     }
@@ -666,6 +670,7 @@ private fun CategoryEntry(
  * tab opens it after a short pause (holding a direction doesn't open every tab on the way); LEFT
  * from the first one reveals the app's menu.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun LiveTabs(
     tabs: Set<Macro>,
@@ -688,8 +693,13 @@ private fun LiveTabs(
         delay(TAB_FOLLOW_DELAY_MILLIS)
         select(key)
     }
+    val requesters = remember(keys) { keys.associateWith { FocusRequester() } }
     Row(
-        modifier.horizontalScroll(rememberScrollState()),
+        modifier
+            // Coming up from the groups lands on the open tab, not on whichever sits above.
+            .focusProperties { enter = { if (focusable) requesters[selected] ?: FocusRequester.Default else FocusRequester.Default } }
+            .focusGroup()
+            .horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -698,6 +708,7 @@ private fun LiveTabs(
             val isSelected = key == selected
             Column(
                 Modifier
+                    .focusRequester(requesters.getValue(key))
                     .focusProperties { canFocus = focusable }
                     .onPreviewKeyEvent { e ->
                         if (focused && index == 0 && e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft) {
