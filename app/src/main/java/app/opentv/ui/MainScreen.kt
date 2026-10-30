@@ -58,7 +58,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import app.opentv.core.AppSettings
 import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.delay
@@ -93,6 +95,7 @@ enum class Tab(val labelRes: Int, val icon: ImageVector) {
 private val RAIL_COLLAPSED = 76.dp
 private val RAIL_EXPANDED = 236.dp
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen(
     isTelevision: Boolean,
@@ -201,7 +204,9 @@ fun MainScreen(
             activeProfileName = activeProfileName,
         )
 
-        Box(Modifier.weight(1f).fillMaxHeight()) {
+        // RIGHT out of the rail goes back to whatever had focus in the page (the live groups or
+        // list), not to whatever sits nearest the menu item it left from.
+        Box(Modifier.weight(1f).fillMaxHeight().focusRestorer()) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,
