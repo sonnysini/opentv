@@ -59,6 +59,8 @@ import androidx.compose.ui.res.stringResource
 import app.opentv.core.AppSettings
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
@@ -148,6 +150,7 @@ fun MainScreen(
     // LEFT out of the list (or Back from the groups) moves focus into it, which opens it.
     var navRevealed by remember { mutableStateOf(false) }
     val navFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(navRevealed) {
         if (navRevealed) {
             delay(50)
@@ -216,7 +219,9 @@ fun MainScreen(
                     onAddSource = onAddSource,
                     onRefresh = onRefresh,
                     onPlayCatchup = onPlayCatchup,
-                    onRevealNav = { navRevealed = true },
+                    // Step out with a real focus move first, so the page remembers where focus
+                    // was (focusRestorer saves on exit only) and RIGHT brings it back there.
+                    onRevealNav = { focusManager.moveFocus(FocusDirection.Left); navRevealed = true },
                 )
                 Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(
                     onPlayChannel = onPlayChannel,
