@@ -223,7 +223,6 @@
     <string name="live_shift_one">+1 ora</string>
     <string name="live_shift_many">+%1$d ore</string>
     <string name="live_shift_kicker">Differita</string>
-    <string name="live_channel_count">%1$d canali</string>
     <string name="live_groups_recent">Recenti</string>
     <string name="live_groups_all">Tutti i gruppi</string>
     <string name="live_merge_action">Unisci a…</string>

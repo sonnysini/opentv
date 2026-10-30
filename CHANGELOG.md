@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.37.2 — 30 October 2026
+
+- **Live TV: group names on one line.** "SKY INTRATTENIMENTO", with the broadcaster in the accent,
+  so more groups fit down the column. The dot beside the selected group is gone.
+- **Live TV: the top folds away in the channels.** Tonight's programmes show when the page opens,
+  hide once you move into the channels and come back with UP onto the tabs. The group name and
+  channel count beside the tabs are gone.
+- **Live TV: no menu flash on RIGHT.** Moving from a group into its channels no longer opens the
+  menu for a moment on the way.
+
 ## 0.37.1 — 30 October 2026
 
 - **Live TV: the menu stays beside the list.** The full-screen channel list keeps the navigation

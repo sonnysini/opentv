@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -71,8 +73,8 @@ import java.util.Locale
 
 /**
  * The top of the live TV page: tonight's big programmes, one at a time, turning over by themselves,
- * dots underneath to say how many there are and which one this is. Big while focus is on it or on
- * the groups; a strip once the channels have it, still turning over.
+ * dots underneath to say how many there are and which one this is. Shown at start and whenever
+ * focus goes up to the tabs or onto it; folded away once the channels have it.
  *
  * "Watch on …" is its one stop for the d-pad: OK tunes the programme's channel (on now or not), LEFT
  * and RIGHT step through the programmes, LEFT on the first hands over to the navigation menu.
@@ -90,7 +92,8 @@ fun TvHero(
     var index by remember { mutableIntStateOf(0) }
     if (index >= items.size) index = 0
     val item = items[index]
-    val height by animateDpAsState(if (expanded) EXPANDED_HEIGHT else STRIP_HEIGHT, label = "heroHeight")
+    // Folds away to nothing while the channels have focus; the button can't take focus meanwhile.
+    val height by animateDpAsState(if (expanded) EXPANDED_HEIGHT else 0.dp, label = "heroHeight")
 
     // Turns over every few seconds; any step by hand starts the count again. Held while the button
     // has focus, so OK plays the programme on screen, not the one that slid in meanwhile.
@@ -108,28 +111,25 @@ fun TvHero(
         index = (index + 1) % items.size
     }
 
-    val title: @Composable (Modifier) -> Unit = { m ->
-        Text(
-            item.title.uppercase(),
-            fontFamily = Oswald,
-            fontWeight = FontWeight.Bold,
-            fontSize = if (expanded) 44.sp else 24.sp,
-            lineHeight = if (expanded) 48.sp else 28.sp,
-            color = Color.White,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-            modifier = m,
-        )
-    }
-
     Box(modifier.fillMaxWidth().height(height).clipToBounds()) {
-        Backdrop(item, Modifier.align(Alignment.TopEnd))
-        if (expanded) {
+        // Laid out at full height whatever the fold, so nothing reflows as it opens and closes.
+        Box(Modifier.fillMaxWidth().requiredHeight(EXPANDED_HEIGHT).align(Alignment.TopStart)) {
+            Backdrop(item, Modifier.align(Alignment.TopEnd))
             Column(Modifier.padding(start = 32.dp, top = 26.dp, end = 32.dp)) {
                 Kicker(item, nowMillis, small = false)
                 Spacer(Modifier.height(8.dp))
-                title(Modifier.fillMaxWidth(0.62f))
+                Text(
+                    item.title.uppercase(),
+                    fontFamily = Oswald,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 44.sp,
+                    lineHeight = 48.sp,
+                    color = Color.White,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(0.62f),
+                )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     meta(item),
@@ -150,30 +150,20 @@ fun TvHero(
                     )
                 }
             }
-        } else {
-            Column(Modifier.align(Alignment.CenterStart).padding(start = 32.dp).widthIn(max = STRIP_TEXT_WIDTH)) {
-                Kicker(item, nowMillis, small = true)
-                Spacer(Modifier.height(2.dp))
-                title(Modifier)
-            }
+            WatchButton(
+                text = stringResource(R.string.tv_hero_watch, item.network),
+                small = false,
+                onClick = { onWatch(item) },
+                onLeft = { if (index > 0) index-- else onExitLeft() },
+                onRight = { index = (index + 1) % items.size },
+                onFocus = { held = it },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 32.dp, bottom = 40.dp)
+                    .focusProperties { canFocus = expanded },
+            )
+            Dots(items.size, index, turn.value, Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 18.dp))
         }
-        // The button and the dots are drawn by the same call in both shapes, only placed elsewhere:
-        // the button keeps its focus while the top grows round it (UP from the channels lands on it).
-        WatchButton(
-            text = stringResource(R.string.tv_hero_watch, item.network),
-            small = !expanded,
-            onClick = { onWatch(item) },
-            onLeft = { if (index > 0) index-- else onExitLeft() },
-            onRight = { index = (index + 1) % items.size },
-            onFocus = { held = it },
-            modifier = if (expanded) Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 40.dp)
-            else Modifier.align(Alignment.CenterStart).padding(start = 32.dp + STRIP_TEXT_WIDTH + 20.dp),
-        )
-        Dots(
-            items.size, index, turn.value,
-            if (expanded) Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 18.dp)
-            else Modifier.align(Alignment.CenterEnd).padding(end = 32.dp),
-        )
     }
 }
 
@@ -343,6 +333,4 @@ private val CLOCK = SimpleDateFormat("HH:mm", Locale.getDefault())
 private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 private val LIVE_RED = Color(0xFFE53935)
 private val EXPANDED_HEIGHT = 292.dp
-private val STRIP_HEIGHT = 72.dp
-private val STRIP_TEXT_WIDTH = 360.dp
 private const val TURN_MILLIS = 8_000

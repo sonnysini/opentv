@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -76,10 +74,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.opentv.R
-import app.opentv.data.parser.GroupBadge
 import app.opentv.data.model.shownName
 import app.opentv.data.repo.TvHighlightsRepository
 import app.opentv.ui.ChannelsViewModel
@@ -209,16 +209,6 @@ fun FullscreenLive(
         // Until the tabs are in, nothing: the flat list would take the focus (and the pick) meant for the tab.
         else -> tabEntries ?: if (tabs.isEmpty()) emptyList() else split
     }
-    val title = when {
-        favouritesOnly -> favouritesLabel.removePrefix("★").trim()
-        selectedCategory == null -> allLabel
-        // Wherever the current group was picked, the tab's name for it (a country without its code).
-        else -> tabs.values.asSequence().flatten().firstOrNull { it.key == selectedCategory && it.shift == 0 }?.let { e ->
-            if (e.key.startsWith("c:")) e.name else listOfNotNull(e.kicker, e.name).joinToString(" ")
-        } ?: (tabEntries ?: split).firstOrNull { it.selected }?.let { e ->
-            listOfNotNull(e.kicker, e.label).joinToString(" ")
-        } ?: categories.firstOrNull { selectedCategory in it.memberKeys }?.let { g -> GroupBadge.of(g.rawName).label } ?: ""
-    }
     // While a tab has focus the groups below follow it but leave focus where it is.
     var tabsFocused by remember { mutableStateOf(false) }
     // DOWN from any tab goes into the groups, even from a tab that sits above the channels.
@@ -229,8 +219,10 @@ fun FullscreenLive(
         registerNavExit { groupsOpen = true; runCatching { groupsFocus.requestFocus() }.isSuccess }
         onDispose { registerNavExit(null) }
     }
-    // The top is big while focus is on it or on the groups, a strip while the channels have it.
+    // The top shows at start; the channels fold it away, and only going up to the tabs brings it back.
     var heroFocused by remember { mutableStateOf(false) }
+    var heroShown by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(tabsFocused, heroFocused) { if (tabsFocused || heroFocused) heroShown = true }
     // The top's button is the first thing on screen that can take focus, so at start it may get it
     // before the groups do: until the first key press, hand it to the groups.
     var keyPressed by remember { mutableStateOf(false) }
@@ -260,13 +252,13 @@ fun FullscreenLive(
     ) {
         TvHero(
             items = highlights,
-            expanded = heroFocused || groupsOpen,
+            expanded = heroShown || heroFocused || tabsFocused,
             nowMillis = nowMillis,
             onWatch = onWatchHighlight,
             onExitLeft = onExitLeft,
             modifier = Modifier.onFocusChanged { heroFocused = it.hasFocus },
         )
-        Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty()) 20.dp else 4.dp, bottom = 20.dp)) {
+        Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty() || !(heroShown || heroFocused || tabsFocused)) 20.dp else 4.dp, bottom = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             LiveTabs(
                 tabs = tabs.keys,
@@ -277,24 +269,6 @@ fun FullscreenLive(
                 below = groupsFocus,
                 modifier = Modifier.weight(1f).onFocusChanged { tabsFocused = it.hasFocus },
             )
-            Spacer(Modifier.width(24.dp))
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 360.dp),
-            )
-            if (rows.isNotEmpty() && awaitingRows == null) {
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    stringResource(R.string.live_channel_count, rows.size),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
         }
         if (mergingName != null) {
             Spacer(Modifier.height(8.dp))
@@ -346,6 +320,7 @@ fun FullscreenLive(
                     onFocusRow = {
                         // Down from the top lands here straight, groups open or not.
                         groupsOpen = false
+                        heroShown = false
                         onFocusRow(it)
                     },
                     onPlay = onPlay,
@@ -606,7 +581,7 @@ private fun FocusedList(
 }
 
 /**
- * One group: the broadcaster (or country code) small above, the name in tall capitals, the count
+ * One group: the broadcaster (or country code) in the accent before the name, in tall capitals, the count
  * on the right. The current group sits on a lighter ground with an accent down its left edge.
  */
 @Composable
@@ -626,7 +601,9 @@ private fun CategoryEntry(
     val shape = RoundedCornerShape(10.dp)
     Row(
         modifier
-            .focusProperties { canFocus = open }
+            // Closing keeps the focused group focusable until the channels have taken the focus:
+            // dropped at once, it fell to the navigation menu, which flashed open on the way.
+            .focusProperties { canFocus = open || focused }
             .leftReveals({ focused }, onLeft)
             .onPreviewKeyEvent { e ->
                 if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { onEnter(); true } else false
@@ -642,40 +619,30 @@ private fun CategoryEntry(
                 if (it.isFocused) onFocused()
             }
             .clickable(interactionSource = null, indication = null, onClick = onEnter)
-            .heightIn(min = 52.dp)
+            .heightIn(min = 44.dp)
             .padding(start = 16.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            if (kicker != null) {
-                Text(
-                    kicker.uppercase(),
-                    color = Accent,
-                    fontFamily = Oswald,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 10.sp,
-                    letterSpacing = 2.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                label.uppercase(),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontFamily = Oswald,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                fontSize = 18.sp,
-                letterSpacing = 1.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        // The broadcaster in the accent, then the name, on one line: "SKY INTRATTENIMENTO".
+        Text(
+            buildAnnotatedString {
+                if (kicker != null) {
+                    withStyle(SpanStyle(color = Accent)) { append(kicker.uppercase()) }
+                    append(' ')
+                }
+                append(label.uppercase())
+            },
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = Oswald,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 18.sp,
+            letterSpacing = 1.5.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         if (count != null) {
             Spacer(Modifier.width(10.dp))
-            if (selected) {
-                Box(Modifier.size(5.dp).clip(CircleShape).background(Accent))
-                Spacer(Modifier.width(8.dp))
-            }
             Text(
                 "%,d".format(Locale.ITALIAN, count),
                 color = if (focused || selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
