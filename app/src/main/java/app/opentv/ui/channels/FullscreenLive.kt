@@ -205,7 +205,8 @@ fun FullscreenLive(
         LAST_GROUP_ALL -> split
         // Favourites and the groups last watched from.
         LAST_GROUP_FAVOURITES -> split.takeWhile { it.key != "all" }
-        else -> tabEntries ?: split
+        // Until the tabs are in, nothing: the flat list would take the focus (and the pick) meant for the tab.
+        else -> tabEntries ?: if (tabs.isEmpty()) emptyList() else split
     }
     val title = when {
         favouritesOnly -> favouritesLabel.removePrefix("★").trim()
@@ -293,7 +294,7 @@ fun FullscreenLive(
             val groupsWidth = 320.dp
             Box(Modifier.width(groupsWidth).fillMaxHeight()) {
                 // A new tab, a new list: it opens on the tab's current group, or picks the first.
-                androidx.compose.runtime.key(selectedTab) {
+                androidx.compose.runtime.key(selectedTab, tabs.isEmpty()) {
                     GroupsList(
                         open = groupsOpen,
                         takesFocus = groupsOpen && !tabsFocused && !heroFocused,
