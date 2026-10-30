@@ -408,7 +408,7 @@ private fun GroupsList(
             .fillMaxSize()
             .clipToBounds()
             .onGloballyPositioned { glide.origin = it.positionInRoot().y }
-            .onFocusChanged { glide.listFocused = it.hasFocus },
+            .onFocusChanged { android.util.Log.d("Glide", "list hasFocus=${it.hasFocus}"); glide.listFocused = it.hasFocus },
     ) {
     FocusedList(
         count = entries.size,
@@ -479,6 +479,7 @@ private class Glide {
     val height: Float get() = fromHeight + (targetHeight - fromHeight) * FastOutSlowInEasing.transform(progress)
 
     fun place(key: String, top: Float, height: Float) {
+        android.util.Log.d("Glide", "place $key top=$top h=$height cur=${this.key} visible=$visible focused=$listFocused progress=$progress")
         // Start from where the box is drawn now, before the target moves on.
         if (key != this.key && visible) {
             fromTop = this.top
@@ -491,6 +492,7 @@ private class Glide {
     }
 
     suspend fun follow() {
+        android.util.Log.d("Glide", "follow key=$key visible=$visible focused=$listFocused progress=$progress")
         if (!listFocused || key == null) {
             delay(GLIDE_EXIT_MILLIS)
             visible = false
