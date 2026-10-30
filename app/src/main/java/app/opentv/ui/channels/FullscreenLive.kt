@@ -443,7 +443,7 @@ private fun GroupsList(
     // The focus box, drawn once over the list so it can slide from group to group.
     Spacer(
         Modifier.fillMaxSize().drawBehind {
-            if (!glide.listFocused || glide.key == null) return@drawBehind
+            if (!glide.visible || glide.key == null) return@drawBehind
             val top = glide.top.value - glide.origin
             val radius = CornerRadius(10.dp.toPx())
             drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, glide.height.value), radius)
@@ -470,7 +470,9 @@ private class Glide {
     var targetHeight by mutableFloatStateOf(0f)
     val top = Animatable(0f)
     val height = Animatable(0f)
-    private var shown = false
+    // Moving from one group to the next, the list is out of focus for a frame: only a real exit
+    // (the channels, the tabs) hides the box and makes the next entry land without a slide.
+    var visible by mutableStateOf(false)
     private var movedAt = 0L
 
     fun place(key: String, top: Float, height: Float) {
@@ -481,10 +483,14 @@ private class Glide {
     }
 
     suspend fun follow() = coroutineScope {
-        if (!listFocused || key == null) { shown = false; return@coroutineScope }
+        if (!listFocused || key == null) {
+            delay(GLIDE_EXIT_MILLIS)
+            visible = false
+            return@coroutineScope
+        }
         val left = GLIDE_MILLIS - (android.os.SystemClock.uptimeMillis() - movedAt)
-        if (!shown || left <= 0) {
-            shown = true
+        if (!visible || left <= 0) {
+            visible = true
             top.snapTo(targetTop)
             height.snapTo(targetHeight)
             return@coroutineScope
@@ -1030,6 +1036,7 @@ private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
 private const val GROUP_FOLLOW_DELAY_MILLIS = 120L
 // The groups' focus box slides for as long as the channels wait to follow.
 private const val GLIDE_MILLIS = GROUP_FOLLOW_DELAY_MILLIS
+private const val GLIDE_EXIT_MILLIS = 150L
 private val GlideFill = Color.White.copy(alpha = 0.11f)
 private const val TAB_FOLLOW_DELAY_MILLIS = 300L
 
