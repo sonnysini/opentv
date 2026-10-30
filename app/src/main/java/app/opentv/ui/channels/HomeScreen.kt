@@ -124,6 +124,8 @@ fun HomeScreen(
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit = { _, _, _, _ -> },
     // Full-screen layout only: LEFT on a row asks the shell to bring its navigation menu back.
     onRevealNav: () -> Unit = {},
+    // Hands the shell what RIGHT out of its menu should do (null: nothing special).
+    registerNavExit: ((() -> Boolean)?) -> Unit = {},
     viewModel: ChannelsViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -346,6 +348,7 @@ fun HomeScreen(
 
     if (fullscreen) {
         FullscreenLive(
+            registerNavExit = registerNavExit,
             highlights = highlights,
             onWatchHighlight = { requestLive(it.channel) },
             rows = rows,

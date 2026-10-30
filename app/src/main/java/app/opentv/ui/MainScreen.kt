@@ -58,13 +58,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import app.opentv.core.AppSettings
 import androidx.compose.foundation.focusGroup
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -97,7 +98,6 @@ enum class Tab(val labelRes: Int, val icon: ImageVector) {
 private val RAIL_COLLAPSED = 76.dp
 private val RAIL_EXPANDED = 236.dp
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen(
     isTelevision: Boolean,
@@ -150,7 +150,9 @@ fun MainScreen(
     // LEFT out of the list (or Back from the groups) moves focus into it, which opens it.
     var navRevealed by remember { mutableStateOf(false) }
     val navFocus = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
+    // RIGHT out of the rail on Live TV: back into the groups, not onto whatever sits nearest the
+    // menu item (the top's button). Set by the full-screen list while it's on screen.
+    var liveNavExit by remember { mutableStateOf<(() -> Boolean)?>(null) }
     LaunchedEffect(navRevealed) {
         if (navRevealed) {
             delay(50)
@@ -201,15 +203,14 @@ fun MainScreen(
             onSelect = { tab = it; navRevealed = true },
             currentFocus = navFocus,
             onFocusLeft = { navRevealed = false },
+            onRight = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
             onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings,
             onOpenProfiles = onOpenProfiles,
             activeProfileName = activeProfileName,
         )
 
-        // RIGHT out of the rail goes back to whatever had focus in the page (the live groups or
-        // list), not to whatever sits nearest the menu item it left from.
-        Box(Modifier.weight(1f).fillMaxHeight().focusRestorer()) {
+        Box(Modifier.weight(1f).fillMaxHeight()) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,
@@ -219,9 +220,8 @@ fun MainScreen(
                     onAddSource = onAddSource,
                     onRefresh = onRefresh,
                     onPlayCatchup = onPlayCatchup,
-                    // Step out with a real focus move first, so the page remembers where focus
-                    // was (focusRestorer saves on exit only) and RIGHT brings it back there.
-                    onRevealNav = { focusManager.moveFocus(FocusDirection.Left); navRevealed = true },
+                    onRevealNav = { navRevealed = true },
+                    registerNavExit = { liveNavExit = it },
                 )
                 Tab.FOOTBALL -> app.opentv.ui.football.FootballScreen(
                     onPlayChannel = onPlayChannel,
@@ -313,6 +313,8 @@ private fun NavRail(
     currentFocus: FocusRequester? = null,
     // Focus has moved out of the rail (after having been in it).
     onFocusLeft: () -> Unit = {},
+    // RIGHT out of the rail: true if the page took focus itself.
+    onRight: () -> Boolean = { false },
 ) {
     // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
@@ -340,6 +342,7 @@ private fun NavRail(
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
             .onFocusChanged { expanded = it.hasFocus }
+            .onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onRight() }
             .focusGroup()
             .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),

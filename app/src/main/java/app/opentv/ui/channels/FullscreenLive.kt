@@ -51,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -132,6 +133,8 @@ fun FullscreenLive(
     onRefocusDone: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
+    // Gets what RIGHT out of the navigation menu should do: back into the groups.
+    registerNavExit: ((() -> Boolean)?) -> Unit = {},
     // Tonight's big programmes for the top of the page; none, no top.
     highlights: List<TvHighlightsRepository.Highlight> = emptyList(),
     onWatchHighlight: (TvHighlightsRepository.Highlight) -> Unit = {},
@@ -221,6 +224,11 @@ fun FullscreenLive(
     // DOWN from any tab goes into the groups, even from a tab that sits above the channels.
     val groupsFocus = remember { FocusRequester() }
 
+    // LEFT reaches the menu only from the groups, so RIGHT goes straight back to them.
+    DisposableEffect(Unit) {
+        registerNavExit { groupsOpen = true; runCatching { groupsFocus.requestFocus() }.isSuccess }
+        onDispose { registerNavExit(null) }
+    }
     // The top is big while focus is on it or on the groups, a strip while the channels have it.
     var heroFocused by remember { mutableStateOf(false) }
     // The top's button is the first thing on screen that can take focus, so at start it may get it
