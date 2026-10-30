@@ -220,6 +220,14 @@
     <string name="settings_channel_layout_list">Simple list</string>
     <string name="settings_channel_layout_fullscreen">Full-screen list (☰ categories)</string>
     <string name="live_categories_title">Categories</string>
+    <string name="tv_hero_tonight">Tonight</string>
+    <string name="tv_hero_on_now">On now</string>
+    <string name="tv_hero_watch">Watch on %1$s</string>
+    <string name="tv_hero_season">Season %1$d</string>
+    <string name="tv_hero_episode">Ep. %1$d</string>
+    <string name="tv_badge_premiere">Premiere</string>
+    <string name="tv_badge_live">Live</string>
+    <string name="tv_badge_finale">Finale</string>
     <string name="live_menu_hint">← Groups</string>
     <string name="live_menu_hint_categories">→ Channels   ← Menu</string>
     <string name="live_channel_count">%1$d channels</string>

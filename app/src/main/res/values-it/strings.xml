@@ -201,6 +201,14 @@
     <string name="settings_channel_layout_list">Elenco semplice</string>
     <string name="settings_channel_layout_fullscreen">Lista a schermo intero (☰ categorie)</string>
     <string name="live_categories_title">Categorie</string>
+    <string name="tv_hero_tonight">Stasera</string>
+    <string name="tv_hero_on_now">In onda</string>
+    <string name="tv_hero_watch">Guarda su %1$s</string>
+    <string name="tv_hero_season">Stagione %1$d</string>
+    <string name="tv_hero_episode">Ep. %1$d</string>
+    <string name="tv_badge_premiere">Prima TV</string>
+    <string name="tv_badge_live">Diretta</string>
+    <string name="tv_badge_finale">Finale</string>
     <string name="live_menu_hint">← Gruppi</string>
     <string name="live_menu_hint_categories">→ Canali   ← Menu</string>
     <string name="live_channel_count">%1$d canali</string>

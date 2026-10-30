@@ -5,7 +5,6 @@
  */
 package app.opentv.ui.channels
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -67,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import app.opentv.R
 import app.opentv.data.parser.GroupBadge
 import app.opentv.data.model.shownName
+import app.opentv.data.repo.TvHighlightsRepository
 import app.opentv.ui.ChannelsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,10 +75,11 @@ import kotlinx.coroutines.delay
 import app.opentv.ui.theme.focusLift
 
 /**
- * Live TV on one screen, TiviMate-style: the groups down the left, the current group's channels
- * filling the rest with what's on now (and next) against each one. While you browse the channels
- * the groups shrink to a strip of badges; LEFT (or Back, or ☰) widens them again, and moving
- * through them swaps the channels beside them. RIGHT or OK goes back into the channels; LEFT or
+ * Live TV on one screen: tonight's big programmes across the top ([TvHero]), the groups down the
+ * left, the current group's channels filling the rest with what's on now (and next) against each
+ * one. While you browse the channels the groups stay in sight but out of reach and the top shrinks
+ * to a strip; LEFT (or Back, or ☰) goes back into the groups, and moving through them swaps the
+ * channels beside them. UP from the top of either list reaches the programmes. RIGHT or OK goes back into the channels; LEFT or
  * Back from the groups asks the host to reveal the app's navigation menu.
  */
 @Composable
@@ -113,6 +114,9 @@ fun FullscreenLive(
     onRefocusDone: () -> Unit,
     onExitLeft: () -> Unit,
     emptyContent: @Composable () -> Unit,
+    // Tonight's big programmes for the top of the page; none, no top.
+    highlights: List<TvHighlightsRepository.Highlight> = emptyList(),
+    onWatchHighlight: (TvHighlightsRepository.Highlight) -> Unit = {},
 ) {
     // Opens on the groups, so the list starts wide and the user picks a group first.
     var groupsOpen by rememberSaveable { mutableStateOf(true) }
@@ -169,6 +173,8 @@ fun FullscreenLive(
         } ?: ""
     }
 
+    // The top is big while focus is on it or on the groups, a strip while the channels have it.
+    var heroFocused by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -183,9 +189,17 @@ fun FullscreenLive(
                     Key.DirectionLeft -> if (needsHolder) { groupsOpen = true; true } else false
                     else -> false
                 }
-            }
-            .padding(horizontal = 32.dp, vertical = 20.dp),
+            },
     ) {
+        TvHero(
+            items = highlights,
+            expanded = heroFocused || groupsOpen,
+            nowMillis = nowMillis,
+            onWatch = onWatchHighlight,
+            onExitLeft = onExitLeft,
+            modifier = Modifier.onFocusChanged { heroFocused = it.hasFocus },
+        )
+        Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty()) 20.dp else 4.dp, bottom = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 title,
@@ -228,7 +242,7 @@ fun FullscreenLive(
         Spacer(Modifier.height(12.dp))
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            val groupsWidth by animateDpAsState(if (groupsOpen) 340.dp else 104.dp, label = "groupsWidth")
+            val groupsWidth = 340.dp
             Box(Modifier.width(groupsWidth).fillMaxHeight()) {
                 GroupsList(
                     open = groupsOpen,
@@ -266,13 +280,18 @@ fun FullscreenLive(
                     refocus = refocus,
                     onRefocusDone = onRefocusDone,
                     nowMillis = nowMillis,
-                    onFocusRow = onFocusRow,
+                    onFocusRow = {
+                        // Down from the top lands here straight, groups open or not.
+                        groupsOpen = false
+                        onFocusRow(it)
+                    },
                     onPlay = onPlay,
                     onLongPress = onLongPress,
                     onLeft = { groupsOpen = true },
                     emptyContent = emptyContent,
                 )
             }
+        }
         }
     }
 }
@@ -281,7 +300,7 @@ fun FullscreenLive(
  * The groups column: Favourites, the groups last watched from, then every group. Open, it is a
  * list of badges, names and channel counts that you move through — the channels beside it follow
  * the focused group after a short pause, so holding a direction doesn't rebuild every group on
- * the way. Closed, it is a strip of badges that can't take focus, the current group marked.
+ * the way. Closed, the same list can't take focus, the current group marked.
  */
 @Composable
 private fun GroupsList(
@@ -328,7 +347,7 @@ private fun GroupsList(
     ) { index, requester ->
         val entry = entries[index]
         Column {
-            entry.section?.let { GroupsHeader(it, open) }
+            entry.section?.let { GroupsHeader(it, true) }
             CategoryEntry(
                 label = entry.label,
                 badge = entry.badge,
@@ -528,7 +547,7 @@ private fun CategoryEntry(
     badge: GroupBadge.Badge?,
     selected: Boolean,
     count: Int?,
-    // Open: badge, name and count, focusable. Closed: the badge alone, which can't take focus.
+    // Closed: drawn the same, but can't take focus.
     open: Boolean,
     modifier: Modifier,
     onFocused: () -> Unit,
@@ -560,12 +579,12 @@ private fun CategoryEntry(
                 if (it.isFocused) onFocused()
             }
             .clickable(interactionSource = null, indication = null, onClick = onEnter)
-            .padding(horizontal = if (open) 12.dp else 8.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Without a badge a closed strip still needs something to tell the groups apart.
-        GroupBadgeSlot(badge, label, initialsIfBlank = !open, modifier = Modifier.size(width = 80.dp, height = 40.dp))
-        if (open) {
+        GroupBadgeSlot(badge, label, initialsIfBlank = false, modifier = Modifier.size(width = 80.dp, height = 40.dp))
+        run {
             Spacer(Modifier.width(14.dp))
             Text(
                 label,

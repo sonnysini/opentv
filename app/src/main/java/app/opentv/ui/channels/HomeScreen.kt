@@ -328,8 +328,20 @@ fun HomeScreen(
         if (categories.isNotEmpty() && categories.none { key in it.memberKeys }) viewModel.selectCategory(null)
     }
 
+    // Tonight's big programmes for the top of the full-screen list, read again every few minutes
+    // (the repository keeps them half an hour; the ones over drop off).
+    val highlights by androidx.compose.runtime.produceState(emptyList<app.opentv.data.repo.TvHighlightsRepository.Highlight>(), fullscreen) {
+        if (!fullscreen) return@produceState
+        while (true) {
+            value = graph.tvHighlightsRepository.tonight()
+            delay(HIGHLIGHTS_REFRESH_MILLIS)
+        }
+    }
+
     if (fullscreen) {
         FullscreenLive(
+            highlights = highlights,
+            onWatchHighlight = { requestLive(it.channel) },
             rows = rows,
             categories = fullscreenCategories,
             selectedCategory = selectedCategory,
@@ -1252,3 +1264,5 @@ private fun EmptyState(onAddSource: () -> Unit) {
 private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 private fun formatTime(utcMillis: Long): String = timeFormat.format(Date(utcMillis))
+
+private const val HIGHLIGHTS_REFRESH_MILLIS = 5 * 60_000L
