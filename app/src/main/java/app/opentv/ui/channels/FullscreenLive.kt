@@ -226,6 +226,16 @@ fun FullscreenLive(
 
     // The top is big while focus is on it or on the groups, a strip while the channels have it.
     var heroFocused by remember { mutableStateOf(false) }
+    // The top's button is the first thing on screen that can take focus, so at start it may get it
+    // before the groups do: until the first key press, hand it to the groups.
+    var keyPressed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        repeat(20) {
+            delay(150)
+            if (keyPressed) return@LaunchedEffect
+            if (heroFocused && groupsOpen) runCatching { groupsFocus.requestFocus() }
+        }
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -233,6 +243,7 @@ fun FullscreenLive(
             .onFocusChanged { focusInside = it.hasFocus }
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                keyPressed = true
                 // The user moved on before the regrouped list came back: don't yank focus later.
                 if (refocus != null) onRefocusDone()
                 when (e.key) {
