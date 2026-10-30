@@ -242,7 +242,6 @@
     <string name="live_shift_one">+1 hour</string>
     <string name="live_shift_many">+%1$d hours</string>
     <string name="live_shift_kicker">Time-shifted</string>
-    <string name="live_channel_count">%1$d channels</string>
     <string name="live_groups_recent">Recent</string>
     <string name="live_groups_all">All groups</string>
     <string name="live_merge_action">Merge with…</string>
