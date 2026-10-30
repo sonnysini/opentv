@@ -11,7 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -466,45 +466,44 @@ private class Glide {
     var origin by mutableFloatStateOf(0f)
     var listFocused by mutableStateOf(false)
     var key by mutableStateOf<String?>(null)
-    var targetTop by mutableFloatStateOf(0f)
-    var targetHeight by mutableFloatStateOf(0f)
-    private val progress = Animatable(1f)
+    private var targetTop by mutableFloatStateOf(0f)
+    private var targetHeight by mutableFloatStateOf(0f)
+    private var progress by mutableFloatStateOf(1f)
     private var fromTop = 0f
     private var fromHeight = 0f
-    private var shownKey: String? = null
     // Moving from one group to the next, the list is out of focus for a frame: only a real exit
     // (the channels, the tabs) hides the box and makes the next entry land without a slide.
     var visible by mutableStateOf(false)
 
-    val top: Float get() = fromTop + (targetTop - fromTop) * FastOutSlowInEasing.transform(progress.value)
-    val height: Float get() = fromHeight + (targetHeight - fromHeight) * FastOutSlowInEasing.transform(progress.value)
+    val top: Float get() = fromTop + (targetTop - fromTop) * FastOutSlowInEasing.transform(progress)
+    val height: Float get() = fromHeight + (targetHeight - fromHeight) * FastOutSlowInEasing.transform(progress)
 
     fun place(key: String, top: Float, height: Float) {
+        // Start from where the box is drawn now, before the target moves on.
+        if (key != this.key && visible) {
+            fromTop = this.top
+            fromHeight = this.height
+            progress = 0f
+        }
         this.key = key
         targetTop = top
         targetHeight = height
     }
 
     suspend fun follow() {
-        val to = key
-        if (!listFocused || to == null) {
+        if (!listFocused || key == null) {
             delay(GLIDE_EXIT_MILLIS)
             visible = false
-            shownKey = null
             return
         }
-        if (to == shownKey) return
-        val slide = visible && shownKey != null
-        shownKey = to
-        visible = true
-        if (!slide) {
-            progress.snapTo(1f)
+        if (!visible) {
+            visible = true
+            progress = 1f
             return
         }
-        fromTop = top
-        fromHeight = height
-        progress.snapTo(0f)
-        progress.animateTo(1f, tween(GLIDE_MILLIS.toInt(), easing = LinearEasing))
+        if (progress >= 1f) return
+        val left = ((1f - progress) * GLIDE_MILLIS).toInt().coerceAtLeast(1)
+        animate(progress, 1f, animationSpec = tween(left, easing = LinearEasing)) { value, _ -> progress = value }
     }
 }
 
