@@ -67,12 +67,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.OpenTV"
         android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="34">
 
         <!--
           usesCleartextTraffic is on because the overwhelming majority of IPTV panels are
           plain HTTP. Refusing them would make the app useless for most of its users. The
-          trade-off is documented in docs/PRIVACY.md.
+          trade-off is documented in docs/PRIVACY.md. With a network security config set the
+          attribute is ignored, so the config's base-config says the same.
         -->
 
         <activity
