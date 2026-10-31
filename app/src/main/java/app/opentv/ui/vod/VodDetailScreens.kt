@@ -35,7 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,7 +88,7 @@ fun MovieDetailScreen(
     var moreLike by remember(movieId) { mutableStateOf<List<Movie>>(emptyList()) }
     var resumeExists by remember(movieId) { mutableStateOf(false) }
     val playFocus = remember { FocusRequester() }
-    val hasAddons by viewModel.hasAddons.collectAsState()
+    val hasAddons by viewModel.hasAddons.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     // null = the add-on picker is closed; a (possibly empty) list = show it. Separate flag for the spinner.
     var addonStreams by remember(movieId) { mutableStateOf<List<StremioStream>?>(null) }
@@ -281,7 +281,7 @@ fun SeriesDetailScreen(
 
     val s = series
     val episodes by (s?.let { viewModel.episodes(it) } ?: viewModel.noEpisodes)
-        .collectAsState(initial = emptyList())
+        .collectAsStateWithLifecycle(initial = emptyList())
 
     if (s == null) { LoadingDetail(); return }
 

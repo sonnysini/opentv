@@ -80,7 +80,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -178,7 +178,7 @@ fun PlayerScreen(
     val graph = remember { ServiceLocator.get(context) }
     val settings = remember { graph.settings }
     val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    val subtitlesDefault by settings.subtitlesEnabled.collectAsState()
+    val subtitlesDefault by settings.subtitlesEnabled.collectAsStateWithLifecycle()
     val controller = remember {
         PlayerController(
             context, scope, graph.streamingHttpClient,
@@ -187,10 +187,10 @@ fun PlayerScreen(
             dvr = settings.livePauseEnabled.value,
         )
     }
-    val state by controller.state.collectAsState()
-    val tracks by controller.tracks.collectAsState()
+    val state by controller.state.collectAsStateWithLifecycle()
+    val tracks by controller.tracks.collectAsStateWithLifecycle()
     // What's recording right now, so the Record button can show as armed for this channel.
-    val activeRecordings by graph.recordingRepository.observeActive().collectAsState(initial = emptyList())
+    val activeRecordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initial = emptyList())
 
     // Hold the screen awake while the player is on screen. A view-level keepScreenOn flag isn't
     // reliable on every TV box, so we set the window flag on the Activity directly — that's what
@@ -272,7 +272,7 @@ fun PlayerScreen(
 
     // Picture-in-picture. While the player is on it is "eligible" to shrink to a floating window
     // (pressing Home does it, handled in MainActivity); [inPip] drives hiding all the chrome.
-    val inPip by app.opentv.core.PipState.inPip.collectAsState()
+    val inPip by app.opentv.core.PipState.inPip.collectAsStateWithLifecycle()
     val pipSupported = remember {
         android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
             context.packageManager.hasSystemFeature(
@@ -298,13 +298,13 @@ fun PlayerScreen(
     var queue by remember { mutableStateOf(PlaybackQueue.items) }
 
     // The side menu browses the guide's current group, with what's on now, and its groups.
-    val browseRows by channels.rows.collectAsState()
-    val browseGroups by channels.nonEmptyCategoryGroups.collectAsState()
-    val groupCounts by channels.groupCounts.collectAsState()
-    val recentLiveGroups by channels.recentLiveGroups.collectAsState()
-    val showRecentGroups by channels.showRecentGroups.collectAsState()
-    val browseCategory by channels.selectedCategory.collectAsState()
-    val browseFavourites by channels.favouritesOnly.collectAsState()
+    val browseRows by channels.rows.collectAsStateWithLifecycle()
+    val browseGroups by channels.nonEmptyCategoryGroups.collectAsStateWithLifecycle()
+    val groupCounts by channels.groupCounts.collectAsStateWithLifecycle()
+    val recentLiveGroups by channels.recentLiveGroups.collectAsStateWithLifecycle()
+    val showRecentGroups by channels.showRecentGroups.collectAsStateWithLifecycle()
+    val browseCategory by channels.selectedCategory.collectAsStateWithLifecycle()
+    val browseFavourites by channels.favouritesOnly.collectAsStateWithLifecycle()
     val groupEntries = rememberLiveGroupEntries(
         categories = browseGroups,
         selectedCategory = browseCategory,
@@ -586,12 +586,12 @@ fun PlayerScreen(
 
     // While watching: a stream that stops moving — stuck loading, an error the silent restart can't
     // clear, or a frozen picture — moves to the channel's next variant after the configured wait.
-    val stallFallback by settings.stallFallback.collectAsState()
-    val controlsTimeoutSeconds by settings.controlsTimeoutSeconds.collectAsState()
-    val stallMillis by settings.stallFallbackMillis.collectAsState()
+    val stallFallback by settings.stallFallback.collectAsStateWithLifecycle()
+    val controlsTimeoutSeconds by settings.controlsTimeoutSeconds.collectAsStateWithLifecycle()
+    val stallMillis by settings.stallFallbackMillis.collectAsStateWithLifecycle()
     // ...and one that keeps stuttering, too briefly each time for the freeze wait, does the same.
-    val hiccupLimit by settings.hiccupLimit.collectAsState()
-    val manualSourceMode by settings.manualSourceMode.collectAsState()
+    val hiccupLimit by settings.hiccupLimit.collectAsStateWithLifecycle()
+    val manualSourceMode by settings.manualSourceMode.collectAsStateWithLifecycle()
     LaunchedEffect(started, paused, stallFallback, stallMillis, hiccupLimit, manualPick, manualSourceMode, currentId, watchEpoch) {
         if (!started || paused) return@LaunchedEffect
         val held = manualPick && manualSourceMode != ManualSourceMode.AUTO
@@ -670,7 +670,7 @@ fun PlayerScreen(
     // screen to a mode that shows every frame evenly (25 fps on 59.94 Hz judders, on 50 Hz it doesn't).
     // The app already sits at 50 Hz (MainActivity), so 25/50 fps channels never switch; leaving the
     // player goes back to that mode rather than the system's.
-    val matchFrameRate by settings.matchFrameRate.collectAsState()
+    val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle()
     LaunchedEffect(currentId, matchFrameRate) {
         val window = context.findActivity()?.window ?: return@LaunchedEffect
         if (!matchFrameRate) {
@@ -694,7 +694,7 @@ fun PlayerScreen(
 
     // Sleep timer: when the armed deadline passes, stop and leave the player. Re-arming from
     // settings restarts this effect with the new deadline.
-    val sleepDeadline by SleepTimer.deadline.collectAsState()
+    val sleepDeadline by SleepTimer.deadline.collectAsStateWithLifecycle()
     LaunchedEffect(sleepDeadline) {
         val d = sleepDeadline ?: return@LaunchedEffect
         val wait = d - System.currentTimeMillis()

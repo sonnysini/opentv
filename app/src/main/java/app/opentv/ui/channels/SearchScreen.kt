@@ -31,7 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,9 +78,9 @@ fun SearchScreen(
     vodViewModel: VodViewModel = viewModel(),
 ) {
     var query by remember { mutableStateOf("") }
-    val channelResults by viewModel.searchResults.collectAsState()
-    val movieResults by vodViewModel.movieResults.collectAsState()
-    val seriesResults by vodViewModel.seriesResults.collectAsState()
+    val channelResults by viewModel.searchResults.collectAsStateWithLifecycle()
+    val movieResults by vodViewModel.movieResults.collectAsStateWithLifecycle()
+    val seriesResults by vodViewModel.seriesResults.collectAsStateWithLifecycle()
     val anyResults = channelResults.isNotEmpty() || movieResults.isNotEmpty() || seriesResults.isNotEmpty()
 
     LaunchedEffect(query) {

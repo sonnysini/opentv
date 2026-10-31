@@ -45,7 +45,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,13 +84,13 @@ import kotlinx.coroutines.flow.map
 fun AppearanceSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
-    val themeMode by settings.themeMode.collectAsState()
-    val appStyle by settings.appStyle.collectAsState()
-    val uiScale by settings.uiScalePercent.collectAsState()
-    val channelLayout by settings.channelLayout.collectAsState()
-    val previewVideo by settings.guidePreviewVideo.collectAsState()
-    val previewSound by settings.guidePreviewSound.collectAsState()
-    val language by settings.languageTag.collectAsState()
+    val themeMode by settings.themeMode.collectAsStateWithLifecycle()
+    val appStyle by settings.appStyle.collectAsStateWithLifecycle()
+    val uiScale by settings.uiScalePercent.collectAsStateWithLifecycle()
+    val channelLayout by settings.channelLayout.collectAsStateWithLifecycle()
+    val previewVideo by settings.guidePreviewVideo.collectAsStateWithLifecycle()
+    val previewSound by settings.guidePreviewSound.collectAsStateWithLifecycle()
+    val language by settings.languageTag.collectAsStateWithLifecycle()
     var showLanguagePicker by remember { mutableStateOf(false) }
 
     SettingsPage(stringResource(R.string.settings_appearance), onBack) {
@@ -218,20 +218,20 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
 fun PlaybackSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
-    val captions by settings.subtitlesEnabled.collectAsState()
-    val resumeLast by settings.resumeLastChannel.collectAsState()
-    val preferredQuality by settings.preferredQuality.collectAsState()
-    val qualityFallback by settings.qualityFallback.collectAsState()
-    val fallbackMillis by settings.qualityFallbackMillis.collectAsState()
-    val stallFallback by settings.stallFallback.collectAsState()
-    val stallMillis by settings.stallFallbackMillis.collectAsState()
-    val hiccupLimit by settings.hiccupLimit.collectAsState()
-    val liveOffset by settings.liveOffsetSeconds.collectAsState()
-    val manualSourceMode by settings.manualSourceMode.collectAsState()
-    val controlsTimeout by settings.controlsTimeoutSeconds.collectAsState()
-    val matchFrameRate by settings.matchFrameRate.collectAsState()
-    val rememberPicks by settings.rememberPicks.collectAsState()
-    val pickedCount = settings.pickedVariants.collectAsState().value.size
+    val captions by settings.subtitlesEnabled.collectAsStateWithLifecycle()
+    val resumeLast by settings.resumeLastChannel.collectAsStateWithLifecycle()
+    val preferredQuality by settings.preferredQuality.collectAsStateWithLifecycle()
+    val qualityFallback by settings.qualityFallback.collectAsStateWithLifecycle()
+    val fallbackMillis by settings.qualityFallbackMillis.collectAsStateWithLifecycle()
+    val stallFallback by settings.stallFallback.collectAsStateWithLifecycle()
+    val stallMillis by settings.stallFallbackMillis.collectAsStateWithLifecycle()
+    val hiccupLimit by settings.hiccupLimit.collectAsStateWithLifecycle()
+    val liveOffset by settings.liveOffsetSeconds.collectAsStateWithLifecycle()
+    val manualSourceMode by settings.manualSourceMode.collectAsStateWithLifecycle()
+    val controlsTimeout by settings.controlsTimeoutSeconds.collectAsStateWithLifecycle()
+    val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle()
+    val rememberPicks by settings.rememberPicks.collectAsStateWithLifecycle()
+    val pickedCount = settings.pickedVariants.collectAsStateWithLifecycle().value.size
 
     SettingsPage(stringResource(R.string.settings_section_playback), onBack) {
         SettingsSection(stringResource(R.string.settings_quality_title)) {
@@ -412,9 +412,9 @@ fun TmdbSettingsScreen(onBack: () -> Unit) {
 internal fun ContentSection() {
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
-    val liveEnabled by settings.liveEnabled.collectAsState()
-    val moviesEnabled by settings.moviesEnabled.collectAsState()
-    val seriesEnabled by settings.seriesEnabled.collectAsState()
+    val liveEnabled by settings.liveEnabled.collectAsStateWithLifecycle()
+    val moviesEnabled by settings.moviesEnabled.collectAsStateWithLifecycle()
+    val seriesEnabled by settings.seriesEnabled.collectAsStateWithLifecycle()
 
     // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
     // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
@@ -526,7 +526,7 @@ private fun LanguagePickerDialog(current: String, onPick: (String) -> Unit, onDi
 @Composable
 private fun TmdbKeySection(settings: AppSettings) {
     val context = LocalContext.current
-    val savedKey by settings.tmdbApiKey.collectAsState()
+    val savedKey by settings.tmdbApiKey.collectAsStateWithLifecycle()
     var field by remember(savedKey) { mutableStateOf(savedKey) }
     val savedMessage = stringResource(R.string.settings_tmdb_saved)
 
@@ -610,7 +610,7 @@ private fun changeLanguage(context: Context, settings: AppSettings, tag: String)
 
 @Composable
 private fun SleepTimerSection() {
-    val deadline by SleepTimer.deadline.collectAsState()
+    val deadline by SleepTimer.deadline.collectAsStateWithLifecycle()
     val remaining = deadline?.let {
         val left = it - System.currentTimeMillis()
         if (left <= 0L) 0 else ((left + 59_999L) / 60_000L).toInt()
@@ -699,14 +699,14 @@ internal fun ThemeOption(label: String, selected: Boolean, onSelect: () -> Unit)
 @Composable
 private fun PreferredSourcesPicker(settings: AppSettings) {
     val context = LocalContext.current
-    val preferred by settings.preferredSources.collectAsState()
+    val preferred by settings.preferredSources.collectAsStateWithLifecycle()
     val known by remember {
         ServiceLocator.get(context).catalogRepository.observeAllCategories(StreamKind.LIVE).map { categories ->
             categories.mapNotNull { CategoryFamily.of(it.name).source }
                 .distinctBy { it.lowercase() }
                 .sortedBy { it.lowercase() }
         }
-    }.collectAsState(initial = emptyList())
+    }.collectAsStateWithLifecycle(initial = emptyList())
     // A preferred source the current list no longer has stays visible, so it can be taken off.
     val gone = preferred.filter { p -> known.none { it.equals(p, ignoreCase = true) } }
     val sources = known + gone

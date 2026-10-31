@@ -20,7 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,8 +51,8 @@ import kotlinx.coroutines.launch
 fun LogoSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { ServiceLocator.get(context).settings }
-    val source by settings.logoSource.collectAsState()
-    val externalGroups by settings.externalGroupLogos.collectAsState()
+    val source by settings.logoSource.collectAsStateWithLifecycle()
+    val externalGroups by settings.externalGroupLogos.collectAsStateWithLifecycle()
 
     SettingsPage(stringResource(R.string.settings_logos_title), onBack) {
         SettingsSection(stringResource(R.string.logos_channels_title)) {
@@ -97,8 +97,8 @@ fun LogoSettingsScreen(onBack: () -> Unit) {
 private fun LogoPackRow() {
     val context = LocalContext.current
     val graph = remember { ServiceLocator.get(context) }
-    val saved by graph.settings.logoPackUrl.collectAsState()
-    val pack by graph.settings.logoPack.collectAsState()
+    val saved by graph.settings.logoPackUrl.collectAsStateWithLifecycle()
+    val pack by graph.settings.logoPack.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     var url by remember(saved) { mutableStateOf(saved) }

@@ -55,7 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -148,8 +148,8 @@ fun VodPlayerScreen(
         else (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
         p.seekTo((p.currentPosition + deltaMs).coerceIn(0L, ceiling))
     }
-    val state by controller.state.collectAsState()
-    val tracks by controller.tracks.collectAsState()
+    val state by controller.state.collectAsStateWithLifecycle()
+    val tracks by controller.tracks.collectAsStateWithLifecycle()
 
     var paused by remember { mutableStateOf(false) }
     var vodPanel by remember { mutableStateOf(VodPanel.NONE) }
@@ -218,7 +218,7 @@ fun VodPlayerScreen(
     }
 
     // Sleep timer: leave the film when the armed deadline passes (position is saved on dispose).
-    val sleepDeadline by SleepTimer.deadline.collectAsState()
+    val sleepDeadline by SleepTimer.deadline.collectAsStateWithLifecycle()
     LaunchedEffect(sleepDeadline) {
         val d = sleepDeadline ?: return@LaunchedEffect
         val wait = d - System.currentTimeMillis()

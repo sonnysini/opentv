@@ -28,7 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,7 +95,7 @@ private enum class Mode { SHARE, RECEIVE, NAS }
 
 @Composable
 private fun SharePane(viewModel: SyncViewModel) {
-    val state by viewModel.serverState.collectAsState()
+    val state by viewModel.serverState.collectAsStateWithLifecycle()
     Card {
         Column(Modifier.padding(20.dp).widthIn(max = 640.dp)) {
             when (val s = state) {
@@ -133,7 +133,7 @@ private fun SharePane(viewModel: SyncViewModel) {
 
 @Composable
 private fun ReceivePane(viewModel: SyncViewModel) {
-    val state by viewModel.receiveState.collectAsState()
+    val state by viewModel.receiveState.collectAsStateWithLifecycle()
     var entry by remember { mutableStateOf("") }
 
     Row {
@@ -188,9 +188,9 @@ private fun ReceivePane(viewModel: SyncViewModel) {
  */
 @Composable
 private fun NasPane(viewModel: SyncViewModel) {
-    val nasState by viewModel.nasState.collectAsState()
-    val autoSync by viewModel.nasAutoSync.collectAsState()
-    val smbHost by viewModel.smbHost.collectAsState()
+    val nasState by viewModel.nasState.collectAsStateWithLifecycle()
+    val autoSync by viewModel.nasAutoSync.collectAsStateWithLifecycle()
+    val smbHost by viewModel.smbHost.collectAsStateWithLifecycle()
     val configured = smbHost.isNotBlank()
 
     Card {

@@ -27,7 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,8 +94,8 @@ class StremioAddonsViewModel(app: Application) : AndroidViewModel(app) {
 @Composable
 fun StremioAddonsScreen(onBack: () -> Unit) {
     val viewModel: StremioAddonsViewModel = viewModel()
-    val addons by viewModel.addons.collectAsState()
-    val status by viewModel.status.collectAsState()
+    val addons by viewModel.addons.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
 
     // Clear the field once an add-on validates and is stored — done as an effect, not during

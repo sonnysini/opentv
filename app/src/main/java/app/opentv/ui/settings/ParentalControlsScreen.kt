@@ -26,7 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,10 +58,10 @@ fun ParentalControlsScreen(
 ) {
     val context = LocalContext.current
     val settings = remember { ServiceLocator.get(context).settings }
-    val pinIsSet by settings.pinIsSet.collectAsState()
-    val hidden by settings.hiddenCategories.collectAsState()
-    val unlocked by settings.hiddenUnlocked.collectAsState()
-    val categories by channelsViewModel.categoryGroups.collectAsState()
+    val pinIsSet by settings.pinIsSet.collectAsStateWithLifecycle()
+    val hidden by settings.hiddenCategories.collectAsStateWithLifecycle()
+    val unlocked by settings.hiddenUnlocked.collectAsStateWithLifecycle()
+    val categories by channelsViewModel.categoryGroups.collectAsStateWithLifecycle()
 
     var authed by remember { mutableStateOf(false) }
 

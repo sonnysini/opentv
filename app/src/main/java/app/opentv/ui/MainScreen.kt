@@ -44,7 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -121,9 +121,9 @@ fun MainScreen(
     // there is always at least one tab and never a blank shell, even with all three types off.
     val context = LocalContext.current
     val settings = remember { AppSettings.get(context) }
-    val liveEnabled by settings.liveEnabled.collectAsState()
-    val moviesEnabled by settings.moviesEnabled.collectAsState()
-    val seriesEnabled by settings.seriesEnabled.collectAsState()
+    val liveEnabled by settings.liveEnabled.collectAsStateWithLifecycle()
+    val moviesEnabled by settings.moviesEnabled.collectAsStateWithLifecycle()
+    val seriesEnabled by settings.seriesEnabled.collectAsStateWithLifecycle()
     val visibleTabs = remember(liveEnabled, moviesEnabled, seriesEnabled) {
         buildList {
             if (liveEnabled) add(Tab.LIVE)
@@ -140,7 +140,7 @@ fun MainScreen(
     // Saveable: coming back from the player must land on the tab it was opened from (Football).
     var tab by rememberSaveable { mutableStateOf(homeTab) }
     // A launcher asked for Football: switch to it; the Football screen consumes the request.
-    val footballRequest by app.opentv.core.FootballRequests.request.collectAsState()
+    val footballRequest by app.opentv.core.FootballRequests.request.collectAsStateWithLifecycle()
     LaunchedEffect(footballRequest, visibleTabs) {
         if (footballRequest == null) return@LaunchedEffect
         if (Tab.FOOTBALL in visibleTabs) tab = Tab.FOOTBALL else app.opentv.core.FootballRequests.consume()
@@ -257,8 +257,8 @@ fun MainScreen(
  */
 @Composable
 private fun StatusBar() {
-    val message by StatusBus.message.collectAsState()
-    val progress by StatusBus.progress.collectAsState()
+    val message by StatusBus.message.collectAsStateWithLifecycle()
+    val progress by StatusBus.progress.collectAsStateWithLifecycle()
     val text = message ?: return
     val p = progress
     Column(
