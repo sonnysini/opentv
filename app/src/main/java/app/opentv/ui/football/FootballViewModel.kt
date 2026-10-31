@@ -131,6 +131,9 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     private var active = false
     private var worker: Job? = null
+    private var refresher: Job? = null
+    /** When the page was last read in full: reopening right after doesn't read it again. */
+    private var loadedAt = 0L
     /** The match whose "Watch now" was pressed: its feeds go before anything else. */
     @Volatile private var focus: Item? = null
     private var focusStarted = 0L
@@ -154,8 +157,11 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         if (on == active) return
         active = on
         if (on) {
+            startRefresh()
             startWorker()
         } else {
+            refresher?.cancel()
+            refresher = null
             worker?.cancel()
             worker = null
             focus = null
@@ -442,12 +448,18 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun boardText(b: AutoScan.Board) = b.codes.take(2).joinToString(" ")
 
-    init {
-        viewModelScope.launch {
+    /**
+     * Only while the page is up: read on opening (unless read moments ago), then again only when a
+     * game kicks off or ends by the clock. Nothing runs while a channel plays or the app is away.
+     */
+    private fun startRefresh() {
+        if (refresher?.isActive == true) return
+        refresher = viewModelScope.launch {
+            if (System.currentTimeMillis() - loadedAt >= RELOAD_AFTER_MILLIS) load()
             while (true) {
+                val next = nextChange(page) ?: break
+                delay((next - System.currentTimeMillis()).coerceAtLeast(0L))
                 load()
-                // A minute while a game is on (score and minute move), five otherwise.
-                delay(if (_ui.value.hero?.match?.phase == Phase.LIVE) 60_000L else 300_000L)
             }
         }
     }
@@ -474,7 +486,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private var feedsFrom: Map<Long, List<MatchChannel>> = emptyMap()
 
     private suspend fun load() {
-        val today = repo.today()
+        val now = System.currentTimeMillis()
+        val today = repo.today().map { byClock(it, now) }
         val upcoming = repo.upcoming()
         if (today.isEmpty() && upcoming.isEmpty()) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
@@ -531,6 +544,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val todayIds = today.mapTo(HashSet()) { it.id }
         round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
         publish()
+        loadedAt = System.currentTimeMillis()
     }
 
     /** [item]'s feeds: the ones found before while its channels are the same, else looked up. */
@@ -596,6 +610,33 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             }
                 .sortedWith(compareBy({ it.first == null }, { it.first }, { leagueRank(it.second) }))
                 .map { it.third }
+
+        /**
+         * [m] as the clock has it at [now]: live from kick-off until [gameLength] after, then over
+         * (unless FotMob already says over or put off). No minute: nothing reads it again mid-game.
+         */
+        fun byClock(m: Match, now: Long): Match {
+            if (m.phase == Phase.OFF || m.phase == Phase.FINISHED) return m
+            val phase = when {
+                now < m.kickoffUtcMillis -> Phase.SCHEDULED
+                now < m.kickoffUtcMillis + gameLength(m.league) -> Phase.LIVE
+                else -> Phase.FINISHED
+            }
+            return m.copy(phase = phase, minute = null)
+        }
+
+        /** The next kick-off or end by the clock among [items], null when none is left. */
+        fun nextChange(items: List<Item>, now: Long = System.currentTimeMillis()): Long? =
+            items.asSequence().map { it.match }
+                .filter { !it.goals && (it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE) }
+                .flatMap { sequenceOf(it.kickoffUtcMillis, it.kickoffUtcMillis + gameLength(it.league)) }
+                .filter { it > now }
+                .minOrNull()
+
+        /** Serie A two hours; a cup game may go to extra time and penalties. */
+        private fun gameLength(league: Int): Long =
+            if (league == FootballRepository.SERIE_A) 120 * 60_000L else 150 * 60_000L
+        private const val RELOAD_AFTER_MILLIS = 5 * 60_000L
 
         private const val TAG = "AutoScan"
         /** About 1 s a feed: a minute of waiting at most. */
