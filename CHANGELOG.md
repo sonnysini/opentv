@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.38.1 — 31 October 2026
+
+- **Football: lighter.** The page is read when you open it (unless read in the last five minutes)
+  and again only when a game kicks off or ends; nothing runs while a channel plays or the app is
+  in the background. LIVE now comes from the clock: from kick-off for two hours (two and a half
+  for the cups), with no minute.
+- **Updates keep your data.** A schema change can no longer silently wipe favourites, hidden
+  channels and other personal settings.
+
 ## 0.38.0 — 31 October 2026
 
 - **Football: the European cups.** Champions League, Europa League and Conference League join
