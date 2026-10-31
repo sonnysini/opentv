@@ -42,8 +42,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * The football home: today's Serie A, the next fixtures, and for each match the channels of the
- * user's own lists that carry it.
+ * The football home: Serie A and the three European cups (Champions, Europa, Conference League) —
+ * today's games, the next fixtures, and for each match the channels of the user's own lists that
+ * carry it.
  *
  * - Fixtures, scores and the live minute come from FotMob's public match list (the same feed the
  *   website uses; no key).
@@ -69,7 +70,7 @@ class FootballRepository(
 ) {
     @Serializable
     data class Team(val id: Long, val name: String) {
-        /** A negative id is a league's: the Serie A logo on [Match.goals]. */
+        /** A negative id is a league's: the Serie A logo on [Match.goals], a row's competition. */
         val crestUrl: String get() =
             if (id < 0) "https://images.fotmob.com/image_resources/logo/leaguelogo/${-id}.png"
             else "https://images.fotmob.com/image_resources/logo/teamlogo/$id.png"
@@ -96,6 +97,8 @@ class FootballRepository(
          * shown and watched like one of them. See [goalShow].
          */
         val goals: Boolean = false,
+        /** FotMob's competition: [SERIE_A], [CHAMPIONS], [EUROPA], [CONFERENCE]. */
+        val league: Int = SERIE_A,
     )
 
     /**
@@ -114,11 +117,15 @@ class FootballRepository(
     /** What's kept on disk: the calendar day by day, channels per match, highlights found. */
     @Serializable
     private data class Disk(
+        /** [DISK_VERSION]: a file from before the cups is read afresh (its days lack them). */
+        val version: Int = 0,
         val days: Map<String, Day> = emptyMap(),
         /** [guideStamp][ChannelDao.guideStamp] the channels below were found with. */
         val stamp: String = "",
         val channels: Map<String, List<MatchChannel>> = emptyMap(),
         val highlights: Map<Long, String> = emptyMap(),
+        /** Every team seen in a Serie A game: who's Italian in a cup. Kept across seasons. */
+        val italian: Set<Long> = emptySet(),
     )
 
     @Serializable
@@ -129,7 +136,9 @@ class FootballRepository(
     private var disk: Disk? = null
 
     private fun disk(): Disk = disk ?: runCatching { json.decodeFromString<Disk>(file.readText()) }
-        .getOrElse { Disk() }.also { disk = it }
+        .getOrElse { Disk() }
+        .let { if (it.version == DISK_VERSION) it else Disk(DISK_VERSION, highlights = it.highlights) }
+        .also { disk = it }
 
     private fun save(d: Disk) {
         disk = d
@@ -145,21 +154,24 @@ class FootballRepository(
     suspend fun today(): List<Match> = days(listOf(LocalDate.now(zone))).first()
 
     /** The fixtures after today, a week ahead at most and [limit] at most. */
-    suspend fun upcoming(limit: Int = 10): List<Match> {
+    suspend fun upcoming(limit: Int = Int.MAX_VALUE): List<Match> {
         val today = LocalDate.now(zone)
         return days((1..7).map { today.plusDays(it.toLong()) }).flatten().take(limit)
     }
 
+    /** The ids of the teams playing Serie A: a cup game with one of them goes first. */
+    suspend fun italianTeams(): Set<Long> = lock.withLock { disk().italian }
+
     /**
-     * The finished matches of the latest matchday played before today, latest first: a row to
-     * watch highlights from on days without games.
+     * The finished Serie A matches of the latest matchday played before today, latest first: a row
+     * to watch highlights from on days without games.
      */
     suspend fun lastRound(): List<Match> {
         val today = LocalDate.now(zone)
         val out = ArrayList<Match>()
         var round: String? = null
         for (day in days((1..10).map { today.minusDays(it.toLong()) })) {
-            val played = day.filter { it.phase == Phase.FINISHED }
+            val played = day.filter { it.phase == Phase.FINISHED && it.league == SERIE_A }
             if (played.isEmpty()) continue
             if (round == null) round = played.last().round
             val same = played.filter { it.round == round }
@@ -184,7 +196,9 @@ class FootballRepository(
             val d = disk()
             if (fetched.isNotEmpty()) {
                 val oldest = LocalDate.now(zone).minusDays(KEEP_DAYS).toString()
-                save(d.copy(days = (d.days + fetched).filterKeys { it >= oldest }))
+                val italian = fetched.values.flatMap { it.matches }.filter { it.league == SERIE_A }
+                    .flatMapTo(HashSet()) { listOf(it.home.id, it.away.id) }
+                save(d.copy(days = (d.days + fetched).filterKeys { it >= oldest }, italian = d.italian + italian))
             }
             disk().days
         }
@@ -217,8 +231,9 @@ class FootballRepository(
 
     /**
      * Channels carrying each of [matches], one entry per logical channel:
-     * - first the two team channels ("Milan", "DAZN Serie A Milan", "DAZN SERIE A 3 FHD MILAN"…),
-     *   the provider's own feed of that team's game;
+     * - first, for a Serie A game, the two team channels ("Milan", "DAZN Serie A Milan", "DAZN
+     *   SERIE A 3 FHD MILAN"…), the provider's own feed of that team's game (not its cup games:
+     *   they're on Sky or Prime Video);
      * - then the channels whose guide names both teams through the game (Zona DAZN, DAZN 1,
      *   Sky Sport…). Club channels ("Inter TV": a radio commentary in the guide), boxing feeds
      *   matched to a DAZN guide by name, replays and timeshift copies are left out;
@@ -316,7 +331,8 @@ class FootballRepository(
     ): List<MatchChannel> {
         val a = keyword(match.home.name)
         val b = keyword(match.away.name)
-        val teams = named.filter { it.displayName.contains(a, ignoreCase = true) || it.displayName.contains(b, ignoreCase = true) }
+        val teams = (if (match.league == SERIE_A) named else emptyList())
+            .filter { it.displayName.contains(a, ignoreCase = true) || it.displayName.contains(b, ignoreCase = true) }
             // "*==== Lazio ====*": a provider's section divider, not a channel.
             .filter { it.isLive() && "==" !in it.displayName && "--" !in it.displayName }
             .mapNotNull { c -> teamOf(c.displayName, match)?.let { it to c } }
@@ -392,6 +408,8 @@ class FootballRepository(
      * feed first, then — for a match a few days old, out of the feed by now — the full video list.
      */
     suspend fun highlightsFor(match: Match): String? = withContext(Dispatchers.IO) {
+        // The Serie A channel has no cup games.
+        if (match.league != SERIE_A) return@withContext null
         knownHighlights(match)?.let { return@withContext it }
         val id = pickHighlights(match, highlightsFeed())
             ?: if (System.currentTimeMillis() - match.kickoffUtcMillis > OLD_MATCH_MILLIS) pickHighlights(match, uploads()) else null
@@ -420,21 +438,22 @@ class FootballRepository(
 
     // ---- FotMob ---------------------------------------------------------------------------------
 
-    /** [day]'s Serie A matches; null when FotMob couldn't be read. */
+    /** [day]'s matches of the [LEAGUES]; null when FotMob couldn't be read. */
     private fun fixtures(day: LocalDate): List<Match>? {
         val url = "https://www.fotmob.com/api/data/matches?date=${day.format(DateTimeFormatter.BASIC_ISO_DATE)}"
         val body = get(url) ?: return null
         return runCatching {
             json.parseToJsonElement(body).jsonObject["leagues"]?.jsonArray.orEmpty()
                 .map { it.jsonObject }
-                .filter { it["primaryId"]?.jsonPrimitive?.intOrNull == SERIE_A }
-                .flatMap { it["matches"]?.jsonArray.orEmpty() }
-                .mapNotNull { parseMatch(it.jsonObject) }
+                .mapNotNull { l -> l["primaryId"]?.jsonPrimitive?.intOrNull?.takeIf { it in LEAGUES }?.let { it to l } }
+                // A cup's day can come as more than one entry (league phase, a play-off).
+                .flatMap { (league, l) -> l["matches"]?.jsonArray.orEmpty().mapNotNull { parseMatch(it.jsonObject, league) } }
+                .distinctBy { it.id }
                 .sortedBy { it.kickoffUtcMillis }
         }.getOrElse { Log.w(TAG, "fixtures $day", it); null }
     }
 
-    private fun parseMatch(m: JsonObject): Match? {
+    private fun parseMatch(m: JsonObject, league: Int): Match? {
         val id = m["id"]?.jsonPrimitive?.longOrNull ?: return null
         val home = team(m["home"]?.jsonObject) ?: return null
         val away = team(m["away"]?.jsonObject) ?: return null
@@ -461,6 +480,7 @@ class FootballRepository(
             phase = phase,
             minute = if (phase == Phase.LIVE) minute else null,
             round = m["tournamentStage"]?.jsonPrimitive?.contentOrNull,
+            league = league,
         )
     }
 
@@ -537,7 +557,8 @@ class FootballRepository(
          * Null on days with no games played together.
          */
         fun goalShow(today: List<Match>): Match? {
-            val slot = today.filter { it.phase != Phase.OFF && !it.goals }
+            // "Diretta Gol Serie A": the cups' games aren't on it.
+            val slot = today.filter { it.phase != Phase.OFF && !it.goals && it.league == SERIE_A }
                 .groupBy { it.kickoffUtcMillis }
                 .filterValues { it.size >= 2 && it.any { m -> m.phase == Phase.SCHEDULED || m.phase == Phase.LIVE } }
                 .minByOrNull { it.key } ?: return null
@@ -559,8 +580,15 @@ class FootballRepository(
             )
         }
 
+        const val SERIE_A = 55
+        const val CHAMPIONS = 42
+        const val EUROPA = 73
+        const val CONFERENCE = 10216
+        /** The competitions shown, in the order rows starting together come in. */
+        val LEAGUES = listOf(CHAMPIONS, EUROPA, CONFERENCE, SERIE_A)
+
         private const val TAG = "Football"
-        private const val SERIE_A = 55
+        private const val DISK_VERSION = 2
         private const val SERIE_A_CHANNEL = "UCBJeMCIeLQos7wacox4hmLQ"
         private const val MINUTE = 60_000L
         private const val LIVE_TTL_MILLIS = 50_000L

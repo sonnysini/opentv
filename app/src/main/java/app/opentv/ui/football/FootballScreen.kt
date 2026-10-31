@@ -111,6 +111,7 @@ import app.opentv.core.FootballRequests
 import app.opentv.R
 import app.opentv.data.model.Channel
 import app.opentv.data.model.shownName
+import app.opentv.data.repo.FootballRepository
 import app.opentv.data.repo.FootballRepository.Match
 import app.opentv.data.repo.FootballRepository.MatchChannel
 import app.opentv.data.repo.FootballRepository.Phase
@@ -138,8 +139,9 @@ private val YOUTUBE_APPS = listOf("com.amazon.firetv.youtube", "com.google.andro
 /**
  * The football home, streaming-app style: the match on now (or next) over the whole top of the
  * page, its best feed's picture behind, "Watch now" already focused — OK and it plays on the best
- * channel of the user's own lists — then rows of 16:9 tiles: the other live games, today's
- * (finished ones play their YouTube highlights), each coming day's, the last round.
+ * channel of the user's own lists — then a row of 16:9 tiles per competition (Serie A and the
+ * three European cups), the one playing next first; Serie A's finished games play their YouTube
+ * highlights. No score anywhere: a game is watched later too.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -260,8 +262,7 @@ fun FootballScreen(
     val request by FootballRequests.request.collectAsState()
     LaunchedEffect(request, ui, looks) {
         val r = request ?: return@LaunchedEffect
-        val all = listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming + ui.lastRound
-        val item = all.firstOrNull { it.match.id == r.matchId }
+        val item = ui.all.firstOrNull { it.match.id == r.matchId }
         val stale = System.currentTimeMillis() - r.requestedAtMillis > REQUEST_WAIT_MILLIS
         when {
             r.action == FootballRequests.Action.OPEN || r.matchId == 0L -> FootballRequests.consume()
@@ -344,7 +345,7 @@ fun FootballScreen(
         if (previewOn) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    val rowList = rows(ui)
+    val rowList = ui.rows
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     // The backdrop belongs to the top of the page: it fades out as the rows scroll up over it.
@@ -359,7 +360,7 @@ fun FootballScreen(
         when {
             ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             ui.failed -> Message(stringResource(R.string.football_unavailable))
-            ui.hero == null && ui.today.isEmpty() && ui.upcoming.isEmpty() && ui.lastRound.isEmpty() -> Message(stringResource(R.string.football_none))
+            ui.hero == null && ui.rows.isEmpty() -> Message(stringResource(R.string.football_none))
             else -> {
                 if (heroItem != null) Backdrop(backdrop, heroItem.match, looks, if (previewOn) previewController.player else null, Modifier.alpha(fade))
                 // TV's default keeps the focused item a third of the way down, which would cut off
@@ -395,10 +396,10 @@ fun FootballScreen(
                             onPick = { picking = heroItem },
                         )
                     }
-                    rowList.forEach { (title, items) ->
-                        item(key = "row:$title") {
+                    rowList.forEach { row ->
+                        item(key = "row:${row.league}") {
                             CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
-                                MatchRow(title, items, viewModel, progress, looks, open, hold)
+                                MatchRow(row, viewModel, progress, looks, open, hold)
                             }
                         }
                     }
@@ -442,19 +443,6 @@ private class JustEnough(private val margin: Float) : BringIntoViewSpec {
             else -> end - containerSize
         }
     }
-}
-
-/** The rows under the top of the page: on now, today, each coming day, the last round. */
-@Composable
-private fun rows(ui: FootballViewModel.UiState): List<Pair<String, List<FootballViewModel.Item>>> {
-    val out = mutableListOf<Pair<String, List<FootballViewModel.Item>>>()
-    if (ui.live.isNotEmpty()) out += stringResource(R.string.football_live_row) to ui.live
-    if (ui.today.isNotEmpty()) out += stringResource(R.string.football_today) to ui.today
-    ui.upcoming.groupBy { localDay(it.match) }.forEach { (day, items) ->
-        out += DAY_TITLE.format(day).replaceFirstChar { it.uppercase() } to items
-    }
-    if (ui.lastRound.isNotEmpty()) out += stringResource(R.string.football_last_round) to ui.lastRound
-    return out
 }
 
 @Composable
@@ -921,10 +909,10 @@ private fun ScanLine(row: FootballViewModel.ScanRow) {
 
 // ---- Rows ---------------------------------------------------------------------------------------
 
+/** A competition's games: its logo, name and matchday over a row of tiles. */
 @Composable
 private fun MatchRow(
-    title: String,
-    items: List<FootballViewModel.Item>,
+    row: FootballViewModel.LeagueRow,
     viewModel: FootballViewModel,
     progress: FootballViewModel.Progress?,
     looks: Int,
@@ -932,18 +920,35 @@ private fun MatchRow(
     onHold: (FootballViewModel.Item) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 48.dp, bottom = 4.dp),
-        )
+        Row(Modifier.padding(start = 48.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            // League logos are drawn for a light page: on a white chip they read on the dark one.
+            Box(
+                Modifier.size(22.dp).clip(RoundedCornerShape(5.dp)).background(Color.White).padding(2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(model = Team(-row.league.toLong(), "").crestUrl, contentDescription = null, modifier = Modifier.fillMaxSize())
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                leagueName(row.league),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            row.round?.takeIf { r -> r.all(Char::isDigit) }?.let {
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.football_matchday, it),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         LazyRow(
             contentPadding = PaddingValues(vertical = 8.dp, horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(items, key = { it.match.id }) { item ->
+            items(row.items, key = { it.match.id }) { item ->
                 MatchTile(item, corner(item, viewModel, progress, looks), onHold = { onHold(item) }) { onOpen(item) }
             }
         }
@@ -1125,20 +1130,28 @@ private fun Crest(team: Team, size: Int) {
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 private val DAY = DateTimeFormatter.ofPattern("EEE d")
 private val DAY_TITLE = DateTimeFormatter.ofPattern("EEEE d")
+private val WEEKDAY = DateTimeFormatter.ofPattern("EEE")
 
-private fun localDay(m: Match): LocalDate = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+/** The competitions' own names, the same in every language. */
+private fun leagueName(league: Int): String = when (league) {
+    FootballRepository.CHAMPIONS -> "Champions League"
+    FootballRepository.EUROPA -> "Europa League"
+    FootballRepository.CONFERENCE -> "Conference League"
+    else -> "Serie A"
+}
 
-/** The score once it's started, the kick-off time before; GOL on the goal show. */
+/** Between the crests on a tab: the kick-off time before, "vs" once on (no score); GOL on the goal show. */
 private fun centre(m: Match): String =
     if (m.goals && m.phase == Phase.LIVE) "GOL"
-    else if (m.homeScore != null && m.awayScore != null) "${m.homeScore}-${m.awayScore}"
-    else TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
+    else if (m.phase == Phase.SCHEDULED) TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
+    else "vs"
 
-/** Over the big title: "SERIE A · 9ª GIORNATA · OGGI 18:30". */
+/** Over the big title: "CHAMPIONS LEAGUE · 4ª GIORNATA · OGGI 21:00". */
 @Composable
 private fun kicker(m: Match): String {
     val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
-    val round = m.round?.let { stringResource(R.string.football_round, it) } ?: "SERIE A"
+    val league = leagueName(m.league).uppercase()
+    val round = m.round?.takeIf { r -> r.all(Char::isDigit) }?.let { stringResource(R.string.football_round, league, it) } ?: league
     val when_ = when (m.phase) {
         Phase.SCHEDULED ->
             if (at.toLocalDate() == LocalDate.now()) stringResource(R.string.football_today) + " " + TIME.format(at)
@@ -1149,32 +1162,25 @@ private fun kicker(m: Match): String {
     return listOfNotNull(round, when_?.uppercase()).joinToString(" · ")
 }
 
-/** The big title: "SASSUOLO vs LAZIO", "SASSUOLO 1 – 0 LAZIO" once it's on. */
+/** The big title: "SASSUOLO vs LAZIO" — the score stays off even once it's on. */
 private fun title(m: Match): AnnotatedString = buildAnnotatedString {
-    if (m.goals) {
-        append(m.home.name.uppercase())
-        return@buildAnnotatedString
-    }
     append(m.home.name.uppercase())
-    if (m.homeScore != null && m.awayScore != null) {
-        append("  ${m.homeScore} – ${m.awayScore}  ")
-    } else {
-        withStyle(SpanStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 30.sp)) { append("  vs  ") }
-    }
+    if (m.goals) return@buildAnnotatedString
+    withStyle(SpanStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 30.sp)) { append("  vs  ") }
     append(m.away.name.uppercase())
 }
 
-/** Under a tile: the teams, with the score once it's over. */
-private fun name(m: Match): String = when {
-    m.goals -> m.home.name
-    m.phase == Phase.FINISHED && m.homeScore != null && m.awayScore != null -> "${m.home.name} ${m.homeScore} – ${m.awayScore} ${m.away.name}"
-    else -> "${m.home.name} – ${m.away.name}"
-}
+/** Under a tile: the teams, never the score. */
+private fun name(m: Match): String = if (m.goals) m.home.name else "${m.home.name} – ${m.away.name}"
 
-/** The tile's chip: kick-off time, LIVE minute, Highlights. */
+/** The tile's chip: day and kick-off ("OGGI 21:00", "GIO 18:45"), LIVE minute, Highlights. */
 @Composable
 private fun chip(m: Match, highlights: String?): String = when (m.phase) {
-    Phase.SCHEDULED -> TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
+    Phase.SCHEDULED -> {
+        val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
+        val day = if (at.toLocalDate() == LocalDate.now()) stringResource(R.string.football_today) else WEEKDAY.format(at).trimEnd('.')
+        day.uppercase() + " " + TIME.format(at)
+    }
     Phase.LIVE -> if (m.goals) stringResource(R.string.football_live) else m.minute ?: stringResource(R.string.football_live)
     Phase.FINISHED -> if (highlights != null) "▶ " + stringResource(R.string.football_highlights) else stringResource(R.string.football_highlights_later)
     Phase.OFF -> "—"

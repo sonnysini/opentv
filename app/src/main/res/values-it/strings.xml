@@ -41,9 +41,10 @@
     <string name="football_no_channel">Non trovata in guida</string>
     <string name="football_channels_soon">Canali in guida a breve</string>
     <string name="football_full_time">Finale</string>
-    <string name="football_round">SERIE A · %1$sª GIORNATA</string>
+    <string name="football_round">%1$s · %2$sª GIORNATA</string>
+    <string name="football_matchday">%1$sª giornata</string>
     <string name="football_unavailable">Impossibile caricare le partite.</string>
-    <string name="football_none">Nessuna partita di Serie A nei prossimi giorni.</string>
+    <string name="football_none">Nessuna partita nei prossimi giorni.</string>
     <string name="football_no_youtube">YouTube non è installato</string>
     <string name="nav_movies">Film</string>
     <string name="nav_shows">Serie</string>
