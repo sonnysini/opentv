@@ -320,13 +320,11 @@ abstract class OpenTvDatabase : RoomDatabase() {
                     MIGRATION_12_14, MIGRATION_13_14,
                 )
                 /*
-                 * Pre-1.0 policy: schema changes drop and rebuild the database. Everything
-                 * in it is re-derivable from the provider (one sync away) except favourites
-                 * and overrides, which is a real but small loss for testers. The policy
-                 * flips to real migrations at the first tagged release — from then on,
-                 * every schema change ships a Migration and this line is deleted.
+                 * Only v1 (pre-release, no migration path) is still dropped and rebuilt.
+                 * Every later schema change must ship a Migration: a missing one now fails
+                 * loudly instead of silently wiping favourites, hidden channels and overrides.
                  */
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigrationFrom(1)
                 .build()
     }
 }
