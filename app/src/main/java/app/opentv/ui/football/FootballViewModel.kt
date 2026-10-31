@@ -601,8 +601,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** About 1 s a feed: a minute of waiting at most. */
         private const val MAX_FEEDS = 30
         private const val SCAN_BUDGET_MILLIS = 60_000L
-        /** Matches looked at by themselves from this long before kick-off: earlier the feeds aren't up yet. */
-        private const val AHEAD_MILLIS = 45 * 60_000L
+        /** Matches looked at by themselves from this long before kick-off, as the scan server does: earlier the feeds aren't up yet. */
+        private const val AHEAD_MILLIS = 35 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */
         private const val DEBUG_WINDOW_MILLIS = 24 * 60 * 60_000L
         private const val IDLE_MILLIS = 30_000L
