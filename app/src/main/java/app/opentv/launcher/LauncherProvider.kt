@@ -100,8 +100,12 @@ class LauncherProvider : ContentProvider() {
     }
 
     private suspend fun footballCursor(repo: FootballRepository): Cursor {
-        val today = repo.today()
-        val upcoming = repo.upcoming(UPCOMING)
+        // Serie A and the Italian teams' cup games: a launcher row has no room for a cup's thirty.
+        val italian = repo.italianTeams()
+        fun ours(m: FootballRepository.Match) =
+            m.league == FootballRepository.SERIE_A || m.home.id in italian || m.away.id in italian
+        val today = repo.today().filter(::ours)
+        val upcoming = repo.upcoming().filter(::ours).take(UPCOMING)
         val todayIds = today.mapTo(HashSet()) { it.id }
         val round = if (today.any { it.phase != Phase.FINISHED }) emptyList()
         else repo.lastRound().filter { it.id !in todayIds }.take(ROUND)
@@ -112,7 +116,8 @@ class LauncherProvider : ContentProvider() {
             cursor.addRow(
                 arrayOf(
                     m.id, section, m.phase.name, m.kickoffUtcMillis, m.minute, m.round,
-                    m.home.name, m.home.crestUrl, m.homeScore, m.away.name, m.away.crestUrl, m.awayScore,
+                    // No score: a game is watched later too.
+                    m.home.name, m.home.crestUrl, null, m.away.name, m.away.crestUrl, null,
                     names.joinToString("|"), highlights,
                 ),
             )

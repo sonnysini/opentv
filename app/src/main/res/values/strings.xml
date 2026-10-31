@@ -49,9 +49,10 @@
     <string name="football_no_channel">Not found in your guide</string>
     <string name="football_channels_soon">Channels once the guide lists it</string>
     <string name="football_full_time">Full time</string>
-    <string name="football_round">SERIE A · MATCHDAY %1$s</string>
+    <string name="football_round">%1$s · MATCHDAY %2$s</string>
+    <string name="football_matchday">matchday %1$s</string>
     <string name="football_unavailable">Couldn\'t load the fixtures.</string>
-    <string name="football_none">No Serie A matches in the next few days.</string>
+    <string name="football_none">No matches in the next few days.</string>
     <string name="football_no_youtube">YouTube isn\'t installed</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_shows">Shows</string>

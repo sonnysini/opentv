@@ -41,7 +41,15 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val channels: List<MatchChannel> = emptyList(),
         /** YouTube id of the highlights, for a finished match. */
         val highlights: String? = null,
+        /**
+         * Serie A, or a cup game with an Italian team: what the big card, its tabs and the scans
+         * done by themselves are about. The other cup games are in their rows, scanned when picked.
+         */
+        val relevant: Boolean = true,
     )
+
+    /** One competition's games under the top of the page: on now, to come, then finished. */
+    data class LeagueRow(val league: Int, val round: String?, val items: List<Item>)
 
     data class UiState(
         val loading: Boolean = true,
@@ -49,14 +57,14 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val hero: Item? = null,
         /** Games on at the same time, as tabs on the big card: two or more, else empty. */
         val heroes: List<Item> = emptyList(),
-        val live: List<Item> = emptyList(),
-        val today: List<Item> = emptyList(),
-        val upcoming: List<Item> = emptyList(),
-        /** The latest matchday before today, finished: highlights on days without games. */
-        val lastRound: List<Item> = emptyList(),
+        /** A row per competition, the one playing next first. */
+        val rows: List<LeagueRow> = emptyList(),
         /** FotMob unreachable and nothing to show. */
         val failed: Boolean = false,
-    )
+    ) {
+        /** Every game on the page, once. */
+        val all: List<Item> get() = (listOfNotNull(hero) + heroes + rows.flatMap { it.items }).distinctBy { it.match.id }
+    }
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -290,8 +298,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         store.pick(item.match.id, first.id)
         val ui = _ui.value
         val now = System.currentTimeMillis()
-        val on = (listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming)
-            .distinctBy { it.match.id }
+        val on = ui.all
             .filter {
                 it.match.id == item.match.id || it.match.phase == Phase.LIVE ||
                     (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
@@ -353,8 +360,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val window = if (BuildConfig.DEBUG) DEBUG_WINDOW_MILLIS else AHEAD_MILLIS
         val ui = _ui.value
         // ui.heroes: games on together are tabs of the big card, in none of the rows.
-        val candidates = (listOfNotNull(ui.hero) + ui.heroes + ui.live + ui.today + ui.upcoming)
-            .distinctBy { it.match.id }
+        val candidates = ui.all
+            .filter { it.relevant }
             .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
             .sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }))
         for (item in candidates) {
@@ -459,65 +466,58 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Finished Serie A games before today (highlights), filled in after the rest of the page. */
+    private var round: List<Item> = emptyList()
+    /** The open games and today's finished ones, from the last load. */
+    private var page: List<Item> = emptyList()
+    /** The channels each match's [feeds] were found from: unchanged, they aren't looked up again. */
+    private var feedsFrom: Map<Long, List<MatchChannel>> = emptyMap()
+
     private suspend fun load() {
         val today = repo.today()
         val upcoming = repo.upcoming()
         if (today.isEmpty() && upcoming.isEmpty()) {
-            _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.today.isEmpty())
+            _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
             return
         }
+        val italian = repo.italianTeams()
+        fun relevant(m: Match) = m.league == FootballRepository.SERIE_A || m.home.id in italian || m.away.id in italian
         val goals = FootballRepository.goalShow(today)
         val channels = repo.channelsFor(
             today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming + listOfNotNull(goals),
         )
         // Highlights already found only: looking up new ones waits until the page is up.
         // The goal show last, like a game kicking off after the others; only with a channel.
-        val items = (today + listOfNotNull(goals?.takeIf { channels[it.id].orEmpty().isNotEmpty() })).map { m ->
-            when (m.phase) {
-                Phase.FINISHED -> Item(m, highlights = repo.knownHighlights(m))
-                Phase.OFF -> Item(m)
-                else -> Item(m, channels = channels[m.id].orEmpty())
+        // A cup game over has nothing left to offer: no score shown, no highlights.
+        val items = (today + listOfNotNull(goals?.takeIf { channels[it.id].orEmpty().isNotEmpty() }))
+            .filter { it.phase != Phase.FINISHED || it.league == FootballRepository.SERIE_A }
+            .map { m ->
+                when (m.phase) {
+                    Phase.FINISHED -> Item(m, highlights = repo.knownHighlights(m))
+                    Phase.OFF -> Item(m, relevant = relevant(m))
+                    else -> Item(m, channels = channels[m.id].orEmpty(), relevant = relevant(m))
+                }
             }
-        }
-        val next = upcoming.map { Item(it, channels = channels[it.id].orEmpty()) }
-        val live = items.filter { it.match.phase == Phase.LIVE }
-        val hero = live.firstOrNull()
-            ?: items.firstOrNull { it.match.phase == Phase.SCHEDULED }
-            ?: next.firstOrNull()
-        // Games on together (or about to be) share the big card as tabs.
-        val now = System.currentTimeMillis()
-        val together = items.filter {
-            it.match.phase == Phase.LIVE ||
-                (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
-        }.sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }))
-        val heroes = if (together.size >= 2) together else emptyList()
+        val next = upcoming.map { Item(it, channels = channels[it.id].orEmpty(), relevant = relevant(it)) }
+        page = items + next
+        publish()
         // The big card's feeds before first paint (its source list); the rest's right after:
         // looking them up is a query per channel, a second or so for a whole matchday.
-        val first = (listOfNotNull(hero) + heroes).distinctBy { it.match.id }
-        feeds = feeds + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsFor(it) }
+        val ui = _ui.value
+        val first = (listOfNotNull(ui.hero) + ui.heroes).distinctBy { it.match.id }
+        val known = feeds
+        feeds = known + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsOf(it, known) }
         // Before the worker wakes: what the scan server ranked needs no look here.
         syncServer()
         // The worker may have found nothing to look at yet (Calcio opened before the first load):
         // wake it now, not at the end of its idle wait.
         wake.trySend(Unit)
-        _ui.value = UiState(
-            loading = false,
-            hero = hero,
-            heroes = heroes,
-            live = live.filter { it !== hero && it !in heroes },
-            // Today's row: still to come first, then the finished ones latest first.
-            today = items.filter { it !== hero && it !in heroes && it.match.phase == Phase.SCHEDULED } +
-                items.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis },
-            upcoming = next.filter { it !== hero },
-            lastRound = _ui.value.lastRound,
-        )
-        val firstIds = first.mapTo(HashSet()) { it.match.id }
-        val known = feeds
-        feeds = (items + next).filter { it.channels.isNotEmpty() }
-            .associate { item ->
-                val id = item.match.id
-                id to ((if (id in firstIds) known[id] else null) ?: feedsFor(item))
-            }
+        _looks.value++
+        // The games that matter first: a cup's other games can wait a moment.
+        val withChannels = page.filter { it.channels.isNotEmpty() }.sortedBy { !it.relevant }
+        val mid = feeds
+        feeds = withChannels.associate { it.match.id to feedsOf(it, mid) }
+        feedsFrom = withChannels.associate { it.match.id to it.channels }
         syncServer()
         wake.trySend(Unit)
         // The cards re-read their feeds along with the looks.
@@ -525,15 +525,34 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // After the rest is on screen: highlights not found yet (the YouTube feed; older ones may
         // need YouTube's full video list, a few seconds on a slow box).
         if (items.any { it.match.phase == Phase.FINISHED && it.highlights == null }) {
-            val withHighlights = items.map { if (it.match.phase == Phase.FINISHED && it.highlights == null) finished(it.match) else it }
-                .associateBy { it.match.id }
-            _ui.value = _ui.value.let { u ->
-                u.copy(today = u.today.map { withHighlights[it.match.id] ?: it })
-            }
+            page = page.map { if (it.match.phase == Phase.FINISHED && it.highlights == null) finished(it.match) else it }
+            publish()
         }
         val todayIds = today.mapTo(HashSet()) { it.id }
-        val round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
-        _ui.value = _ui.value.copy(lastRound = round)
+        round = repo.lastRound().filter { it.id !in todayIds }.map { finished(it) }
+        publish()
+    }
+
+    /** [item]'s feeds: the ones found before while its channels are the same, else looked up. */
+    private suspend fun feedsOf(item: Item, known: Map<Long, List<Channel>>): List<Channel> =
+        known[item.match.id]?.takeIf { feedsFrom[item.match.id] == item.channels } ?: feedsFor(item)
+
+    /** The page out of [page] and [round]: the big card, its tabs, a row per competition. */
+    private fun publish() {
+        val all = page + round.filter { r -> page.none { it.match.id == r.match.id } }
+        val open = all.filter { it.match.phase == Phase.LIVE || it.match.phase == Phase.SCHEDULED }
+        // Italian games first, a game before the goal show; then the soonest, then by competition.
+        val order = compareBy<Item>({ !it.relevant }, { it.match.goals }, { it.match.kickoffUtcMillis }, { leagueRank(it.match.league) })
+        val hero = open.filter { it.match.phase == Phase.LIVE }.sortedWith(order).firstOrNull()
+            ?: open.sortedWith(order).firstOrNull()
+        // Games on together (or about to be) share the big card as tabs.
+        val now = System.currentTimeMillis()
+        val together = open.filter {
+            it.relevant && (it.match.phase == Phase.LIVE || it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
+        }.sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }, { leagueRank(it.match.league) }))
+        val heroes = if (together.size >= 2) together else emptyList()
+        val onTop = (listOfNotNull(hero) + heroes).mapTo(HashSet()) { it.match.id }
+        _ui.value = UiState(loading = false, hero = hero, heroes = heroes, rows = leagueRows(all, onTop))
     }
 
     private suspend fun feedsFor(item: Item): List<Channel> {
@@ -553,19 +572,43 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         return out
     }
 
-    private companion object {
-        const val TAG = "AutoScan"
+    companion object {
+        /** Where [league] goes among games starting together: Champions, Europa, Conference, Serie A. */
+        fun leagueRank(league: Int): Int = FootballRepository.LEAGUES.indexOf(league).let { if (it < 0) Int.MAX_VALUE else it }
+
+        /**
+         * A row per competition out of [all], leaving out the games on the big card ([onTop]): live,
+         * then to come by kick-off (Italian games first at the same time, the goal show last), then
+         * finished, latest first. The competition playing next goes first ([leagueRank] when two
+         * start together); a matchday over goes to the bottom.
+         */
+        fun leagueRows(all: List<Item>, onTop: Set<Long>): List<LeagueRow> =
+            all.filter { it.match.phase != Phase.OFF }.groupBy { it.match.league }.mapNotNull { (league, games) ->
+                val open = games.filter { it.match.phase == Phase.LIVE || it.match.phase == Phase.SCHEDULED }
+                val shown = games.filter { it.match.id !in onTop }
+                val items = shown.filter { it.match.phase == Phase.LIVE }.sortedBy { it.match.kickoffUtcMillis } +
+                    shown.filter { it.match.phase == Phase.SCHEDULED }
+                        .sortedWith(compareBy({ it.match.kickoffUtcMillis }, { it.match.goals }, { !it.relevant })) +
+                    shown.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis }
+                if (items.isEmpty()) return@mapNotNull null
+                val round = (open.firstOrNull { !it.match.goals } ?: games.firstOrNull { !it.match.goals })?.match?.round
+                Triple(open.minOfOrNull { it.match.kickoffUtcMillis }, league, LeagueRow(league, round, items))
+            }
+                .sortedWith(compareBy({ it.first == null }, { it.first }, { leagueRank(it.second) }))
+                .map { it.third }
+
+        private const val TAG = "AutoScan"
         /** About 1 s a feed: a minute of waiting at most. */
-        const val MAX_FEEDS = 30
-        const val SCAN_BUDGET_MILLIS = 60_000L
+        private const val MAX_FEEDS = 30
+        private const val SCAN_BUDGET_MILLIS = 60_000L
         /** Matches looked at by themselves from this long before kick-off: earlier the feeds aren't up yet. */
-        const val AHEAD_MILLIS = 45 * 60_000L
+        private const val AHEAD_MILLIS = 45 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */
-        const val DEBUG_WINDOW_MILLIS = 24 * 60 * 60_000L
-        const val IDLE_MILLIS = 30_000L
-        const val TABS_AHEAD_MILLIS = 15 * 60_000L
-        val SD = Regex("\\bSD\\b", RegexOption.IGNORE_CASE)
-        val FOREIGN_PREFIX = Regex("^\\s*(?!IT\\b)[A-Z]{2,3}\\s*[:|]")
+        private const val DEBUG_WINDOW_MILLIS = 24 * 60 * 60_000L
+        private const val IDLE_MILLIS = 30_000L
+        private const val TABS_AHEAD_MILLIS = 15 * 60_000L
+        private val SD = Regex("\\bSD\\b", RegexOption.IGNORE_CASE)
+        private val FOREIGN_PREFIX = Regex("^\\s*(?!IT\\b)[A-Z]{2,3}\\s*[:|]")
     }
 
     private suspend fun finished(m: Match) = Item(m, highlights = repo.highlightsFor(m))
