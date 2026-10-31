@@ -43,7 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -86,6 +88,9 @@ fun TvHero(
     nowMillis: Long,
     onWatch: (Highlight) -> Unit,
     onExitLeft: () -> Unit,
+    // The button's handle, and where DOWN from it goes (the tabs).
+    buttonFocus: FocusRequester? = null,
+    below: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) return
@@ -160,7 +165,11 @@ fun TvHero(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(start = 32.dp, bottom = 40.dp)
-                    .focusProperties { canFocus = expanded },
+                    .then(if (buttonFocus != null) Modifier.focusRequester(buttonFocus) else Modifier)
+                    .focusProperties {
+                        canFocus = expanded
+                        below?.let { down = it }
+                    },
             )
             Dots(items.size, index, turn.value, Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 18.dp))
         }

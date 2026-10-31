@@ -63,6 +63,7 @@ import app.opentv.ui.channels.LiveSnapshot
 import app.opentv.ui.channels.LiveSnapshotStore
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -504,6 +505,24 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
      */
     val rowsLoaded = MutableStateFlow(snapshotRowsFor(startSnapshot) != null)
 
+    /**
+     * The last few groups' built rows, so moving back onto one shows its channels straight away
+     * instead of after a fresh database read and guide match. Small groups only: "All" is far too
+     * big to keep around and is rebuilt every time anyway.
+     */
+    private val rowsCache = object : LinkedHashMap<Pair<RowsKey, Long?>, List<Row>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<RowsKey, Long?>, List<Row>>) =
+            size > ROWS_CACHE_GROUPS
+    }
+
+    private fun rememberRows(key: RowsKey, source: Long?, rows: List<Row>) {
+        if (key.query.isNotBlank() || rows.size > SNAPSHOT_MAX_ROWS) return
+        synchronized(rowsCache) { rowsCache[key to source] = rows }
+    }
+
+    private fun recentRows(key: RowsKey, source: Long?): List<Row>? =
+        if (key.query.isNotBlank()) null else synchronized(rowsCache) { rowsCache[key to source] }
+
     /** Guards the start-up loading bar so it shows once, on the first build, not on every tap. */
     @Volatile
     private var guideBuilt = rowsLoaded.value
@@ -600,7 +619,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                     // with blank ones for a few seconds: hold them back when there is a snapshot.
                     .filter { (_, withGuide) -> withGuide || snapshotRowsFor(LiveSnapshotStore.current) == null }
                     .onEach { (rows, withGuide) -> if (withGuide && source == null) saveSnapshot(key, rows) }
+                    .onEach { (rows, withGuide) -> if (withGuide) rememberRows(key, source, rows) }
                     .map { it.first }
+                    // A group seen a moment ago is on screen at once; its fresh build follows.
+                    .onStart { recentRows(key, source)?.let { emit(it) } }
             }
             // Grouping thousands of channels against a 12-hour, all-feeds programme window is heavy
             // enough to freeze the UI for a big provider — a category tap that took minutes. Run the
@@ -949,6 +971,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Above this many rows (the "All" list) the snapshot keeps only the groups. */
         private const val SNAPSHOT_MAX_ROWS = 1_500
+        private const val ROWS_CACHE_GROUPS = 15
 
         const val LAST_GROUP_ALL = "all"
         const val LAST_GROUP_FAVOURITES = "fav"

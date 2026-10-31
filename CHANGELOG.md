@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.37.3 — 31 October 2026
+
+- **Live TV: groups switch faster.** Moving onto another group no longer freezes the screen for
+  half a second, the channels follow after a much shorter pause, and the last groups you opened
+  come back at once.
+- **Live TV: the focus slides.** The box around the focused group glides from one group to the
+  next instead of jumping.
+- **Live TV: a fixed way up and down.** UP from the first channel goes to the tabs; from the top's
+  button DOWN goes to the tabs and then the groups, and quick presses no longer skip the tabs.
+
 ## 0.37.2 — 30 October 2026
 
 - **Live TV: group names on one line.** "SKY INTRATTENIMENTO", with the broadcaster in the accent,

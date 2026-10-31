@@ -59,18 +59,19 @@ fun rememberLiveGroupEntries(
     // The remembered entries' picks go through these, so they always reach the latest callbacks.
     val selectCategory by rememberUpdatedState(onSelectCategory)
     val selectFavourites by rememberUpdatedState(onSelectFavourites)
-    return remember(categories, selectedCategory, favouritesOnly, counts, recentGroups, external, favouritesLabel, allLabel) {
-        val allSelected = !favouritesOnly && selectedCategory == null
-        fun all(prefix: String) = LiveGroupEntry(prefix + "all", allLabel, allSelected, counts[LAST_GROUP_ALL]) { selectCategory(null) }
-        fun group(prefix: String, g: ChannelsViewModel.CategoryGroup): LiveGroupEntry {
+    // Naming and badging every group is slow on a Fire stick (hundreds of groups): done only when
+    // the groups change. Moving the selection then only re-marks the entries, so picking another
+    // group no longer stalls the screen for half a second.
+    val built = remember(categories, counts, recentGroups, external, favouritesLabel, allLabel) {
+        fun all(prefix: String) = Marked(LiveGroupEntry(prefix + "all", allLabel, false, counts[LAST_GROUP_ALL]) { selectCategory(null) }) { cat, favs -> !favs && cat == null }
+        fun group(prefix: String, g: ChannelsViewModel.CategoryGroup): Marked {
             val s = shown(g.rawName)
-            return LiveGroupEntry(prefix + "cat-" + g.key, s.label, !favouritesOnly && selectedCategory in g.memberKeys, counts[g.key], s.badge) {
-                selectCategory(g.key)
-            }
+            val entry = LiveGroupEntry(prefix + "cat-" + g.key, s.label, false, counts[g.key], s.badge) { selectCategory(g.key) }
+            return Marked(entry) { cat, favs -> !favs && cat in g.memberKeys }
         }
         buildList {
             val fav = shown(favouritesLabel)
-            add(LiveGroupEntry("fav", fav.label, favouritesOnly, counts[LAST_GROUP_FAVOURITES], fav.badge) { selectFavourites() })
+            add(Marked(LiveGroupEntry("fav", fav.label, false, counts[LAST_GROUP_FAVOURITES], fav.badge) { selectFavourites() }) { _, favs -> favs })
             val recent = recentGroups.mapNotNull { key ->
                 when (key) {
                     LAST_GROUP_FAVOURITES -> null
@@ -78,12 +79,18 @@ fun rememberLiveGroupEntries(
                     else -> categories.firstOrNull { key in it.memberKeys }?.let { group("recent-", it) }
                 }
             }
-            addAll(recent.mapIndexed { i, e -> if (i == 0) e.copy(section = recentTitle) else e })
-            add(all("").let { if (recent.isNotEmpty()) it.copy(section = allTitle) else it })
+            addAll(recent.mapIndexed { i, m -> if (i == 0) m.copy(entry = m.entry.copy(section = recentTitle)) else m })
+            add(all("").let { m -> if (recent.isNotEmpty()) m.copy(entry = m.entry.copy(section = allTitle)) else m })
             categories.forEach { add(group("", it)) }
         }
     }
+    return remember(built, selectedCategory, favouritesOnly) {
+        built.map { m -> m.entry.copy(selected = m.isSelected(selectedCategory, favouritesOnly)) }
+    }
 }
+
+/** An entry and how to tell whether it is the current one. */
+private data class Marked(val entry: LiveGroupEntry, val isSelected: (String?, Boolean) -> Boolean)
 
 /** A group's badge — logo, flag or big emoji — sized by [modifier]; its initials when asked and there's none. */
 @Composable
