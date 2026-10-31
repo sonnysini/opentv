@@ -215,9 +215,10 @@ fun FullscreenLive(
         favouritesLabel, allLabel, onPick, onPickFavourites,
     )
     val tabEntries = rememberTabEntries(tabs, selectedTab, selectedCategory, favouritesOnly, onPick)
+    // The broadcaster split off each name once per label, not again on every pick.
+    val kickers = remember { HashMap<String, Pair<String?, String>>() }
     val split = remember(flat) {
-        android.util.Log.d("Glide", "split recompute n=${flat.size}")
-        flat.map { e -> CategoryMacro.kicker(e.label).let { (kicker, name) -> e.copy(kicker = kicker, label = name) } }
+        flat.map { e -> kickers.getOrPut(e.label) { CategoryMacro.kicker(e.label) }.let { (kicker, name) -> e.copy(kicker = kicker, label = name) } }
     }
     val entries = when (selectedTab) {
         LAST_GROUP_ALL -> split
