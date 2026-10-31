@@ -420,6 +420,7 @@ private fun GroupsList(
         jumpTo = selectedIndex.takeIf { takesFocus && hasSelection && !landed },
         jumpVersion = hasSelection,
         onJumped = { if (hasSelection) landed = true },
+        enterAtActive = true,
     ) { index, requester ->
         val entry = entries[index]
         Column {
@@ -623,6 +624,9 @@ private fun FocusedList(
     // A new value re-runs the jump even to the same index (the list changed under it).
     jumpVersion: Any? = null,
     onJumped: () -> Unit = {},
+    // Coming in from outside (DOWN from the tabs) lands on [activeIndex] even while not [active]:
+    // left to the geometry it took the first row, and the channels followed it there.
+    enterAtActive: Boolean = false,
     item: @Composable (index: Int, requester: Modifier) -> Unit,
 ) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 3).coerceAtLeast(0))
@@ -631,6 +635,9 @@ private fun FocusedList(
     // The requester follows focus, so coming back into the list (RIGHT from the navigation menu)
     // returns to the row you left rather than to whichever row sits nearest the menu.
     var focusedIndex by remember { mutableIntStateOf(startIndex) }
+    LaunchedEffect(activeIndex, listHasFocus) {
+        if (enterAtActive && !listHasFocus && activeIndex != null && activeIndex in 0 until count) focusedIndex = activeIndex
+    }
     LaunchedEffect(active) {
         if (!active) return@LaunchedEffect
         if (activeIndex != null && activeIndex in 0 until count) focusedIndex = activeIndex
@@ -671,7 +678,7 @@ private fun FocusedList(
             // throws ("FocusRequester is not initialized") and took the app down on a key press.
             .focusProperties {
                 enter = {
-                    if (active && listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
+                    if ((active || enterAtActive) && listState.layoutInfo.visibleItemsInfo.any { it.index == focusedIndex }) focusRequester
                     else FocusRequester.Default
                 }
             }
