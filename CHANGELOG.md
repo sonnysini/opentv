@@ -5,7 +5,7 @@
 - **Football: the European cups.** Champions League, Europa League and Conference League join
   Serie A, one row per competition. The competition that plays next comes first; inside a row the
   games follow kick-off time, Italian teams first when two start together.
-- **Football: day and time on every card.** "TODAY 18:00", "TUE 21:00", so no day separators.
+- **Football: day and time on every card.** "OGGI 18:00", "MAR 21:00", so no day separators.
 - **Football: no score anywhere.** Live games show only LIVE and the minute, on the top, the cards
   and the launcher. Finished cup games are gone.
 - **Football: Italian teams only for the extras.** The top, the background scan and the launcher
