@@ -152,6 +152,8 @@ fun FullscreenLive(
     highlights: List<TvHighlightsRepository.Highlight> = emptyList(),
     onWatchHighlight: (TvHighlightsRepository.Highlight) -> Unit = {},
 ) {
+    val dbgT0 = System.nanoTime(); androidx.compose.runtime.SideEffect { android.util.Log.d("Glide", "FL comp ${(System.nanoTime()-dbgT0)/1000000}ms") }
+    LaunchedEffect(rows) { android.util.Log.d("Glide", "rows arrived n=${rows.size}") }
     // Opens on the groups, so the list starts wide and the user picks a group first.
     var groupsOpen by rememberSaveable { mutableStateOf(true) }
     // Only while focus is in here: once LEFT/Back has handed it to the navigation menu, Back
@@ -200,6 +202,7 @@ fun FullscreenLive(
     val favouritesLabel = stringResource(R.string.guide_favourites)
     val allLabel = stringResource(R.string.guide_all_channels)
     val onPick: (String?) -> Unit = { key ->
+        android.util.Log.d("Glide", "pick $key")
         awaitingRows = rows
         onSelectCategory(key)
     }
@@ -213,6 +216,7 @@ fun FullscreenLive(
     )
     val tabEntries = rememberTabEntries(tabs, selectedTab, selectedCategory, favouritesOnly, onPick)
     val split = remember(flat) {
+        android.util.Log.d("Glide", "split recompute n=${flat.size}")
         flat.map { e -> CategoryMacro.kicker(e.label).let { (kicker, name) -> e.copy(kicker = kicker, label = name) } }
     }
     val entries = when (selectedTab) {
