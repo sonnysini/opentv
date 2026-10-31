@@ -190,7 +190,7 @@ fun PlayerScreen(
     val state by controller.state.collectAsStateWithLifecycle()
     val tracks by controller.tracks.collectAsStateWithLifecycle()
     // What's recording right now, so the Record button can show as armed for this channel.
-    val activeRecordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initial = emptyList())
+    val activeRecordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
 
     // Hold the screen awake while the player is on screen. A view-level keepScreenOn flag isn't
     // reliable on every TV box, so we set the window flag on the Activity directly — that's what

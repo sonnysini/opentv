@@ -281,7 +281,7 @@ fun SeriesDetailScreen(
 
     val s = series
     val episodes by (s?.let { viewModel.episodes(it) } ?: viewModel.noEpisodes)
-        .collectAsStateWithLifecycle(initial = emptyList())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
 
     if (s == null) { LoadingDetail(); return }
 

@@ -165,7 +165,7 @@ fun FootballScreen(
     // one connection is free for the player.
     val graph = remember { ServiceLocator.get(context) }
     val previewSetting by graph.settings.guidePreviewVideo.collectAsStateWithLifecycle()
-    val recordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initial = emptyList())
+    val recordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
     val previewScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     val previewController = remember {
         PlayerController(context, previewScope, graph.httpClient, subtitlesEnabled = false, preview = true)

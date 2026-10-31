@@ -172,7 +172,7 @@ fun HomeScreen(
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     // Recording from the guide: what's capturing now, and a scope to kick a capture off.
-    val activeRecordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initial = emptyList())
+    val activeRecordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
     val recordScope = rememberCoroutineScope()
     // The programme the user pressed OK on in the grid — drives the per-programme record menu.
     var recordTarget by remember { mutableStateOf<Pair<ChannelsViewModel.Row, Programme>?>(null) }

@@ -706,7 +706,7 @@ private fun PreferredSourcesPicker(settings: AppSettings) {
                 .distinctBy { it.lowercase() }
                 .sortedBy { it.lowercase() }
         }
-    }.collectAsStateWithLifecycle(initial = emptyList())
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
     // A preferred source the current list no longer has stays visible, so it can be taken off.
     val gone = preferred.filter { p -> known.none { it.equals(p, ignoreCase = true) } }
     val sources = known + gone
