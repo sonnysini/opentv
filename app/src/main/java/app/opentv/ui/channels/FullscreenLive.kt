@@ -152,8 +152,6 @@ fun FullscreenLive(
     highlights: List<TvHighlightsRepository.Highlight> = emptyList(),
     onWatchHighlight: (TvHighlightsRepository.Highlight) -> Unit = {},
 ) {
-    val dbgT0 = System.nanoTime(); androidx.compose.runtime.SideEffect { android.util.Log.d("Glide", "FL comp ${(System.nanoTime()-dbgT0)/1000000}ms") }
-    LaunchedEffect(rows) { android.util.Log.d("Glide", "rows arrived n=${rows.size}") }
     // Opens on the groups, so the list starts wide and the user picks a group first.
     var groupsOpen by rememberSaveable { mutableStateOf(true) }
     // Only while focus is in here: once LEFT/Back has handed it to the navigation menu, Back
@@ -202,7 +200,6 @@ fun FullscreenLive(
     val favouritesLabel = stringResource(R.string.guide_favourites)
     val allLabel = stringResource(R.string.guide_all_channels)
     val onPick: (String?) -> Unit = { key ->
-        android.util.Log.d("Glide", "pick $key")
         awaitingRows = rows
         onSelectCategory(key)
     }
@@ -413,7 +410,7 @@ private fun GroupsList(
             .fillMaxSize()
             .clipToBounds()
             .onGloballyPositioned { glide.origin = it.positionInRoot().y }
-            .onFocusChanged { android.util.Log.d("Glide", "list hasFocus=${it.hasFocus}"); glide.listFocused = it.hasFocus },
+            .onFocusChanged { glide.listFocused = it.hasFocus },
     ) {
     FocusedList(
         count = entries.size,
@@ -484,7 +481,6 @@ private class Glide {
     val height: Float get() = fromHeight + (targetHeight - fromHeight) * FastOutSlowInEasing.transform(progress)
 
     fun place(key: String, top: Float, height: Float) {
-        android.util.Log.d("Glide", "place $key top=$top h=$height cur=${this.key} visible=$visible focused=$listFocused progress=$progress")
         // Start from where the box is drawn now, before the target moves on.
         if (key != this.key && visible) {
             fromTop = this.top
@@ -497,7 +493,6 @@ private class Glide {
     }
 
     suspend fun follow() {
-        android.util.Log.d("Glide", "follow key=$key visible=$visible focused=$listFocused progress=$progress")
         if (!listFocused || key == null) {
             delay(GLIDE_EXIT_MILLIS)
             visible = false

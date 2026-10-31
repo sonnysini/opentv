@@ -128,7 +128,6 @@ fun HomeScreen(
     registerNavExit: ((() -> Boolean)?) -> Unit = {},
     viewModel: ChannelsViewModel = viewModel(),
 ) {
-    val dbgT0 = System.nanoTime(); androidx.compose.runtime.SideEffect { android.util.Log.d("Glide", "HomeScreen comp ${(System.nanoTime()-dbgT0)/1000000}ms") }
     val context = LocalContext.current
     val graph = remember { ServiceLocator.get(context) }
     val settings = remember { graph.settings }
