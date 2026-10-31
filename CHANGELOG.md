@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.2 — 31 October 2026
+
+- **Lighter in the background.** Screens stop following their data while the app is in the
+  background or hidden behind the player, and pick it up again when they come back.
+
 ## 0.38.1 — 31 October 2026
 
 - **Football: lighter.** The page is read when you open it (unless read in the last five minutes)

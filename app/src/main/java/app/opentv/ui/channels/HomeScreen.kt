@@ -40,7 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -131,32 +131,32 @@ fun HomeScreen(
     val context = LocalContext.current
     val graph = remember { ServiceLocator.get(context) }
     val settings = remember { graph.settings }
-    val previewSetting by settings.guidePreviewVideo.collectAsState()
-    val channelLayout by settings.channelLayout.collectAsState()
+    val previewSetting by settings.guidePreviewVideo.collectAsStateWithLifecycle()
+    val channelLayout by settings.channelLayout.collectAsStateWithLifecycle()
     val fullscreen = channelLayout == AppSettings.ChannelLayout.FULLSCREEN
     // The full-screen list has no preview pane, so it never runs the preview player either.
     val previewEnabled = previewSetting && !fullscreen
 
-    val categories by viewModel.visibleCategoryGroups.collectAsState()
-    val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsState()
-    val groupCounts by viewModel.groupCounts.collectAsState()
-    val liveTabs by viewModel.liveTabs.collectAsState()
-    val selectedTab by viewModel.selectedTab.collectAsState()
-    val recentLiveGroups by viewModel.recentLiveGroups.collectAsState()
-    val showRecentGroups by viewModel.showRecentGroups.collectAsState()
+    val categories by viewModel.visibleCategoryGroups.collectAsStateWithLifecycle()
+    val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsStateWithLifecycle()
+    val groupCounts by viewModel.groupCounts.collectAsStateWithLifecycle()
+    val liveTabs by viewModel.liveTabs.collectAsStateWithLifecycle()
+    val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
+    val recentLiveGroups by viewModel.recentLiveGroups.collectAsStateWithLifecycle()
+    val showRecentGroups by viewModel.showRecentGroups.collectAsStateWithLifecycle()
     val recentGroups = if (showRecentGroups) recentLiveGroups else emptyList()
-    val rows by viewModel.rows.collectAsState()
-    val rowsLoaded by viewModel.rowsLoaded.collectAsState()
-    val selectedCategory by viewModel.selectedCategory.collectAsState()
-    val favouritesOnly by viewModel.favouritesOnly.collectAsState()
-    val sources by viewModel.sources.collectAsState()
-    val selectedSource by viewModel.selectedSource.collectAsState()
-    val windowStart by viewModel.windowStartMillis.collectAsState()
+    val rows by viewModel.rows.collectAsStateWithLifecycle()
+    val rowsLoaded by viewModel.rowsLoaded.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val favouritesOnly by viewModel.favouritesOnly.collectAsStateWithLifecycle()
+    val sources by viewModel.sources.collectAsStateWithLifecycle()
+    val selectedSource by viewModel.selectedSource.collectAsStateWithLifecycle()
+    val windowStart by viewModel.windowStartMillis.collectAsStateWithLifecycle()
     // How many days ahead the guide is scrolled (0 = live now). Drives the ‹ Today › nav.
-    val guideDayOffset by viewModel.guideDayOffset.collectAsState()
+    val guideDayOffset by viewModel.guideDayOffset.collectAsStateWithLifecycle()
     // Tri-state: null = still checking the catalogue, true = channels on disk, false = confirmed
     // empty. Drives the choice between the loading spinner and a recoverable error below.
-    val channelsPresent by viewModel.channelsPresent.collectAsState()
+    val channelsPresent by viewModel.channelsPresent.collectAsStateWithLifecycle()
 
     // Two separate ideas, on purpose:
     //  - highlightedRow: where the d-pad is in the grid. Moves freely with up/down.
@@ -168,11 +168,11 @@ fun HomeScreen(
         settings.lastChannelId.let { id -> list.firstOrNull { row -> row.variants.any { it.id == id } } }
     var highlightedRow by remember { mutableStateOf(lastWatched(rows)) }
     var selectedRow by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
-    val previewSound by settings.guidePreviewSound.collectAsState()
+    val previewSound by settings.guidePreviewSound.collectAsStateWithLifecycle()
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     // Recording from the guide: what's capturing now, and a scope to kick a capture off.
-    val activeRecordings by graph.recordingRepository.observeActive().collectAsState(initial = emptyList())
+    val activeRecordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
     val recordScope = rememberCoroutineScope()
     // The programme the user pressed OK on in the grid — drives the per-programme record menu.
     var recordTarget by remember { mutableStateOf<Pair<ChannelsViewModel.Row, Programme>?>(null) }
@@ -1162,8 +1162,8 @@ private fun ChannelRow(
 
 @Composable
 private fun LoadingState(isSyncing: Boolean) {
-    val s by app.opentv.core.StatusBus.message.collectAsState()
-    val p by app.opentv.core.StatusBus.progress.collectAsState()
+    val s by app.opentv.core.StatusBus.message.collectAsStateWithLifecycle()
+    val p by app.opentv.core.StatusBus.progress.collectAsStateWithLifecycle()
     val status = s
     val progress = p
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -25,7 +25,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +68,7 @@ fun EpgSettingsScreen(
     onBack: () -> Unit,
     viewModel: EpgViewModel = viewModel(),
 ) {
-    val ui by viewModel.ui.collectAsState()
+    val ui by viewModel.ui.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     var newName by remember { mutableStateOf("") }

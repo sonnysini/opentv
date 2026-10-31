@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.opentv.R
 import app.opentv.core.ServiceLocator
 import app.opentv.data.model.Profile
@@ -123,10 +123,10 @@ class RecordingsViewModel(app: Application) : AndroidViewModel(app) {
 @Composable
 fun RecordingsScreen(onPlay: (Recording) -> Unit) {
     val viewModel: RecordingsViewModel = viewModel()
-    val recordings by viewModel.recordings.collectAsState()
-    val reminders by viewModel.reminders.collectAsState()
-    val profiles by viewModel.profiles.collectAsState()
-    val seriesRules by viewModel.seriesRules.collectAsState()
+    val recordings by viewModel.recordings.collectAsStateWithLifecycle()
+    val reminders by viewModel.reminders.collectAsStateWithLifecycle()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val seriesRules by viewModel.seriesRules.collectAsStateWithLifecycle()
 
     val now = System.currentTimeMillis()
     val upcomingReminders = reminders.filter { !it.fired && it.endUtcMillis > now }

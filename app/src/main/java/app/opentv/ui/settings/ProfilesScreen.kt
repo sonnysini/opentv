@@ -23,7 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,8 +47,8 @@ fun ProfilesScreen(
     onBack: () -> Unit,
     viewModel: ProfilesViewModel = viewModel(),
 ) {
-    val profiles by viewModel.profiles.collectAsState()
-    val activeId by viewModel.activeProfileId.collectAsState()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val activeId by viewModel.activeProfileId.collectAsStateWithLifecycle()
 
     // null = list; NEW = adding; a positive id = renaming that profile.
     var editing by remember { mutableStateOf<Long?>(null) }

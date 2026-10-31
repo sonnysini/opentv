@@ -22,7 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,12 +51,12 @@ fun GroupingScreen(
     onBack: () -> Unit,
     viewModel: GroupingViewModel = viewModel(),
 ) {
-    val mergeSources by viewModel.mergeSources.collectAsState()
-    val stripSources by viewModel.stripSources.collectAsState()
-    val showRecentGroups by viewModel.showRecentGroups.collectAsState()
-    val suggestions by viewModel.suggestions.collectAsState()
-    val merges by viewModel.merges.collectAsState()
-    val busy by viewModel.busy.collectAsState()
+    val mergeSources by viewModel.mergeSources.collectAsStateWithLifecycle()
+    val stripSources by viewModel.stripSources.collectAsStateWithLifecycle()
+    val showRecentGroups by viewModel.showRecentGroups.collectAsStateWithLifecycle()
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val merges by viewModel.merges.collectAsStateWithLifecycle()
+    val busy by viewModel.busy.collectAsStateWithLifecycle()
 
     // A row that is answered disappears; focus moves to the row that takes its place, so the
     // d-pad never lands on nothing.

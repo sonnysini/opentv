@@ -37,7 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,16 +77,16 @@ fun MoviesScreen(
     isSyncing: Boolean,
     viewModel: VodViewModel = viewModel(),
 ) {
-    val categories by viewModel.movieCategories.collectAsState()
-    val resume by viewModel.continueWatching.collectAsState()
-    val recommended by viewModel.recommendedMovies.collectAsState()
-    val recentlyAdded by viewModel.recentlyAddedMovies.collectAsState()
-    val genreRows by viewModel.movieGenreRows.collectAsState()
-    val categoryMovies by viewModel.movies.collectAsState()
-    val vodLoading by viewModel.vodLoading.collectAsState()
-    val vodProgress by viewModel.vodProgress.collectAsState()
-    val sources by viewModel.sources.collectAsState()
-    val selectedSource by viewModel.selectedVodSource.collectAsState()
+    val categories by viewModel.movieCategories.collectAsStateWithLifecycle()
+    val resume by viewModel.continueWatching.collectAsStateWithLifecycle()
+    val recommended by viewModel.recommendedMovies.collectAsStateWithLifecycle()
+    val recentlyAdded by viewModel.recentlyAddedMovies.collectAsStateWithLifecycle()
+    val genreRows by viewModel.movieGenreRows.collectAsStateWithLifecycle()
+    val categoryMovies by viewModel.movies.collectAsStateWithLifecycle()
+    val vodLoading by viewModel.vodLoading.collectAsStateWithLifecycle()
+    val vodProgress by viewModel.vodProgress.collectAsStateWithLifecycle()
+    val sources by viewModel.sources.collectAsStateWithLifecycle()
+    val selectedSource by viewModel.selectedVodSource.collectAsStateWithLifecycle()
 
     // Pull the movie library the first time this tab is opened, not at login; refresh the computed
     // home rows (recommended, by-genre) on open too — cheap, and covers a library already on disk.
@@ -164,15 +164,15 @@ fun SeriesScreen(
     isSyncing: Boolean,
     viewModel: VodViewModel = viewModel(),
 ) {
-    val categories by viewModel.seriesCategories.collectAsState()
-    val resume by viewModel.continueWatching.collectAsState()
-    val recentlyAdded by viewModel.recentlyAddedSeries.collectAsState()
-    val genreRows by viewModel.seriesGenreRows.collectAsState()
-    val categorySeries by viewModel.series.collectAsState()
-    val vodLoading by viewModel.vodLoading.collectAsState()
-    val vodProgress by viewModel.vodProgress.collectAsState()
-    val sources by viewModel.sources.collectAsState()
-    val selectedSource by viewModel.selectedVodSource.collectAsState()
+    val categories by viewModel.seriesCategories.collectAsStateWithLifecycle()
+    val resume by viewModel.continueWatching.collectAsStateWithLifecycle()
+    val recentlyAdded by viewModel.recentlyAddedSeries.collectAsStateWithLifecycle()
+    val genreRows by viewModel.seriesGenreRows.collectAsStateWithLifecycle()
+    val categorySeries by viewModel.series.collectAsStateWithLifecycle()
+    val vodLoading by viewModel.vodLoading.collectAsStateWithLifecycle()
+    val vodProgress by viewModel.vodProgress.collectAsStateWithLifecycle()
+    val sources by viewModel.sources.collectAsStateWithLifecycle()
+    val selectedSource by viewModel.selectedVodSource.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         if (hasSources) viewModel.ensureVodLoaded()

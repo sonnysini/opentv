@@ -84,7 +84,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -151,21 +151,21 @@ fun FootballScreen(
     onPlayVideo: (key: String, url: String, title: String) -> Unit,
     viewModel: FootballViewModel = viewModel(),
 ) {
-    val ui by viewModel.ui.collectAsState()
-    val opening by viewModel.opening.collectAsState()
-    val scan by viewModel.scan.collectAsState()
-    val autoPlay by viewModel.autoPlay.collectAsState()
-    val progress by viewModel.progress.collectAsState()
+    val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val opening by viewModel.opening.collectAsStateWithLifecycle()
+    val scan by viewModel.scan.collectAsStateWithLifecycle()
+    val autoPlay by viewModel.autoPlay.collectAsStateWithLifecycle()
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
     // Re-read the feeds' looks whenever one lands.
-    val looks by viewModel.looks.collectAsState()
+    val looks by viewModel.looks.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // ---- Live preview ------------------------------------------------------------------------
     // One muted player for the top of the page, as the guide's: stopped before the full-screen
     // player opens and whenever the screen goes, so the box never decodes twice and the account's
     // one connection is free for the player.
     val graph = remember { ServiceLocator.get(context) }
-    val previewSetting by graph.settings.guidePreviewVideo.collectAsState()
-    val recordings by graph.recordingRepository.observeActive().collectAsState(initial = emptyList())
+    val previewSetting by graph.settings.guidePreviewVideo.collectAsStateWithLifecycle()
+    val recordings by graph.recordingRepository.observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
     val previewScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     val previewController = remember {
         PlayerController(context, previewScope, graph.httpClient, subtitlesEnabled = false, preview = true)
@@ -259,7 +259,7 @@ fun FootballScreen(
     }
     // A launcher's match card: act on it as on a click here, once the match is on the page (its
     // feeds looked up for Watch). Given up after a while: a match gone from the page plays nothing.
-    val request by FootballRequests.request.collectAsState()
+    val request by FootballRequests.request.collectAsStateWithLifecycle()
     LaunchedEffect(request, ui, looks) {
         val r = request ?: return@LaunchedEffect
         val item = ui.all.firstOrNull { it.match.id == r.matchId }

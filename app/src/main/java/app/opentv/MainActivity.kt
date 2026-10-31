@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,12 +119,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings = remember { ServiceLocator.get(this).settings }
-            val themeMode by settings.themeMode.collectAsState()
-            val uiScale by settings.uiScalePercent.collectAsState()
-            val appStyle by settings.appStyle.collectAsState()
-            val logoSource by settings.logoSource.collectAsState()
-            val logoPack by settings.logoPack.collectAsState()
-            val externalGroupLogos by settings.externalGroupLogos.collectAsState()
+            val themeMode by settings.themeMode.collectAsStateWithLifecycle()
+            val uiScale by settings.uiScalePercent.collectAsStateWithLifecycle()
+            val appStyle by settings.appStyle.collectAsStateWithLifecycle()
+            val logoSource by settings.logoSource.collectAsStateWithLifecycle()
+            val logoPack by settings.logoPack.collectAsStateWithLifecycle()
+            val externalGroupLogos by settings.externalGroupLogos.collectAsStateWithLifecycle()
             val darkTheme = when (themeMode) {
                 AppSettings.ThemeMode.DARK -> true
                 AppSettings.ThemeMode.LIGHT -> false
@@ -295,9 +296,9 @@ private fun OpenTvApp(isTelevision: Boolean) {
     val sourcesViewModel: SourcesViewModel = viewModel()
     val vodViewModel: VodViewModel = viewModel()
     val profilesViewModel: ProfilesViewModel = viewModel()
-    val sourcesUi by sourcesViewModel.ui.collectAsState()
-    val profiles by profilesViewModel.profiles.collectAsState()
-    val activeProfileId by profilesViewModel.activeProfileId.collectAsState()
+    val sourcesUi by sourcesViewModel.ui.collectAsStateWithLifecycle()
+    val profiles by profilesViewModel.profiles.collectAsStateWithLifecycle()
+    val activeProfileId by profilesViewModel.activeProfileId.collectAsStateWithLifecycle()
     val activeProfileName = profiles.firstOrNull { it.id == activeProfileId }?.name ?: "Me"
 
     // Until the saved sources have loaded from the database, we cannot tell a first run from a

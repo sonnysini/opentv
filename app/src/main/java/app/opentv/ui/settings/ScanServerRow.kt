@@ -20,7 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,7 +39,7 @@ import app.opentv.core.AppSettings
 /** Settings › Playback › Football scan server: the address and a Save button. */
 @Composable
 internal fun ScanServerRow(settings: AppSettings) {
-    val saved by settings.scanServerUrl.collectAsState()
+    val saved by settings.scanServerUrl.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     var url by remember(saved) { mutableStateOf(saved) }
     Card {

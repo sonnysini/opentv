@@ -25,7 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,13 +58,13 @@ fun CategoriesScreen(
     onBack: () -> Unit,
     viewModel: CategoriesViewModel = viewModel(),
 ) {
-    val kind by viewModel.kind.collectAsState()
-    val query by viewModel.query.collectAsState()
-    val entries by viewModel.entries.collectAsState()
-    val offCount by viewModel.offCount.collectAsState()
-    val totalCount by viewModel.totalCount.collectAsState()
-    val italianOnly by viewModel.italianOnly.collectAsState()
-    val foreignSportOff by viewModel.foreignSportOff.collectAsState()
+    val kind by viewModel.kind.collectAsStateWithLifecycle()
+    val query by viewModel.query.collectAsStateWithLifecycle()
+    val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val offCount by viewModel.offCount.collectAsStateWithLifecycle()
+    val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
+    val italianOnly by viewModel.italianOnly.collectAsStateWithLifecycle()
+    val foreignSportOff by viewModel.foreignSportOff.collectAsStateWithLifecycle()
 
     Column(
         Modifier

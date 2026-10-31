@@ -34,7 +34,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,17 +78,17 @@ fun ChannelManagerScreen(
     onBack: () -> Unit,
     viewModel: ChannelsViewModel = viewModel(),
 ) {
-    val sources by viewModel.sources.collectAsState()
-    val categoryGroups by viewModel.managerCategoryGroups.collectAsState()
-    val selectedSource by viewModel.managerSelectedSource.collectAsState()
-    val selectedCategory by viewModel.managerSelectedCategory.collectAsState()
-    val browseRows by viewModel.managerRows.collectAsState()
+    val sources by viewModel.sources.collectAsStateWithLifecycle()
+    val categoryGroups by viewModel.managerCategoryGroups.collectAsStateWithLifecycle()
+    val selectedSource by viewModel.managerSelectedSource.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.managerSelectedCategory.collectAsStateWithLifecycle()
+    val browseRows by viewModel.managerRows.collectAsStateWithLifecycle()
 
     // Search is one option among browse-by-category: the "Search" rail entry flips the right pane
     // to the original keyboard-driven search, which is kept intact rather than thrown away.
     var searchMode by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    val searchResults by viewModel.managerResults.collectAsState()
+    val searchResults by viewModel.managerResults.collectAsStateWithLifecycle()
     LaunchedEffect(query) { viewModel.setManagerQuery(query) }
 
     // Focus handoff between the panes, mirroring HomeScreen's rail: the active left entry (the
