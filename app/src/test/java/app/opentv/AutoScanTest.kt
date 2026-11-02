@@ -68,13 +68,13 @@ class AutoScanTest {
     }
 
     @Test
-    fun `60 fps goes below every other feed that plays, still above the dead`() {
+    fun `above 50 fps is a still picture, ruled out like a dead feed`() {
         val ranked = AutoScan.rank(
-            listOf("fhd60" to probe(1080, 60), "sd25" to probe(576, 25), "dead" to null, "hd50" to probe(720, 50)),
+            listOf("fhd60" to probe(1080, 60), "sd25" to probe(576, 25), "dead" to null, "hd50" to probe(720, 50), "fhd59" to probe(1080, 59)),
             "Lecce", "Juventus",
         )
-        assertThat(ranked.map { it.item }).containsExactly("hd50", "sd25", "fhd60", "dead").inOrder()
-        assertThat(ranked[2].verdict).isEqualTo(Verdict.OK)
+        assertThat(ranked.take(2).map { it.item }).containsExactly("hd50", "sd25").inOrder()
+        assertThat(ranked.drop(2).map { it.verdict }).containsExactly(Verdict.DEAD, Verdict.DEAD, Verdict.DEAD)
     }
 
     @Test

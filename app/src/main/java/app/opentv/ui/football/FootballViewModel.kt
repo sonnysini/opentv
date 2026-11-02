@@ -404,7 +404,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             val p = e?.probe
             val verdict = when {
                 e == null -> null
-                p == null -> AutoScan.Verdict.DEAD
+                p == null || AutoScan.still(p) -> AutoScan.Verdict.DEAD
                 p.board != null -> AutoScan.gameCheck(p.board, m.home.name, m.away.name) ?: AutoScan.Verdict.OK
                 else -> AutoScan.Verdict.OK
             }
@@ -488,7 +488,14 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun load() {
         val now = System.currentTimeMillis()
         val today = repo.today().map { byClock(it, now) }
-        val upcoming = repo.upcoming()
+        // Serie A: only the matchday on now (FotMob's round), not the next one's games a week out.
+        // A rescheduled game is never played inside another matchday, so the first one still to
+        // play decides: once today's are over, the next matchday shows.
+        val week = repo.upcoming()
+        val round = (today + week).firstOrNull {
+            it.league == FootballRepository.SERIE_A && it.round != null && (it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE)
+        }?.round
+        val upcoming = week.filter { it.league != FootballRepository.SERIE_A || round == null || it.round == null || it.round == round }
         if (today.isEmpty() && upcoming.isEmpty()) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
             return
@@ -643,7 +650,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         private const val MAX_FEEDS = 30
         private const val SCAN_BUDGET_MILLIS = 60_000L
         /** Matches looked at by themselves from this long before kick-off, as the scan server does: earlier the feeds aren't up yet. */
-        private const val AHEAD_MILLIS = 35 * 60_000L
+        private const val AHEAD_MILLIS = 15 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */
         private const val DEBUG_WINDOW_MILLIS = 24 * 60 * 60_000L
         private const val IDLE_MILLIS = 30_000L

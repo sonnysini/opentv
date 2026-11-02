@@ -89,6 +89,9 @@ object AutoScan {
         }
     }
 
+    /** Above 50 fps it's a still picture (the 59.94/60s seen were a frozen DAZN logo): as good as dead. */
+    fun still(p: Probe): Boolean = (p.fps ?: 0) > MAX_FPS
+
     /** Ranks [probes] (null = didn't start), best first. */
     fun <T> rank(
         probes: List<Pair<T, Probe?>>,
@@ -99,6 +102,7 @@ object AutoScan {
     ): List<Ranked<T>> {
         val judged = probes.map { (item, p) ->
             if (p == null) return@map Ranked(item, null, Verdict.DEAD, Int.MIN_VALUE)
+            if (still(p)) return@map Ranked(item, p, Verdict.DEAD, Int.MIN_VALUE)
             val verdict = p.board?.let { gameCheck(it, home, away) } ?: Verdict.OK
             Ranked(item, p, verdict, quality(p) + if (verdict == Verdict.CONFIRMED) CONFIRMED_BONUS else 0)
         }
@@ -128,11 +132,10 @@ object AutoScan {
 
     /**
      * The quality part of the score: 50 fps above all, then lines, then bitrate (15 a Mbps, never
-     * enough to beat a step in lines), 5.1, E-AC3, start-up time. A 60 fps feed goes below every
-     * other one that plays: Italian football is 50 fps, and the 60s seen were a frozen DAZN logo.
+     * enough to beat a step in lines), 5.1, E-AC3, start-up time.
      */
     fun quality(p: Probe): Int =
-        (if ((p.fps ?: 0) >= FPS60) -FPS60_PENALTY else if ((p.fps ?: 0) >= 48) FPS50_BONUS else 0) + p.height / 2 +
+        (if ((p.fps ?: 0) >= 48) FPS50_BONUS else 0) + p.height / 2 +
             ((p.kbps ?: 0) / 1000).coerceAtMost(MAX_MBPS) * PER_MBPS +
             (if ((p.audioChannels ?: 0) >= 6) SURROUND_BONUS else 0) +
             (if (p.audioHd) AUDIO_HD_BONUS else 0) - (p.millis / 50).toInt()
@@ -140,8 +143,8 @@ object AutoScan {
     private fun fold(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
     private const val FPS50_BONUS = 1000
-    private const val FPS60 = 55
-    private const val FPS60_PENALTY = 10_000
+    /** Italian football is 50 fps (or 25): anything faster doesn't play the game. */
+    private const val MAX_FPS = 52
     private const val SURROUND_BONUS = 50
     private const val AUDIO_HD_BONUS = 20
     private const val CONFIRMED_BONUS = 200

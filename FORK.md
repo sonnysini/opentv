@@ -76,8 +76,8 @@ way the TV lists them, and changes apply at once. It is in Italian on a phone se
 - **"Channel not available"** instead of an endless spinner when nothing plays.
 - **Redesigned bar**: large logo, clock, what's on now and next, time left, an icon-only button
   row, and a backdrop that stays readable on bright pictures.
-- **Stream details, Kodi-style**: tags for resolution, codec, frame rate and audio, plus an Info
-  panel with decoder, dropped frames, download rate and buffer.
+- **Stream details, Kodi-style**: tags for resolution, codec, frame rate, the live download rate
+  (Mb/s) and audio, plus an Info panel with decoder, dropped frames and buffer.
 - **☰ in the player** opens the channel list of the current group.
 
 ## TV guide and logos
