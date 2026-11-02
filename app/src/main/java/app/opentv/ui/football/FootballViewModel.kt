@@ -492,10 +492,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // A rescheduled game is never played inside another matchday, so the first one still to
         // play decides: once today's are over, the next matchday shows.
         val week = repo.upcoming()
-        val round = (today + week).firstOrNull {
+        val matchday = (today + week).firstOrNull {
             it.league == FootballRepository.SERIE_A && it.round != null && (it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE)
         }?.round
-        val upcoming = week.filter { it.league != FootballRepository.SERIE_A || round == null || it.round == null || it.round == round }
+        val upcoming = week.filter { it.league != FootballRepository.SERIE_A || matchday == null || it.round == null || it.round == matchday }
         if (today.isEmpty() && upcoming.isEmpty()) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
             return
