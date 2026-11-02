@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.39.0 — 2 November 2026
+
+- **Download rate in the player bar.** Next to the frame rate, the Mb/s the channel is actually
+  using, measured live.
+- **Football: one Serie A matchday at a time.** Next matchday's games appear once the current
+  one is over, on the Football page and on the launcher row. The cups are unchanged.
+- **Football: feeds checked closer to kick-off.** The best feed is looked for 15 minutes before
+  the game instead of 35, when the real pictures are already on.
+- **Football: still pictures ruled out.** Feeds above 50 fps (a frozen logo, never the game) are
+  no longer offered.
+
 ## 0.38.2 — 31 October 2026
 
 - **Lighter in the background.** Screens stop following their data while the app is in the

@@ -62,7 +62,7 @@ class StreamInfoTest {
         val second = meter.sample(1_000, stats(video, audio, frames = 50, bytes = 1_000_000))
         assertThat(second.frameRate).isEqualTo("50")
         assertThat(second.download).isEqualTo("8.0 Mb/s")
-        assertThat(second.badges).containsExactly("1080p", "HEVC", "50fps", "AC3 5.1").inOrder()
+        assertThat(second.badges).containsExactly("1080p", "HEVC", "50fps", "8.0 Mb/s", "AC3 5.1").inOrder()
     }
 
     @Test

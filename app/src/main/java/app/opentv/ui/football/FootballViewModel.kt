@@ -404,7 +404,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             val p = e?.probe
             val verdict = when {
                 e == null -> null
-                p == null -> AutoScan.Verdict.DEAD
+                p == null || AutoScan.still(p) -> AutoScan.Verdict.DEAD
                 p.board != null -> AutoScan.gameCheck(p.board, m.home.name, m.away.name) ?: AutoScan.Verdict.OK
                 else -> AutoScan.Verdict.OK
             }
@@ -488,7 +488,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun load() {
         val now = System.currentTimeMillis()
         val today = repo.today().map { byClock(it, now) }
-        val upcoming = repo.upcoming()
+        val upcoming = FootballRepository.sameMatchday(today, repo.upcoming())
         if (today.isEmpty() && upcoming.isEmpty()) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
             return
@@ -643,7 +643,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         private const val MAX_FEEDS = 30
         private const val SCAN_BUDGET_MILLIS = 60_000L
         /** Matches looked at by themselves from this long before kick-off, as the scan server does: earlier the feeds aren't up yet. */
-        private const val AHEAD_MILLIS = 35 * 60_000L
+        private const val AHEAD_MILLIS = 15 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */
         private const val DEBUG_WINDOW_MILLIS = 24 * 60 * 60_000L
         private const val IDLE_MILLIS = 30_000L

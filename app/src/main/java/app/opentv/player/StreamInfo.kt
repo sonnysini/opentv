@@ -160,12 +160,13 @@ object StreamInfo {
         val bufferedSeconds: Float,
         val liveDelaySeconds: Float?,
     ) {
-        /** The short Kodi-style row for the bar: `1080p` `HEVC` `50fps` `HDR10` `AC3 5.1`. */
+        /** The short Kodi-style row for the bar: `1080p` `HEVC` `50fps` `7.8 Mb/s` `HDR10` `AC3 5.1`. */
         val badges: List<String>
             get() = listOfNotNull(
                 resolution,
                 videoCodec,
                 frameRate?.let { "${it}fps" },
+                download,
                 hdr,
                 listOfNotNull(audioCodec, channels).joinToString(" ").ifEmpty { null },
             )
