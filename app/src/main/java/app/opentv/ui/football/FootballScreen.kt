@@ -1133,7 +1133,7 @@ private val DAY_TITLE = DateTimeFormatter.ofPattern("EEEE d")
 private val WEEKDAY = DateTimeFormatter.ofPattern("EEE")
 
 /** The competitions' own names, the same in every language. */
-private fun leagueName(league: Int): String = when (league) {
+internal fun leagueName(league: Int): String = when (league) {
     FootballRepository.CHAMPIONS -> "Champions League"
     FootballRepository.EUROPA -> "Europa League"
     FootballRepository.CONFERENCE -> "Conference League"

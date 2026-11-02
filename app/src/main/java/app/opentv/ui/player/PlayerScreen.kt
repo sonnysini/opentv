@@ -639,7 +639,12 @@ fun PlayerScreen(
             }.orEmpty()
             val current = upcoming.firstOrNull()?.takeIf { it.startUtcMillis <= now }
             val next = if (current != null) upcoming.getOrNull(1) else upcoming.firstOrNull()
-            onAir = if (current == null && next == null) null else OnAir(current, next)
+            val game = if (matchFeeds) MatchFeeds.gameOf(id) else null
+            onAir = when {
+                game != null -> matchOnAir(game, current, context.getString(R.string.player_match_source, variantName(channel)))
+                current == null && next == null -> null
+                else -> OnAir(current, next)
+            }
             val changeAt = (current?.endUtcMillis ?: next?.startUtcMillis) ?: (now + EPG_RETRY_MILLIS)
             delay((changeAt - now).coerceIn(1_000L, EPG_RETRY_MILLIS))
         }
@@ -1003,7 +1008,9 @@ fun PlayerScreen(
             else -> Unit
         }
 
-        val channelTitle = when (val s = state) {
+        // A game from the football home plays as a channel of its own: its name and crests, not the feed's.
+        val game = if (matchFeeds) currentId?.let(MatchFeeds::gameOf) else null
+        val channelTitle = game?.title ?: when (val s = state) {
             is PlayerController.State.Buffering -> s.title
             is PlayerController.State.Playing -> s.title
             is PlayerController.State.Error -> s.title
@@ -1060,7 +1067,10 @@ fun PlayerScreen(
                 val logoUrl = (variants.firstOrNull { it.id == currentId }?.shownLogo() ?: listedChannel?.shownLogo())
                     ?.takeIf { it.isNotBlank() }
                 Row {
-                    if (logoUrl != null) {
+                    if (game?.homeCrest != null) {
+                        MatchCrests(game.homeCrest, game.awayCrest, Modifier.padding(top = 4.dp).size(LOGO_SIZE))
+                        Spacer(Modifier.width(28.dp))
+                    } else if (logoUrl != null) {
                         Box(
                             Modifier
                                 .padding(top = 4.dp)
@@ -1368,8 +1378,59 @@ fun PlayerScreen(
     }
 }
 
-/** The guide's current and following programme for the channel on screen; either may be missing. */
-private data class OnAir(val now: Programme?, val next: Programme?)
+/**
+ * The guide's current and following programme for the channel on screen; either may be missing.
+ * [footer] stands in for the following one where there's none to tell (a game: the feed it's on).
+ */
+private data class OnAir(val now: Programme?, val next: Programme?, val footer: String? = null)
+
+/**
+ * [game] as its own channel's guide: one programme from kick-off, the competition and matchday for
+ * a title. Its description is the feed's own guide's when that one is about this game, else ours.
+ */
+private fun matchOnAir(game: MatchFeeds.Game, feedNow: Programme?, source: String): OnAir {
+    val own = feedNow?.takeIf { p -> game.teams.isEmpty() || game.teams.any { p.title.contains(it, ignoreCase = true) } }
+    val start = game.kickoffUtcMillis.takeIf { it > 0 } ?: own?.startUtcMillis
+    val slot = start?.let {
+        Programme(
+            feedId = 0,
+            epgChannelId = "",
+            startUtcMillis = it,
+            endUtcMillis = it + MATCH_SLOT_MILLIS,
+            title = game.heading.ifBlank { game.title },
+            description = own?.description?.takeIf(String::isNotBlank) ?: game.about.ifBlank { null },
+        )
+    }
+    return OnAir(slot, null, source)
+}
+
+/** A game's logo: the home crest in front, top left, over the away one behind it, bottom right. */
+@Composable
+private fun MatchCrests(home: String, away: String?, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .padding(12.dp),
+    ) {
+        if (away == null) {
+            AsyncImage(model = home, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+            return@Box
+        }
+        AsyncImage(
+            model = away,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.align(Alignment.BottomEnd).fillMaxSize(0.5f),
+        )
+        AsyncImage(
+            model = home,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.align(Alignment.TopStart).fillMaxSize(0.62f),
+        )
+    }
+}
 
 /** The stream's specs as small outlined tags next to the channel name, Kodi-style. */
 @Composable
@@ -1509,6 +1570,16 @@ private fun OnAirPanel(info: OnAir, clock: Long) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+        info.footer?.takeIf { info.next == null }?.let { footer ->
+            if (info.now != null) Spacer(Modifier.height(8.dp))
+            Text(
+                footer,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.65f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         info.next?.let { next ->
             if (info.now != null) Spacer(Modifier.height(8.dp))
@@ -2027,6 +2098,9 @@ private const val FALLBACK_NOTICE_MILLIS = 3_000L
 private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
 private val LOGO_SIZE = 128.dp
+
+/** A game's slot in its guide: kick-off to the end of a game with its break and stoppage time. */
+private const val MATCH_SLOT_MILLIS = 110 * 60_000L
 
 /** Maps a remote's number keys (top row and numeric keypad) to a digit, or null for other keys. */
 private fun keyToDigit(key: Key): Char? = when (key) {
