@@ -20,6 +20,18 @@ object MatchFeeds {
         val feeds: List<Long>,
         /** As the football home shows them ("Lazio · FHD · DVS"). */
         val names: Map<Long, String> = emptyMap(),
+        /**
+         * What the player shows the game as, a channel of its own: the crests for a logo (home in
+         * front; no away on the goal show), its slot from kick-off, "Serie A · 10ª giornata" for
+         * the programme, and a line about it for when the feed's guide has none.
+         */
+        val homeCrest: String? = null,
+        val awayCrest: String? = null,
+        /** The teams' names, to tell the feed's own programme about this game from another. */
+        val teams: List<String> = emptyList(),
+        val kickoffUtcMillis: Long = 0,
+        val heading: String = "",
+        val about: String = "",
     )
 
     @Volatile private var games: List<Game> = emptyList()

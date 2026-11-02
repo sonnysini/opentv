@@ -13,6 +13,7 @@ import app.opentv.data.repo.FootballRepository
 import app.opentv.data.repo.FootballRepository.Match
 import app.opentv.data.repo.FootballRepository.MatchChannel
 import app.opentv.data.repo.FootballRepository.Phase
+import app.opentv.R
 import app.opentv.data.model.Channel
 import app.opentv.data.model.shownName
 import app.opentv.BuildConfig
@@ -319,8 +320,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             val order = sources(g).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(g) }
             val ordered = if (g.match.id == item.match.id) listOf(first) + order.filter { it.id != first.id } else order
             if (ordered.isEmpty()) return@mapNotNull null
-            MatchFeeds.Game(g.match.id, titleOf(g.match), ordered.map { it.id }, ordered.associate { it.id to nameOf(it) }) to
-                ordered.first()
+            gameOf(g.match, ordered) to ordered.first()
         }.distinctBy { it.second.id } // one feed can't open two games: the queue keys on it
         MatchFeeds.set(games.map { it.first })
         PlaybackQueue.items = games.map { (g, lead) -> PlaybackQueue.Item(lead.id, g.title, lead.logoUrl) }
@@ -447,6 +447,29 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun titleOf(m: Match) = if (m.goals) m.home.name else "${m.home.name} - ${m.away.name}"
+
+    /** [m] as the player shows it: a channel of its own, airing the game. */
+    private fun gameOf(m: Match, feeds: List<Channel>): MatchFeeds.Game {
+        val app = getApplication<Application>()
+        val league = leagueName(m.league)
+        val round = m.round?.takeIf { r -> r.isNotEmpty() && r.all(Char::isDigit) }
+        return MatchFeeds.Game(
+            matchId = m.id,
+            title = titleOf(m),
+            feeds = feeds.map { it.id },
+            names = feeds.associate { it.id to nameOf(it) },
+            homeCrest = m.home.crestUrl,
+            awayCrest = m.away.crestUrl.takeUnless { m.goals },
+            teams = if (m.goals) emptyList() else listOf(m.home.name, m.away.name),
+            kickoffUtcMillis = m.kickoffUtcMillis,
+            heading = round?.let { "$league · " + app.getString(R.string.football_matchday, it) } ?: league,
+            about = when {
+                m.goals -> ""
+                round != null -> app.getString(R.string.player_match_about, titleOf(m), round, league)
+                else -> app.getString(R.string.player_match_about_no_round, titleOf(m), league)
+            },
+        )
+    }
 
     private fun nameOf(c: Channel) = listOf(c.shownName, c.qualityLabel).filter(String::isNotBlank).joinToString(" · ")
 

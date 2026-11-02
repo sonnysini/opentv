@@ -51,6 +51,9 @@
     <string name="football_full_time">Full time</string>
     <string name="football_round">%1$s · MATCHDAY %2$s</string>
     <string name="football_matchday">matchday %1$s</string>
+    <string name="player_match_about">%1$s, %3$s matchday %2$s.</string>
+    <string name="player_match_about_no_round">%1$s, %2$s.</string>
+    <string name="player_match_source">source: %1$s</string>
     <string name="football_unavailable">Couldn\'t load the fixtures.</string>
     <string name="football_none">No matches in the next few days.</string>
     <string name="football_no_youtube">YouTube isn\'t installed</string>
