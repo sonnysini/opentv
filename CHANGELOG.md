@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.39.1 — 2 November 2026
+
+- **Football: the scan server is asked first.** With a scan server set, the TV reads its rankings
+  before looking at any feed itself, so a game the server already scanned is never scanned again
+  on the TV. Games not started yet are left to the server; the TV only scans a game on now that
+  the server has no ranking for. Without a scan server nothing changes.
+
 ## 0.39.0 — 2 November 2026
 
 - **Download rate in the player bar.** Next to the frame rate, the Mb/s the channel is actually

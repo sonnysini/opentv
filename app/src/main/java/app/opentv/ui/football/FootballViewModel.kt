@@ -232,11 +232,16 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private fun byServer(item: Item): Boolean =
         store.fromServer(item.match.id) && sources(item).any { it.looked && it.usable }
 
+    /** When the scan server was last read. */
+    private var syncedAt = 0L
+
     /** Reads the scan server's rankings (when one is set) into the looks. */
     private suspend fun syncServer() {
         val url = graph.settings.scanServerUrl.value
         if (url.isBlank()) return
-        val server = ServerScans.fetch(graph.httpClient, url) ?: return
+        val server = ServerScans.fetch(graph.httpClient, url)
+        syncedAt = System.currentTimeMillis()
+        if (server == null) return
         if (ServerScans.apply(server, feeds, store).isNotEmpty()) _looks.value++
     }
 
@@ -342,6 +347,12 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                         if (focus === f) publishFocus(f)
                         continue
                     }
+                    // The scan server first: what it ranked since the last read needs no look here.
+                    if (graph.settings.scanServerUrl.value.isNotBlank() &&
+                        System.currentTimeMillis() - syncedAt >= SYNC_EVERY_MILLIS
+                    ) {
+                        syncServer()
+                    }
                     val bg = nextInBackground()
                     if (bg == null) {
                         _progress.value = null
@@ -364,11 +375,13 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private fun nextInBackground(): Pair<Item, Channel>? {
         val now = System.currentTimeMillis()
         val window = if (BuildConfig.DEBUG) DEBUG_WINDOW_MILLIS else AHEAD_MILLIS
+        // With a scan server, games not started yet are its to look at: it scans just before kick-off.
+        val server = graph.settings.scanServerUrl.value.isNotBlank()
         val ui = _ui.value
         // ui.heroes: games on together are tabs of the big card, in none of the rows.
         val candidates = ui.all
             .filter { it.relevant }
-            .filter { it.match.phase == Phase.LIVE || (it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
+            .filter { it.match.phase == Phase.LIVE || (!server && it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
             .sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }))
         for (item in candidates) {
             // Ranked by the scan server: the connection stays free for the player.
@@ -637,6 +650,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         private fun gameLength(league: Int): Long =
             if (league == FootballRepository.SERIE_A) 120 * 60_000L else 150 * 60_000L
         private const val RELOAD_AFTER_MILLIS = 5 * 60_000L
+        /** The scan server is read again before a look of the TV's own after this long. */
+        private const val SYNC_EVERY_MILLIS = 60_000L
 
         private const val TAG = "AutoScan"
         /** About 1 s a feed: a minute of waiting at most. */
