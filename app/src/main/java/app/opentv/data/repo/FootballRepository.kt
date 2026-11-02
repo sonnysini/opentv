@@ -552,6 +552,18 @@ class FootballRepository(
 
     companion object {
         /**
+         * [upcoming] without the Serie A games of a later matchday (FotMob's round) than the one on
+         * now: next week's games wait until this week's are over. A rescheduled game is never played
+         * inside another matchday, so the first Serie A game still to play decides.
+         */
+        fun sameMatchday(today: List<Match>, upcoming: List<Match>): List<Match> {
+            val matchday = (today + upcoming).firstOrNull {
+                it.league == SERIE_A && it.round != null && (it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE)
+            }?.round ?: return upcoming
+            return upcoming.filter { it.league != SERIE_A || it.round == null || it.round == matchday }
+        }
+
+        /**
          * The goal channel as a game of its own: for the first kick-off today that two or more
          * games share and that isn't over, from that kick-off, live while any of them is.
          * Null on days with no games played together.

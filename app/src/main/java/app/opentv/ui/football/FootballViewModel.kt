@@ -488,14 +488,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun load() {
         val now = System.currentTimeMillis()
         val today = repo.today().map { byClock(it, now) }
-        // Serie A: only the matchday on now (FotMob's round), not the next one's games a week out.
-        // A rescheduled game is never played inside another matchday, so the first one still to
-        // play decides: once today's are over, the next matchday shows.
-        val week = repo.upcoming()
-        val matchday = (today + week).firstOrNull {
-            it.league == FootballRepository.SERIE_A && it.round != null && (it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE)
-        }?.round
-        val upcoming = week.filter { it.league != FootballRepository.SERIE_A || matchday == null || it.round == null || it.round == matchday }
+        val upcoming = FootballRepository.sameMatchday(today, repo.upcoming())
         if (today.isEmpty() && upcoming.isEmpty()) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
             return
