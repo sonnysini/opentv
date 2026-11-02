@@ -1396,7 +1396,8 @@ private fun matchOnAir(game: MatchFeeds.Game, feedNow: Programme?, source: Strin
             feedId = 0,
             epgChannelId = "",
             startUtcMillis = it,
-            endUtcMillis = it + MATCH_SLOT_MILLIS,
+            // Where the feed's guide has the game, it ends when that says; else two hours on.
+            endUtcMillis = own?.endUtcMillis?.takeIf { end -> end > it + MIN_GUIDE_SLOT_MILLIS } ?: (it + MATCH_SLOT_MILLIS),
             title = game.heading.ifBlank { game.title },
             description = own?.description?.takeIf(String::isNotBlank) ?: game.about.ifBlank { null },
         )
@@ -2099,8 +2100,11 @@ private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
 private val LOGO_SIZE = 128.dp
 
-/** A game's slot in its guide: kick-off to the end of a game with its break and stoppage time. */
-private const val MATCH_SLOT_MILLIS = 110 * 60_000L
+/** A game's slot without a guide of its own: two hours from kick-off, stoppage time and all. */
+private const val MATCH_SLOT_MILLIS = 120 * 60_000L
+
+/** Shorter than this, the feed's programme isn't the whole game (a pre-match show ending at kick-off). */
+private const val MIN_GUIDE_SLOT_MILLIS = 90 * 60_000L
 
 /** Maps a remote's number keys (top row and numeric keypad) to a digit, or null for other keys. */
 private fun keyToDigit(key: Key): Char? = when (key) {
