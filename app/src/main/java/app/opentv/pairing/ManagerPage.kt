@@ -26,7 +26,7 @@ object ManagerPage {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="robots" content="noindex, nofollow">
-        <title>OpenTV — manage channels</title>
+        <title>MyTV — manage channels</title>
         <style>
           :root { --bg:#07080c; --surface:#12141d; --surface2:#181b26; --line:#2a2f3d;
                   --text:#e8eaf0; --muted:#a8aec0; --accent:#7c93ff; --accent2:#3a447a;
@@ -137,7 +137,7 @@ object ManagerPage {
         <body>
           <div class="wrap">
             <header>
-              <h1>OpenTV — manage channels</h1>
+              <h1>MyTV — manage channels</h1>
               <p class="hint">Changes apply to your TV the moment you make them.</p>
             </header>
 
@@ -270,8 +270,8 @@ object ManagerPage {
             </div>
 
             <p class="privacy">
-              This page is served by your television, over your own network — there is no OpenTV
-              account and no OpenTV server. Nothing you change here leaves your home.
+              This page is served by your television, over your own network — there is no MyTV
+              account and no MyTV server. Nothing you change here leaves your home.
             </p>
           </div>
 
@@ -313,7 +313,7 @@ object ManagerPage {
           // English is written in place; a phone set to Italian gets these. Static text in the page is
           // swapped once at load ([translatePage]); text built later goes through t().
           var IT = {
-            "OpenTV — manage channels": "OpenTV — gestisci i canali",
+            "MyTV — manage channels": "MyTV — gestisci i canali",
             "Changes apply to your TV the moment you make them.": "Le modifiche arrivano subito sulla TV.",
             "Add a provider": "Aggiungi un fornitore",
             "Add an Xtream, M3U or Stalker portal from here — a real keyboard beats the TV remote. Your login stays on the TV.": "Aggiungi qui un fornitore Xtream, M3U o Stalker: una tastiera vera batte il telecomando. I dati di accesso restano sulla TV.",
@@ -371,7 +371,7 @@ object ManagerPage {
             "Tap a name to rename. Star to favourite, eye to hide, drag ≡ to move, ⋯ to merge.": "Tocca il nome per rinominare. Stella = preferito, occhio = nascondi, trascina ≡ per spostare, ⋯ per unire.",
             "Close": "Chiudi",
             "Search every channel…": "Cerca tra tutti i canali…",
-            "This page is served by your television, over your own network — there is no OpenTV account and no OpenTV server. Nothing you change here leaves your home.": "Questa pagina arriva dalla tua TV, sulla tua rete: niente account né server OpenTV. Quello che cambi qui non esce di casa.",
+            "This page is served by your television, over your own network — there is no MyTV account and no MyTV server. Nothing you change here leaves your home.": "Questa pagina arriva dalla tua TV, sulla tua rete: niente account né server MyTV. Quello che cambi qui non esce di casa.",
             "Couldn't reach the TV — still on the same wifi?": "Non raggiungo la TV: sei ancora sulla stessa rete wifi?",
             "Drag to move": "Trascina per spostare",
             "No channels yet — add a provider above to get started.": "Ancora nessun canale: aggiungi un fornitore qui sopra.",
@@ -428,9 +428,9 @@ object ManagerPage {
             "Adding & loading channels…": "Aggiungo e carico i canali…",
             "Added — {0} channels loaded.": "Aggiunto: {0} canali caricati.",
             "Could not add the provider": "Non sono riuscito ad aggiungere il fornitore",
-            "This isn't an OpenTV settings file.": "Questo non è un file di impostazioni OpenTV.",
+            "This isn't a MyTV settings file.": "Questo non è un file di impostazioni MyTV.",
             "Saved {0}.": "Salvato il {0}.",
-            "Saved {0} from OpenTV {1}.": "Salvato il {0} da OpenTV {1}.",
+            "Saved {0} from MyTV {1}.": "Salvato il {0} da MyTV {1}.",
             "Channel merges ({0} merged, {1} ignored) — added to the ones on the TV": "Unioni dei canali ({0} unite, {1} ignorate): si aggiungono a quelle della TV",
             "Tick at least one.": "Spunta almeno una voce.",
             "Importing…": "Importo…",
@@ -439,7 +439,7 @@ object ManagerPage {
             "{0} new merges": "{0} unioni nuove",
             "{0} guide feeds": "{0} guide TV",
             "Done — {0}. The TV is regrouping channels.": "Fatto: {0}. La TV sta raggruppando i canali.",
-            "The language changes next time OpenTV starts.": "La lingua cambia al prossimo avvio di OpenTV.",
+            "The language changes next time MyTV starts.": "La lingua cambia al prossimo avvio di MyTV.",
             "Nothing selected to import.": "Niente da importare selezionato.",
             "Fill in the required fields for this provider type.": "Compila i campi obbligatori per questo tipo di fornitore.",
             "Could not save the source.": "Non sono riuscito a salvare il fornitore.",
@@ -468,7 +468,7 @@ object ManagerPage {
                 if (key && IT[key]) c.nodeValue = c.nodeValue.replace(/\S[\s\S]*\S|\S/, IT[key]);
               }
             }
-            document.title = t('OpenTV — manage channels');
+            document.title = t('MyTV — manage channels');
           }
           translatePage();
 
@@ -1026,11 +1026,11 @@ object ManagerPage {
             f.text().then(function(text){
               var d = null;
               try { d = JSON.parse(text); } catch (e) {}
-              if (!d || d.format !== 'opentv-settings') { setStatus("This isn't an OpenTV settings file.", 'err'); return; }
+              if (!d || d.format !== 'opentv-settings') { setStatus("This isn't a MyTV settings file.", 'err'); return; }
               bakText = text;
               var n = (d.merges || []).length, ig = (d.ignoredPairs || []).length;
               var when = d.exportedAt ? new Date(d.exportedAt).toLocaleString() : '';
-              el('bakInfo').textContent = d.app ? t('Saved {0} from OpenTV {1}.', when, d.app) : t('Saved {0}.', when);
+              el('bakInfo').textContent = d.app ? t('Saved {0} from MyTV {1}.', when, d.app) : t('Saved {0}.', when);
               el('bakMergesLabel').textContent = t('Channel merges ({0} merged, {1} ignored) — added to the ones on the TV', n, ig);
               el('bakSettings').disabled = !d.settings;
               el('bakSettings').checked = !!d.settings;
@@ -1053,7 +1053,7 @@ object ManagerPage {
                 if (m) parts.push(t('{0} new merges', r.merges));
                 if (r.guides) parts.push(t('{0} guide feeds', r.guides));
                 var msg = t('Done — {0}. The TV is regrouping channels.', parts.join(', '));
-                if (r.languageChanged) msg += ' ' + t('The language changes next time OpenTV starts.');
+                if (r.languageChanged) msg += ' ' + t('The language changes next time MyTV starts.');
                 setStatus(msg, 'ok');
                 el('bakChoice').hidden = true; el('bakFile').value = ''; bakText = null;
               })

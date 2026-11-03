@@ -77,7 +77,13 @@ fun AboutScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(20.dp))
 
         Section(stringResource(R.string.about_version)) {
-            Text("OpenTV ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+            Text("MyTV ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.about_based_on),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(
