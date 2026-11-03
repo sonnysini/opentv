@@ -32,12 +32,15 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.util.concurrent.atomic.AtomicLong
 
@@ -60,7 +63,7 @@ import java.util.concurrent.atomic.AtomicLong
 class PlayerController(
     context: Context,
     private val scope: CoroutineScope,
-    httpClient: OkHttpClient,
+    private val httpClient: OkHttpClient,
     subtitlesEnabled: Boolean = true,
     /**
      * Tunes the player for the guide's muted preview pane: a shallow start buffer so a highlighted
@@ -346,8 +349,10 @@ class PlayerController(
             bytesLoaded.set(0)
             _state.value = State.Buffering(request.title)
 
+            val uri = if (vod && !request.isLive) pinnedUrl(request) else request.url
+
             val mediaItem = MediaItem.Builder()
-                .setUri(request.url)
+                .setUri(uri)
                 .apply {
                     // Only meaningful for live streams; setting it on VOD skews seeking.
                     val offset = request.liveOffsetMillis
@@ -373,6 +378,34 @@ class PlayerController(
                 prepare()
             }
         }
+    }
+
+    /**
+     * Where a film's address finally lands, so every read of it goes to the same server.
+     *
+     * Xtream panels redirect each request to one of several edge servers, and those don't all hold
+     * the same encode of a title — the same id comes back with different file sizes. Starting from
+     * the top that goes unnoticed, but a resume or a seek mixes reads from two different files: the
+     * index points into the wrong one and Matroska fails with "must be in a Cues", or the extractor
+     * churns through data that never lines up. Pinning the redirect target keeps one file per play;
+     * a restart resolves again from the original address. Any failure falls back to that address.
+     */
+    private suspend fun pinnedUrl(request: Request): String {
+        if (!request.url.startsWith("http")) return request.url
+        return withTimeoutOrNull(PIN_TIMEOUT_MILLIS) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val probe = okhttp3.Request.Builder()
+                        .url(request.url)
+                        .header("User-Agent", request.userAgent)
+                        .header("Range", "bytes=0-0")
+                        .build()
+                    httpClient.newCall(probe).execute().use { response ->
+                        response.request.url.toString().takeIf { response.isSuccessful }
+                    }
+                }.getOrNull()
+            }
+        } ?: request.url
     }
 
     /** Playback position, frames drawn so far and whether there's a picture, for [StallWatch]. */
@@ -576,6 +609,7 @@ class PlayerController(
         const val VOD_MIN_BUFFER_MILLIS = 30_000
         const val VOD_MAX_BUFFER_MILLIS = 120_000
         const val VOD_TARGET_BUFFER_BYTES = 64 * 1024 * 1024
+        const val PIN_TIMEOUT_MILLIS = 6_000L
         const val BUFFER_FOR_PLAYBACK_MILLIS = 2_500
         const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MILLIS = 5_000
 
