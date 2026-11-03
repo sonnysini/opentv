@@ -40,6 +40,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import app.opentv.data.remote.TmdbLists
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,10 +66,11 @@ import coil.compose.AsyncImage
 import app.opentv.ui.theme.focusLift
 
 /**
- * Movies: a modern, row-based home — Continue Watching, Recommended, Recently added and a row per
- * genre, each a horizontally-scrolling shelf of poster cards. A category chip strip along the top
- * keeps whole-category browsing one press away without a permanent rail eating the width. Clicking
- * a film opens its detail page rather than playing straight away, the streaming-app convention.
+ * Movies, in the live page's clothes: a hero turning over the week's most watched films, genre tabs
+ * in Oswald, then shelves — Continue Watching, the week's Top 10, Recently added, Popular in Italy,
+ * Top rated. The charts are TMDB's ([app.opentv.data.repo.VodHomeRepository]), kept to what the
+ * provider really has; with no TMDB key the hero shows what came in lately and the shelves are the
+ * catalogue's own. The last tab, All, is the provider's categories, one grid each.
  */
 @Composable
 fun MoviesScreen(
@@ -87,6 +91,9 @@ fun MoviesScreen(
     val vodProgress by viewModel.vodProgress.collectAsStateWithLifecycle()
     val sources by viewModel.sources.collectAsStateWithLifecycle()
     val selectedSource by viewModel.selectedVodSource.collectAsStateWithLifecycle()
+    val tmdbEnabled by viewModel.tmdbEnabled.collectAsStateWithLifecycle()
+    val home by viewModel.moviesHome.collectAsStateWithLifecycle()
+    val genreHits by viewModel.movieGenreHits.collectAsStateWithLifecycle()
 
     // Pull the movie library the first time this tab is opened, not at login; refresh the computed
     // home rows (recommended, by-genre) on open too — cheap, and covers a library already on disk.
@@ -94,60 +101,129 @@ fun MoviesScreen(
         if (hasSources) viewModel.ensureVodLoaded()
         viewModel.loadHomeFeeds()
     }
+    // The charts, once there's a library to look them up in (and again when a sync lands).
+    LaunchedEffect(vodLoading, tmdbEnabled) {
+        if (!vodLoading && tmdbEnabled) viewModel.loadMoviesHome()
+    }
 
-    // null = the curated home rows; a category id = that category's full grid.
+    val genres = if (tmdbEnabled) TmdbLists.MOVIE_GENRES.entries.toList() else emptyList()
+    val tabLabels = listOf(stringResource(R.string.vod_tab_featured)) + genres.map { it.value } +
+        stringResource(R.string.vod_tab_all)
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    if (tab > tabLabels.lastIndex) tab = 0
+    val allTab = tabLabels.lastIndex
     var browseCategory by remember { mutableStateOf<String?>(null) }
 
-    val hasContent = resume.isNotEmpty() || recommended.isNotEmpty() ||
-        recentlyAdded.isNotEmpty() || genreRows.isNotEmpty()
-
-    Column(Modifier.fillMaxSize()) {
-        SearchAffordance(onOpenSearch)
-        if (sources.size > 1) {
-            ProviderChips(
-                sources = sources,
-                selected = selectedSource,
-                onSelectAll = { browseCategory = null; viewModel.selectVodSource(null) },
-                onSelectSource = { id -> browseCategory = null; viewModel.selectVodSource(id) },
-            )
+    val chartHero = home?.hero.orEmpty()
+    val slides = remember(home, recentlyAdded) {
+        val top = home?.top10.orEmpty()
+        chartHero.map { h ->
+            val rank = top.indexOfFirst { it.movie.id == h.hit.movie.id }.takeIf { it >= 0 }?.plus(1)
+            h.hit.toSlide(rank, h.logoUrl, h.genres)
+        }.ifEmpty { recentlyAdded.filter { it.backdropUrl != null }.take(6).map { it.toSlide() } }
+    }
+    val kicker = stringResource(
+        if (chartHero.isNotEmpty()) R.string.vod_hero_trending_movies else R.string.vod_hero_new_movies,
+    )
+    val play: (Movie) -> Unit = { onResume("movie:${it.id}", it.streamUrl, it.displayTitle) }
+    val selectTab: (Int) -> Unit = { i ->
+        tab = i
+        if (i == allTab && browseCategory == null) {
+            categories.firstOrNull()?.let { browseCategory = it.id; viewModel.selectMovieCategory(it.id) }
         }
-        CategoryChips(
-            entries = categories.map { it.id to it.name },
-            selected = browseCategory,
-            onSelectHome = { browseCategory = null; viewModel.selectMovieCategory(null) },
-            onSelectCategory = { id -> browseCategory = id; viewModel.selectMovieCategory(id) },
-        )
-        vodProgress?.let { VodSyncStrip(it) }
-        // Weighted so the shelves fill the space under the fixed search + chips header, exactly and
-        // unambiguously — the same reason Live TV weights its guide grid.
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                browseCategory != null -> MovieCategoryGrid(categoryMovies, viewModel, onOpenMovie)
-                !hasContent -> when {
-                    vodLoading || isSyncing -> LoadingVod(stringResource(R.string.vod_loading_movies))
-                    hasSources -> EmptyVod(stringResource(R.string.vod_no_movies), stringResource(R.string.vod_no_movies_provider))
-                    else -> EmptyVod(stringResource(R.string.vod_no_movies), stringResource(R.string.vod_no_movies_add))
+    }
+
+    if (tab == allTab) {
+        Column(Modifier.fillMaxSize()) {
+            Spacer(Modifier.height(12.dp))
+            VodTabs(tabLabels, tab, selectTab)
+            if (sources.size > 1) {
+                ProviderChips(
+                    sources = sources,
+                    selected = selectedSource,
+                    onSelectAll = { browseCategory = null; viewModel.selectVodSource(null) },
+                    onSelectSource = { id -> browseCategory = null; viewModel.selectVodSource(id) },
+                )
+            }
+            CategoryChips(
+                entries = categories.map { it.id to it.name },
+                selected = browseCategory,
+                onSelectHome = { tab = 0 },
+                onSelectCategory = { id -> browseCategory = id; viewModel.selectMovieCategory(id) },
+            )
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (browseCategory != null) MovieCategoryGrid(categoryMovies, viewModel, onOpenMovie)
+            }
+        }
+        return
+    }
+
+    val hasContent = resume.isNotEmpty() || recommended.isNotEmpty() || recentlyAdded.isNotEmpty() ||
+        genreRows.isNotEmpty() || home != null
+    if (!hasContent && slides.isEmpty()) {
+        when {
+            vodLoading || isSyncing -> LoadingVod(stringResource(R.string.vod_loading_movies))
+            hasSources -> EmptyVod(stringResource(R.string.vod_no_movies), stringResource(R.string.vod_no_movies_provider))
+            else -> EmptyVod(stringResource(R.string.vod_no_movies), stringResource(R.string.vod_no_movies_add))
+        }
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        if (slides.isNotEmpty()) item(key = "hero") {
+            VodHero(slides, kicker, onWatch = { play(it.movie) }, onDetails = { onOpenMovie(it.movie) })
+        }
+        item(key = "tabs") { VodTabs(tabLabels, tab, selectTab, Modifier.padding(top = if (slides.isEmpty()) 12.dp else 0.dp)) }
+        vodProgress?.let { p -> item(key = "sync") { VodSyncStrip(p) } }
+        if (tab == 0) {
+            if (resume.isNotEmpty()) item(key = "cw") { ContinueWatchingRow(resume, onResume) }
+            home?.let { h ->
+                item(key = "top10") { TopTenRow(stringResource(R.string.vod_top10_movies), h.top10, onOpenMovie) }
+            }
+            if (recentlyAdded.isNotEmpty()) item(key = "recent") {
+                MoviePosterRow(stringResource(R.string.vod_recently_added), recentlyAdded, onOpenMovie)
+            }
+            home?.let { h ->
+                item(key = "popular") { HitRow(stringResource(R.string.vod_popular_italy), h.popular, onOpenMovie) }
+                item(key = "best") { HitRow(stringResource(R.string.vod_top_rated_ever), h.topRated, onOpenMovie) }
+            }
+            if (home == null) {
+                if (recommended.isNotEmpty()) item(key = "rec") {
+                    MoviePosterRow(stringResource(R.string.vod_recommended), recommended, onOpenMovie)
                 }
-                else -> LazyColumn(
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    if (resume.isNotEmpty()) item(key = "cw") { ContinueWatchingRow(resume, onResume) }
-                    if (recommended.isNotEmpty()) item(key = "rec") {
-                        MoviePosterRow(stringResource(R.string.vod_recommended), recommended, onOpenMovie)
-                    }
-                    if (recentlyAdded.isNotEmpty()) item(key = "recent") {
-                        MoviePosterRow(stringResource(R.string.vod_recently_added), recentlyAdded, onOpenMovie)
-                    }
-                    items(genreRows, key = { "g:${it.genre}" }) { group ->
-                        MoviePosterRow(group.genre, group.items, onOpenMovie)
-                    }
+                items(genreRows, key = { "g:${it.genre}" }) { group ->
+                    MoviePosterRow(group.genre, group.items, onOpenMovie)
+                }
+            }
+        } else {
+            val genreId = genres[tab - 1].key
+            val hits = genreHits[genreId]
+            item(key = "load:$genreId") { LaunchedEffect(genreId) { if (hits == null) viewModel.loadMovieGenre(genreId) } }
+            when {
+                hits == null -> item(key = "wait") { GenreNote(stringResource(R.string.vod_genre_loading)) }
+                hits.isEmpty() -> item(key = "none") { GenreNote(stringResource(R.string.vod_genre_empty)) }
+                else -> items(hits.chunked(GRID_COLUMNS), key = { "r:${it.first().movie.id}" }) { row ->
+                    HitGridRow(row, onOpenMovie)
                 }
             }
         }
     }
 }
+
+@Composable
+private fun GenreNote(text: String) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 36.dp, vertical = 24.dp),
+    )
+}
+
+private const val GRID_COLUMNS = 7
 
 /**
  * Shows: the same row-based home as Movies (Continue Watching, Recently added, genre rows) with the
@@ -230,7 +306,7 @@ fun SeriesScreen(
 
 /** One category's films as a poster grid. Quality variants collapse to one card, badged. */
 @Composable
-private fun MovieCategoryGrid(movies: List<Movie>, viewModel: VodViewModel, onOpenMovie: (Movie) -> Unit) {
+internal fun MovieCategoryGrid(movies: List<Movie>, viewModel: VodViewModel, onOpenMovie: (Movie) -> Unit) {
     if (movies.isEmpty()) { LoadingVod(stringResource(R.string.vod_loading_movies)); return }
     val groups = remember(movies) { viewModel.collapseVariants(movies) }
     LazyVerticalGrid(
@@ -520,7 +596,7 @@ private fun ResumeCard(item: VodViewModel.ResumeItem, onClick: () -> Unit) {
  * d-pad without a permanent side rail taking the width.
  */
 @Composable
-private fun CategoryChips(
+internal fun CategoryChips(
     entries: List<Pair<String, String>>,
     selected: String?,
     onSelectHome: () -> Unit,
@@ -551,7 +627,7 @@ private fun CategoryChips(
  * pick a provider to browse just its Movies/Shows categories, or "All sources" to fold them.
  */
 @Composable
-private fun ProviderChips(
+internal fun ProviderChips(
     sources: List<Source>,
     selected: Long?,
     onSelectAll: () -> Unit,
@@ -644,7 +720,7 @@ private fun SearchAffordance(onOpenSearch: () -> Unit) {
 }
 
 @Composable
-private fun EmptyVod(title: String, body: String) {
+internal fun EmptyVod(title: String, body: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(title, style = MaterialTheme.typography.headlineSmall)
@@ -655,7 +731,7 @@ private fun EmptyVod(title: String, body: String) {
 }
 
 @Composable
-private fun LoadingVod(message: String) {
+internal fun LoadingVod(message: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
@@ -675,7 +751,7 @@ private fun LoadingVod(message: String) {
  * is on its way. Counts are this run's titles, so they climb from zero on a refresh too.
  */
 @Composable
-private fun VodSyncStrip(progress: app.opentv.data.repo.CatalogRepository.VodProgress) {
+internal fun VodSyncStrip(progress: app.opentv.data.repo.CatalogRepository.VodProgress) {
     val format = remember { java.text.NumberFormat.getIntegerInstance() }
     Row(
         verticalAlignment = Alignment.CenterVertically,

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.42.0 — 3 November 2026
+
+- **Movies, redone in the live page's style.** A hero at the top turns over the week's most
+  watched films that are in your list — backdrop, the film's own title art, year, genres, running
+  time, TMDB rating and the copies on offer (4K/FHD/HD), Watch and Details. Under it, genre tabs in
+  Oswald (Featured, Action, Comedy, Drama, Horror, Thriller, Sci-fi, Animation, Family, All) and
+  shelves: Continue watching, the week's Top 10 with big numbers, Recently added, Popular in
+  Italy, Top rated of all time. Charts come from TMDB and keep only the titles your provider has
+  (matched by TMDB id, else by name and year); they are cached for 12 hours. All is the provider's
+  own categories, as before. Without a TMDB key the hero shows the latest arrivals and the shelves
+  are the catalogue's own.
+
 ## 0.41.0 — 3 November 2026
 
 - **OpenTV is now MyTV.** New name, new teal logo (a screen with a play button) and a new wide

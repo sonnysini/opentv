@@ -1201,6 +1201,37 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
      * entirely unless the profile changed or the catalogue size moved — so re-opening Movies/Shows
      * is free and a post-sync refresh still fills the rows in.
      */
+    // ---- TMDB charts on the Movies home (see VodHomeRepository) ----------------------------------
+
+    /** True once the user has a TMDB key: the home is then built from TMDB's charts. */
+    val tmdbEnabled: StateFlow<Boolean> =
+        settings.tmdbApiKey
+            .map { it.isNotBlank() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), settings.tmdbApiKey.value.isNotBlank())
+
+    private val _moviesHome = MutableStateFlow<app.opentv.data.repo.MoviesHome?>(null)
+    val moviesHome: StateFlow<app.opentv.data.repo.MoviesHome?> = _moviesHome.asStateFlow()
+
+    private val _movieGenreHits = MutableStateFlow<Map<Int, List<app.opentv.data.repo.MovieHit>>>(emptyMap())
+    val movieGenreHits: StateFlow<Map<Int, List<app.opentv.data.repo.MovieHit>>> = _movieGenreHits.asStateFlow()
+
+    /** (Re)builds the chart rows; cheap when the library hasn't changed since the last build. */
+    fun loadMoviesHome() {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.movieCount() }.getOrDefault(0)
+            if (count == 0) return@launch
+            _moviesHome.value = runCatching { graph.vodHomeRepository.moviesHome(count) }.getOrNull()
+        }
+    }
+
+    fun loadMovieGenre(genreId: Int) {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.movieCount() }.getOrDefault(0)
+            val hits = runCatching { graph.vodHomeRepository.movieGenre(genreId, count) }.getOrDefault(emptyList())
+            _movieGenreHits.value = _movieGenreHits.value + (genreId to hits)
+        }
+    }
+
     fun loadHomeFeeds() {
         viewModelScope.launch {
             homeFeedsMutex.withLock {

@@ -593,6 +593,14 @@ interface MovieDao {
     @Query("SELECT * FROM movies WHERE id IN (:ids)")
     suspend fun byIds(ids: List<Long>): List<Movie>
 
+    /** Every copy of the films with these TMDB ids — how a TMDB chart finds what the provider has. */
+    @Query("SELECT * FROM movies WHERE tmdbId IN (:tmdbIds)")
+    suspend fun byTmdbIds(tmdbIds: List<String>): List<Movie>
+
+    /** Films whose name contains [text] — the title fallback for those the provider gave no TMDB id. */
+    @Query("SELECT * FROM movies WHERE name LIKE '%' || :text || '%' LIMIT :limit")
+    suspend fun nameContains(text: String, limit: Int): List<Movie>
+
     /** How many movies are on disk. A cheap COUNT the home feeds use to tell "the library grew"
      *  from "same as last time" without loading every row (see VodViewModel.loadHomeFeeds). */
     @Query("SELECT COUNT(*) FROM movies")
@@ -769,6 +777,14 @@ interface SeriesDao {
 
     @Query("SELECT * FROM series WHERE id = :id")
     suspend fun byId(id: Long): Series?
+
+    /** Every copy of the shows with these TMDB ids. See [MovieDao.byTmdbIds]. */
+    @Query("SELECT * FROM series WHERE tmdbId IN (:tmdbIds)")
+    suspend fun byTmdbIds(tmdbIds: List<String>): List<Series>
+
+    /** Shows whose name contains [text]. See [MovieDao.nameContains]. */
+    @Query("SELECT * FROM series WHERE name LIKE '%' || :text || '%' LIMIT :limit")
+    suspend fun nameContains(text: String, limit: Int): List<Series>
 
     @Query("UPDATE series SET favourite = :favourite WHERE id = :id")
     suspend fun setFavourite(id: Long, favourite: Boolean)

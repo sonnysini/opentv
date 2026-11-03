@@ -121,6 +121,13 @@ object ServiceLocator {
             )
         }
 
+        val vodHomeRepository: app.opentv.data.repo.VodHomeRepository by lazy {
+            app.opentv.data.repo.VodHomeRepository(
+                database.movies(),
+                app.opentv.data.remote.TmdbLists(httpClient, settings, java.io.File(appContext.cacheDir, "tmdb")),
+            )
+        }
+
         val tvHighlightsRepository: app.opentv.data.repo.TvHighlightsRepository by lazy {
             app.opentv.data.repo.TvHighlightsRepository(httpClient, database.channels())
         }
