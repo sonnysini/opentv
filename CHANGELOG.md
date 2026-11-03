@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.44.1 — 4 November 2026
+
+- **Cup games found under their Italian names.** Guides write "Atletico M. - Bayern M." or
+  "FC Barcellona - Aston Villa": a game is now matched by any word of each team's name and by the
+  Italian one (Barcellona, Lipsia, Stoccarda, Praga…), so these games get their channels and play.
+  A game with no channel found says so instead of doing nothing on OK.
+- **Changing game in the player goes like a TV channel.** Channel up/down to another game starts
+  from its first channel, with the servers chosen in the settings ahead of the rest. The game
+  started with OK keeps the best feed the scan found.
+- **Closing "Pick source" goes back to the game.** Back out of the list of a game's feeds and
+  focus returns to its card, not to the menu on the left.
+
 ## 0.44.0 — 3 November 2026
 
 - **Film player bar with icons.** Round icon-only buttons in place of the labelled chips: a white

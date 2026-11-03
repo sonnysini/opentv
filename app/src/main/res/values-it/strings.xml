@@ -48,6 +48,7 @@
     <string name="player_match_source">fonte: %1$s</string>
     <string name="football_unavailable">Impossibile caricare le partite.</string>
     <string name="football_none">Nessuna partita nei prossimi giorni.</string>
+    <string name="football_no_channels">Nessun canale trovato per questa partita</string>
     <string name="football_no_youtube">YouTube non è installato</string>
     <string name="nav_movies">Film</string>
     <string name="nav_shows">Serie</string>

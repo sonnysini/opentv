@@ -56,6 +56,7 @@
     <string name="player_match_source">source: %1$s</string>
     <string name="football_unavailable">Couldn\'t load the fixtures.</string>
     <string name="football_none">No matches in the next few days.</string>
+    <string name="football_no_channels">No channel found for this match</string>
     <string name="football_no_youtube">YouTube isn\'t installed</string>
     <string name="nav_movies">Movies</string>
     <string name="nav_shows">Shows</string>
