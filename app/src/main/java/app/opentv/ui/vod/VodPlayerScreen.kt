@@ -69,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -181,6 +182,7 @@ fun VodPlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val seekFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     // The bar's buttons take focus a beat after it appears; until then the screen itself holds it,
     // and presses in that gap must still seek/pause rather than fall through.
@@ -497,6 +499,7 @@ fun VodPlayerScreen(
                         durationMs = durationMs,
                         pendingMs = pendingSeekMs,
                         focusRequester = seekFocus,
+                        downFocus = playFocus,
                         onSeek = { forward, repeat -> nudgeSeek(forward, repeat) },
                         onToggle = { togglePause() },
                         modifier = Modifier.weight(1f),
@@ -520,6 +523,7 @@ fun VodPlayerScreen(
                     VodChip(
                         icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         label = if (paused) stringResource(R.string.common_play) else stringResource(R.string.player_pause),
+                        focusRequester = playFocus,
                     ) { togglePause() }
                     Spacer(Modifier.width(10.dp))
                     VodChip(Icons.Filled.FastForward, stringResource(R.string.player_forward)) {
@@ -595,6 +599,7 @@ private fun SeekBar(
     durationMs: Long,
     pendingMs: Long?,
     focusRequester: FocusRequester,
+    downFocus: FocusRequester,
     onSeek: (forward: Boolean, repeatCount: Int) -> Unit,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
@@ -606,6 +611,8 @@ private fun SeekBar(
         modifier
             .height(44.dp)
             .focusRequester(focusRequester)
+            // Down lands on play/pause, not on whichever button sits under the bar's middle.
+            .focusProperties { down = downFocus }
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -731,9 +738,16 @@ private fun TrackPanel(
             controller.disableText(); onPicked(trackType, ""); onDone()
         }
     }
-    groups.forEach { group ->
-        for (i in 0 until group.length) {
-            if (!group.isTrackSupported(i)) continue
+    // Tracks in the viewer's own language first — a film can carry twenty subtitle languages.
+    val ownLanguage = java.util.Locale.getDefault().isO3Language
+    val ordered = groups.flatMap { group -> (0 until group.length).map { group to it } }
+        .sortedBy { (group, i) ->
+            val code = group.getTrackFormat(i).language
+            if (code != null && runCatching { java.util.Locale(code).isO3Language }.getOrNull() == ownLanguage) 0 else 1
+        }
+    ordered.forEach { (group, i) ->
+        run {
+            if (!group.isTrackSupported(i)) return@run
             val format = group.getTrackFormat(i)
             val language = format.language?.takeIf { it.isNotBlank() && it != "und" }
             val name = language?.let(::languageName)
