@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.44.0 — 3 November 2026
+
+- **Film player bar with icons.** Round icon-only buttons in place of the labelled chips: a white
+  disc marks the focused one, a light one the picker that's open. The seek bar runs the full width;
+  the time (position / length, and what's left) sits on the right of the buttons. Up from the
+  buttons goes back to the seek bar, down puts the bar away. The picture-format button shows the
+  new format's name for a moment. Look taken from NuvioTV's player (GPL-3.0).
+
 ## 0.43.0 — 3 November 2026
 
 - **A proper film player.** With the bar hidden the remote works like a TV player: left/right jump

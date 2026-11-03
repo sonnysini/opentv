@@ -13,7 +13,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -46,11 +45,11 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -178,6 +177,16 @@ fun VodPlayerScreen(
     // holding the button glides the marker instead of rebuffering at every step.
     var pendingSeekMs by remember { mutableStateOf<Long?>(null) }
     var seekCommit by remember { mutableStateOf<Job?>(null) }
+
+    // Bumped by the format button; the new format's name shows next to it for a moment.
+    var aspectHint by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var aspectHintVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(aspectHint) {
+        if (aspectHint == 0) return@LaunchedEffect
+        aspectHintVisible = true
+        delay(1_500)
+        aspectHintVisible = false
+    }
 
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -485,65 +494,87 @@ fun VodPlayerScreen(
                     Spacer(Modifier.height(4.dp))
                 }
                 Text(title, style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                Spacer(Modifier.height(12.dp))
+
+                // Full-width seek bar. It holds focus when the bar comes up: left/right seek (faster
+                // the longer they're held), OK pauses, down reaches the buttons.
+                val shownPosition = pendingSeekMs ?: positionMs
+                SeekBar(
+                    positionMs = positionMs,
+                    bufferedMs = bufferedMs,
+                    durationMs = durationMs,
+                    pendingMs = pendingSeekMs,
+                    focusRequester = seekFocus,
+                    downFocus = playFocus,
+                    onSeek = { forward, repeat -> nudgeSeek(forward, repeat) },
+                    onToggle = { togglePause() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
                 Spacer(Modifier.height(8.dp))
 
-                // Seek bar with times either side. It holds focus when the bar comes up: left/right
-                // seek (faster the longer they're held), OK pauses, down reaches the buttons.
-                val shownPosition = pendingSeekMs ?: positionMs
+                // Icon-only buttons with the times on the right, after NuvioTV's player controls
+                // (github.com/NuvioMedia/NuvioTV, GPL-3.0). Up goes back to the seek bar, down puts
+                // the bar away.
+                fun hideFromButtons() { vodPanel = VodPanel.NONE; controlsVisible = false }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatDuration(shownPosition), color = Color.White)
-                    Spacer(Modifier.width(12.dp))
-                    SeekBar(
-                        positionMs = positionMs,
-                        bufferedMs = bufferedMs,
-                        durationMs = durationMs,
-                        pendingMs = pendingSeekMs,
-                        focusRequester = seekFocus,
-                        downFocus = playFocus,
-                        onSeek = { forward, repeat -> nudgeSeek(forward, repeat) },
-                        onToggle = { togglePause() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    // Time left reads better than the total when deciding whether to finish tonight.
-                    Text(
-                        if (durationMs > 0 && !growingRec) "-" + formatDuration(durationMs - shownPosition)
-                        else formatDuration(durationMs),
-                        color = Color.White,
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    VodChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind)) {
+                    // Kept for touch screens, where the seek bar can't be dragged; on a TV the bar
+                    // itself is quicker.
+                    VodIconButton(Icons.Filled.Replay10, stringResource(R.string.player_rewind), seekFocus, ::hideFromButtons) {
                         if (growingRec) seekRelative(-15_000) else controller.seekBackward(); interaction++
                     }
-                    Spacer(Modifier.width(10.dp))
-                    VodChip(
+                    VodIconButton(
                         icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         label = if (paused) stringResource(R.string.common_play) else stringResource(R.string.player_pause),
+                        upFocus = seekFocus,
+                        onDown = ::hideFromButtons,
                         focusRequester = playFocus,
                     ) { togglePause() }
-                    Spacer(Modifier.width(10.dp))
-                    VodChip(Icons.Filled.FastForward, stringResource(R.string.player_forward)) {
+                    VodIconButton(Icons.Filled.Forward10, stringResource(R.string.player_forward), seekFocus, ::hideFromButtons) {
                         if (growingRec) seekRelative(15_000) else controller.seekForward(); interaction++
                     }
-                    Spacer(Modifier.width(20.dp))
-                    VodChip(Icons.Filled.ClosedCaption, stringResource(R.string.player_subtitles), subtitlesChipFocus) {
+                    Spacer(Modifier.width(16.dp))
+                    VodIconButton(
+                        Icons.Filled.ClosedCaption, stringResource(R.string.player_subtitles), seekFocus, ::hideFromButtons,
+                        subtitlesChipFocus, active = vodPanel == VodPanel.SUBTITLES,
+                    ) {
                         vodPanel = if (vodPanel == VodPanel.SUBTITLES) VodPanel.NONE else VodPanel.SUBTITLES
                         interaction++
                     }
-                    Spacer(Modifier.width(10.dp))
-                    VodChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), audioChipFocus) {
+                    VodIconButton(
+                        Icons.Filled.Audiotrack, stringResource(R.string.player_audio), seekFocus, ::hideFromButtons,
+                        audioChipFocus, active = vodPanel == VodPanel.AUDIO,
+                    ) {
                         vodPanel = if (vodPanel == VodPanel.AUDIO) VodPanel.NONE else VodPanel.AUDIO
                         interaction++
                     }
-                    Spacer(Modifier.width(10.dp))
-                    // One press steps Fit → Fill → Stretch; the label says which is on.
-                    VodChip(Icons.Filled.AspectRatio, resizeLabel(resizeMode)) {
+                    // One press steps Fit → Fill → Stretch; the new format's name shows briefly beside it.
+                    VodIconButton(Icons.Filled.AspectRatio, resizeLabel(resizeMode), seekFocus, ::hideFromButtons) {
                         settings.setVodResizeMode(nextResizeMode(resizeMode))
+                        aspectHint++
                         interaction++
+                    }
+                    AnimatedVisibility(visible = aspectHintVisible, enter = fadeIn(), exit = fadeOut()) {
+                        Text(
+                            resizeLabel(resizeMode),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            modifier = Modifier.padding(start = 4.dp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        formatDuration(shownPosition) + " / " + formatDuration(durationMs),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                    )
+                    // Time left reads better than the total when deciding whether to finish tonight.
+                    if (durationMs > 0 && !growingRec) {
+                        Text(
+                            "  −" + formatDuration(durationMs - shownPosition),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.6f),
+                        )
                     }
                 }
             }
@@ -671,34 +702,47 @@ private fun SeekBar(
     }
 }
 
+/**
+ * A round, icon-only transport button: see-through at rest, a white disc with a black icon when
+ * focused (after NuvioTV's ControlButton). [active] marks the button whose picker is open.
+ */
 @Composable
-private fun VodChip(
+private fun VodIconButton(
     icon: ImageVector,
     label: String,
+    upFocus: FocusRequester,
+    onDown: () -> Unit,
     focusRequester: FocusRequester? = null,
+    active: Boolean = false,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val container = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.14f)
-    val content = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
-    Row(
+    val container = when {
+        focused -> Color.White
+        active -> Color.White.copy(alpha = 0.22f)
+        else -> Color.Transparent
+    }
+    Box(
         modifier = Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusProperties { up = upFocus }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) { onDown(); true } else false
+            }
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
-            .clip(RoundedCornerShape(12.dp))
+            .size(52.dp)
+            .clip(CircleShape)
             .background(container)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                else Modifier,
-            )
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, tint = content)
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = content)
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (focused) Color.Black else Color.White,
+            modifier = Modifier.size(28.dp),
+        )
     }
 }
 
