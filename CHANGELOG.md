@@ -8,8 +8,6 @@
   buttons goes back to the seek bar, down puts the bar away. The picture-format button shows the
   new format's name for a moment. Look taken from NuvioTV's player (GPL-3.0).
 
-## 0.43.0 — 3 November 2026
-
 - **A proper film player.** With the bar hidden the remote works like a TV player: left/right jump
   10 s at a time, faster while held (30 s, a minute, two), with the target time shown over the bar
   before the jump happens; OK pauses; the media keys work everywhere. The bar opens on its seek bar,
