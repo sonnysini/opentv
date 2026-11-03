@@ -1193,6 +1193,71 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- TMDB charts on the Movies and Shows homes (see VodHomeRepository) -----------------------
+
+    /** True once the user has a TMDB key: the home is then built from TMDB's charts. */
+    val tmdbEnabled: StateFlow<Boolean> =
+        settings.tmdbApiKey
+            .map { it.isNotBlank() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), settings.tmdbApiKey.value.isNotBlank())
+
+    private val _moviesHome = MutableStateFlow<app.opentv.data.repo.MoviesHome?>(null)
+    val moviesHome: StateFlow<app.opentv.data.repo.MoviesHome?> = _moviesHome.asStateFlow()
+
+    private val _movieGenreHits = MutableStateFlow<Map<Int, List<app.opentv.data.repo.MovieHit>>>(emptyMap())
+    val movieGenreHits: StateFlow<Map<Int, List<app.opentv.data.repo.MovieHit>>> = _movieGenreHits.asStateFlow()
+
+    /** (Re)builds the chart rows; cheap when the library hasn't changed since the last build. */
+    fun loadMoviesHome() {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.movieCount() }.getOrDefault(0)
+            if (count == 0) return@launch
+            _moviesHome.value = runCatching { graph.vodHomeRepository.moviesHome(count) }.getOrNull()
+        }
+    }
+
+    fun loadMovieGenre(genreId: Int) {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.movieCount() }.getOrDefault(0)
+            val hits = runCatching { graph.vodHomeRepository.movieGenre(genreId, count) }.getOrDefault(emptyList())
+            _movieGenreHits.value = _movieGenreHits.value + (genreId to hits)
+        }
+    }
+
+    private val _seriesHome = MutableStateFlow<app.opentv.data.repo.SeriesHome?>(null)
+    val seriesHome: StateFlow<app.opentv.data.repo.SeriesHome?> = _seriesHome.asStateFlow()
+
+    private val _seriesGenreHits = MutableStateFlow<Map<Int, List<app.opentv.data.repo.SeriesHit>>>(emptyMap())
+    val seriesGenreHits: StateFlow<Map<Int, List<app.opentv.data.repo.SeriesHit>>> = _seriesGenreHits.asStateFlow()
+
+    fun loadSeriesHome() {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.seriesCount() }.getOrDefault(0)
+            if (count == 0) return@launch
+            _seriesHome.value = runCatching { graph.vodHomeRepository.seriesHome(count) }.getOrNull()
+        }
+    }
+
+    fun loadSeriesGenre(genreId: Int) {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.seriesCount() }.getOrDefault(0)
+            val hits = runCatching { graph.vodHomeRepository.seriesGenre(genreId, count) }.getOrDefault(emptyList())
+            _seriesGenreHits.value = _seriesGenreHits.value + (genreId to hits)
+        }
+    }
+
+    private val _newEpisodes = MutableStateFlow<List<CatalogRepository.NewEpisodes>>(emptyList())
+    /** Shows the profile follows with episodes it hasn't reached yet. See [CatalogRepository.newEpisodes]. */
+    val newEpisodes: StateFlow<List<CatalogRepository.NewEpisodes>> = _newEpisodes.asStateFlow()
+
+    fun loadNewEpisodes() {
+        viewModelScope.launch {
+            _newEpisodes.value = runCatching {
+                graph.catalogRepository.newEpisodes(settings.activeProfileId.value)
+            }.getOrDefault(emptyList())
+        }
+    }
+
     /**
      * Recomputes the computed home rows (Recommended + by-genre) with bounded queries.
      *
@@ -1364,6 +1429,20 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Loads a series, lazily enriching backdrop/cast/genre on first open. See CatalogRepository.seriesDetail. */
     suspend fun seriesDetail(id: Long): Series? = graph.catalogRepository.seriesDetail(id)
+
+    /** The profile's resume points for these media keys, by key — the episode cards' seen/progress. */
+    suspend fun positions(keys: List<String>): Map<String, PlaybackPosition> =
+        graph.catalogRepository.positions(settings.activeProfileId.value, keys)
+
+    /** The film's copies by quality, best first, for the page's 4K/FHD/HD buttons. */
+    suspend fun movieVariants(movie: Movie): List<app.opentv.data.repo.MovieVariant> =
+        runCatching { graph.catalogRepository.movieVariants(movie) }.getOrDefault(emptyList())
+
+    /** The title's own lettering from TMDB for its page, when there's a key and a TMDB id. */
+    suspend fun titleLogo(isMovie: Boolean, tmdbId: String?): String? = graph.vodHomeRepository.logoUrl(
+        if (isMovie) app.opentv.data.remote.TmdbLists.Kind.MOVIE else app.opentv.data.remote.TmdbLists.Kind.TV,
+        tmdbId,
+    )
 
     /** "More like this" for the movie detail screen. */
     suspend fun moreLikeThis(movie: Movie): List<Movie> = graph.catalogRepository.moreLikeThis(movie)

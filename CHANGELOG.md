@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.42.0 — 3 November 2026
+
+- **Movies, redone in the live page's style.** A hero at the top turns over the week's most
+  watched films that are in your list — backdrop, the film's own title art, year, genres, running
+  time, TMDB rating and the copies on offer (4K/FHD/HD), Watch and Details. Under it, genre tabs in
+  Oswald (Featured, Action, Comedy, Drama, Horror, Thriller, Sci-fi, Animation, Family, All) and
+  shelves: Continue watching, the week's Top 10 with big numbers, Recently added, Popular in
+  Italy, Top rated of all time. Charts come from TMDB and keep only the titles your provider has
+  (matched by TMDB id, else by name and year); they are cached for 12 hours. All is the provider's
+  own categories, as before. Without a TMDB key the hero shows the latest arrivals and the shelves
+  are the catalogue's own.
+- **Shows, the same way.** The week's trending series in the hero (Details opens the show), TMDB's
+  TV genres as tabs (Crime, Drama, Comedy, Sci-Fi & Fantasy, Animation, Action & Adventure,
+  Mystery, All), and shelves: Continue watching, New episodes, Top 10, Recently added, Popular in
+  Italy, Top rated. New episodes lists the shows you're watching whose furthest episode you
+  finished and that have more after it: it shows the next one and how many are left. Their episode
+  lists are refreshed once a session.
+- Charts and the film page's quality buttons use the Italian copy of a title when the provider also
+  has it in a foreign-language category ("🇩🇪 DE Netflix").
+- **New film and show pages.** The same hero as the home: backdrop, the title's own lettering,
+  year, genres, running time or seasons, rating and the copies on offer, the plot. A film has
+  Watch/Resume plus a button for each other copy (FHD, HD…), favourite and add-on sources, then cast
+  and similar films. A show has Resume S3 · E2 (or Watch the next episode), then tabs: one per
+  season, Cast, Similar. Seasons are rows of episode cards with the still, a bar of how far you got,
+  the length and "✓ Seen" or the minutes left; the page opens on the season you're in. Episode
+  titles drop the show name and code the provider puts in front.
+- Without a TMDB key the Movies hero no longer goes missing: a film with no wide art shows its
+  poster instead.
+- **TMDB key from the remote.** The key field now saves on the TV keyboard's Done and DOWN moves
+  on to Save; before, a key typed with the remote could never be saved.
+- Posters no longer show the providers' fake ★ 10.0.
+
 ## 0.41.0 — 3 November 2026
 
 - **OpenTV is now MyTV.** New name, new teal logo (a screen with a play button) and a new wide
