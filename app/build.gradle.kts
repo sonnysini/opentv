@@ -139,6 +139,8 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
     implementation(libs.media3.datasource.okhttp)
+    // Software audio for what the box can't decode itself (DTS, TrueHD, AC-3 on boxes without it).
+    implementation(libs.media3.ffmpeg.decoder)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
