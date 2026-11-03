@@ -244,8 +244,8 @@ class FootballRepository(
      */
     suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
         val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
-        // "#4": entries from before the goal show are looked up again.
-        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#5"
+        // "#6": entries from before teams went by their Italian names are looked up again.
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#6"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
         val missing = matches.filter { key(it) !in kept && !it.goals }
         val goalShows = matches.filter { key(it) !in kept && it.goals }
@@ -290,24 +290,30 @@ class FootballRepository(
         val windows = matches.map { m ->
             Triple(m, m.kickoffUtcMillis + 5 * MINUTE, m.kickoffUtcMillis + 100 * MINUTE)
         }
-        val args = ArrayList<Any>()
-        val sql = windows.joinToString(" UNION ALL ") { (m, from, to) ->
-            args += from
-            args += to + LONGEST_PROGRAMME_MILLIS
-            args += to
-            args += "%${keyword(m.home.name)}%"
-            args += "%${keyword(m.away.name)}%"
-            "SELECT * FROM programmes WHERE endUtcMillis > ? AND endUtcMillis < ? AND startUtcMillis < ?" +
-                " AND title LIKE ? AND title LIKE ?"
+        // A team goes by any of its names ("Bayern München", "Bayern M.", "Bayern Monaco"): one
+        // LIKE per name. In parts, under SQLite's limit on query arguments.
+        val programmes = windows.chunked(GUIDE_CHUNK).flatMap { part ->
+            val args = ArrayList<Any>()
+            val sql = part.joinToString(" UNION ALL ") { (m, from, to) ->
+                args += from
+                args += to + LONGEST_PROGRAMME_MILLIS
+                args += to
+                fun likeAny(keys: List<String>) = keys.joinToString(" OR ", "(", ")") { k ->
+                    args += "%$k%"
+                    "title LIKE ?"
+                }
+                "SELECT * FROM programmes WHERE endUtcMillis > ? AND endUtcMillis < ? AND startUtcMillis < ?" +
+                    " AND ${likeAny(teamKeys(m.home.name))} AND ${likeAny(teamKeys(m.away.name))}"
+            }
+            runCatching { programmeDao.query(SimpleSQLiteQuery(sql, args.toTypedArray())) }
+                .getOrElse { Log.w(TAG, "guide", it); emptyList() }
         }
-        val programmes = runCatching { programmeDao.query(SimpleSQLiteQuery(sql, args.toTypedArray())) }
-            .getOrElse { Log.w(TAG, "guide", it); emptyList() }
         return windows.associate { (m, from, to) ->
-            val a = keyword(m.home.name)
-            val b = keyword(m.away.name)
+            val a = teamKeys(m.home.name)
+            val b = teamKeys(m.away.name)
             m.id to programmes
                 .filter { it.endUtcMillis > from && it.startUtcMillis < to }
-                .filter { names(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase()) }
+                .filter { namesBoth(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase()) }
                 .mapTo(LinkedHashSet()) { it.epgChannelId }
         }
     }
@@ -350,7 +356,7 @@ class FootballRepository(
                 val n = fold(c.displayName).lowercase()
                 c.isLive() && !NOT_THE_GAME.containsMatchIn(n) &&
                     // A team's name in a guide-matched channel: its club channel, not the game.
-                    !names(n, a, a) && !names(n, b, b)
+                    !namesAny(n, teamKeys(match.home.name)) && !namesAny(n, teamKeys(match.away.name))
             }
             .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
             .mapNotNull { (_, variants) -> logical(variants) }
@@ -540,17 +546,82 @@ class FootballRepository(
         return word(a).containsMatchIn(t) && word(b).containsMatchIn(t)
     }
 
-    private fun fold(s: String): String =
-        if (s.all { it.code < 128 }) s else Normalizer.normalize(s, Normalizer.Form.NFD).replace(MARKS, "")
-
-    // Compiled once: building a regex per channel and per programme took seconds on a Fire TV.
-    private val words = HashMap<String, Regex>()
-
-    private fun word(w: String): Regex = synchronized(words) {
-        words.getOrPut(w) { Regex("\\b${Regex.escape(w)}\\b") }
-    }
-
     companion object {
+        /**
+         * The words a guide title may call a team by: each word of its name and the Italian one.
+         * "Atlético Madrid" → atletico, madrid ("Atletico M."); "Barcelona" → barcelona, barcellona;
+         * "AZ Alkmaar" → az, alkmaar. "FC", "Real", "City" and the like say nothing on their own.
+         */
+        fun teamKeys(name: String): List<String> {
+            val words = fold(name).lowercase().split(NON_WORD)
+                .filter { it.length >= 2 && it !in NAME_NOISE && !it.all(Char::isDigit) }
+            return (words + words.flatMap { ITALIAN_NAMES[it].orEmpty() }).distinct()
+                .ifEmpty { listOf(fold(name).lowercase()) }
+        }
+
+        /** [title] names both teams, each by any of its [teamKeys] as a whole word. */
+        fun namesBoth(title: String, home: List<String>, away: List<String>): Boolean {
+            val t = fold(title).lowercase()
+            return home.any { word(it).containsMatchIn(t) } && away.any { word(it).containsMatchIn(t) }
+        }
+
+        /** [text] names the team as a whole word. */
+        fun namesAny(text: String, keys: List<String>): Boolean {
+            val t = fold(text).lowercase()
+            return keys.any { word(it).containsMatchIn(t) }
+        }
+
+        private fun fold(s: String): String =
+            if (s.all { it.code < 128 }) s
+            else Normalizer.normalize(s, Normalizer.Form.NFD).replace(MARKS, "")
+                // Letters with no accent to strip: "Bodø", "Białystok".
+                .replace('ø', 'o').replace('Ø', 'O').replace('ł', 'l').replace('Ł', 'L')
+                .replace('đ', 'd').replace('ı', 'i').replace("æ", "ae").replace("ß", "ss")
+
+        // Compiled once: building a regex per channel and per programme took seconds on a Fire TV.
+        private val words = HashMap<String, Regex>()
+
+        private fun word(w: String): Regex = synchronized(words) {
+            words.getOrPut(w) { Regex("\\b${Regex.escape(w)}\\b") }
+        }
+
+        /** Words of a club's name that don't tell it apart: "FC", "Real", "City", "United". */
+        private val NAME_NOISE = setOf(
+            "fc", "afc", "cf", "ac", "as", "ss", "ssc", "sc", "us", "club", "real", "city", "united", "town",
+            "the", "of", "de", "del", "st", "fk", "nk", "sk", "rb", "cp", "sv", "vfb", "vfl", "bk", "if", "cd", "ud", "sd",
+        )
+
+        /** FotMob's English or local name → what Italian guides write: "FC Barcellona", "RB Lipsia". */
+        private val ITALIAN_NAMES = mapOf(
+            "barcelona" to listOf("barcellona"),
+            "munchen" to listOf("monaco"), "munich" to listOf("monaco"),
+            "stuttgart" to listOf("stoccarda"),
+            "leipzig" to listOf("lipsia"),
+            "prague" to listOf("praga"), "praha" to listOf("praga"),
+            "athens" to listOf("atene"),
+            "brugge" to listOf("bruges"),
+            "zagreb" to listOf("zagabria"),
+            "sevilla" to listOf("siviglia"),
+            "marseille" to listOf("marsiglia"),
+            "lyon" to listOf("lione"),
+            "nice" to listOf("nizza"),
+            "koln" to listOf("colonia"),
+            "freiburg" to listOf("friburgo"),
+            "frankfurt" to listOf("francoforte"),
+            "kobenhavn" to listOf("copenaghen"), "copenhagen" to listOf("copenaghen"),
+            "olympiacos" to listOf("olympiakos"),
+            "zvezda" to listOf("stella"),
+            "germain" to listOf("psg"),
+            "lisbon" to listOf("lisbona"),
+            "salzburg" to listOf("salisburgo"),
+            "moscow" to listOf("mosca"),
+            "belgrade" to listOf("belgrado"),
+            "bucharest" to listOf("bucarest"),
+            "warsaw" to listOf("varsavia"),
+            "mainz" to listOf("magonza"),
+            "gladbach" to listOf("moenchengladbach"),
+        )
+
         /**
          * [upcoming] without the Serie A games of a later matchday (FotMob's round) than the one on
          * now: next week's games wait until this week's are over. A rescheduled game is never played
@@ -608,6 +679,8 @@ class FootballRepository(
         private const val KEEP_DAYS = 14L
         /** A game's programme ends at most this long after the game: bounds the guide search. */
         private const val LONGEST_PROGRAMME_MILLIS = 6 * 60 * MINUTE
+        /** Matches per guide query: a dozen arguments each, well under SQLite's 999. */
+        private const val GUIDE_CHUNK = 40
         private const val FEED_TTL_MILLIS = 5 * MINUTE
         private const val UPLOADS_TTL_MILLIS = 30 * MINUTE
         private const val OLD_MATCH_MILLIS = 12 * 60 * MINUTE

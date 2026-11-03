@@ -42,10 +42,17 @@ object QualityPreference {
         preference: PreferredQuality,
         preferredSources: List<String> = emptyList(),
     ): List<Channel> {
-        val byQuality = orderByQuality(variants, preference)
-        if (preferredSources.isEmpty()) return byQuality
+        return bySource(orderByQuality(variants, preference), preferredSources)
+    }
+
+    /**
+     * [feeds] with those of [preferredSources] first, in the sources' order; otherwise as they
+     * come. A match's feeds keep their channels' order this way, the chosen servers ahead.
+     */
+    fun bySource(feeds: List<Channel>, preferredSources: List<String>): List<Channel> {
+        if (preferredSources.isEmpty()) return feeds
         val rankOf = preferredSources.withIndex().associate { (i, name) -> name.lowercase() to i }
-        return byQuality.sortedBy { rankOf[sourceOf(it.qualityLabel)?.lowercase()] ?: Int.MAX_VALUE }
+        return feeds.sortedBy { rankOf[sourceOf(it.qualityLabel)?.lowercase()] ?: Int.MAX_VALUE }
     }
 
     /** The restream source in a variant label: `FHD · Src` → `Src`; a label without a quality is

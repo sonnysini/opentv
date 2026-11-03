@@ -225,6 +225,13 @@ fun FootballScreen(
     var picking by remember { mutableStateOf<FootballViewModel.Item?>(null) }
     BackHandler(enabled = picking != null) { picking = null }
     val noYoutube = stringResource(R.string.football_no_youtube)
+    val noChannels = stringResource(R.string.football_no_channels)
+    // A game no channel was found for: say so, rather than nothing happening on OK.
+    val noChannel: (FootballViewModel.Item) -> Unit = { item ->
+        if (item.channels.isEmpty() && (item.match.phase == Phase.LIVE || item.match.phase == Phase.SCHEDULED)) {
+            Toast.makeText(context, noChannels, Toast.LENGTH_SHORT).show()
+        }
+    }
     val openInYouTube: (String) -> Unit = { id ->
         // Straight into a YouTube app: on Fire TV a bare link also matches Silk and Music, and
         // Android would ask which one to use.
@@ -255,6 +262,7 @@ fun FootballScreen(
         when {
             item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
             item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> viewModel.autoWatch(item)
+            else -> noChannel(item)
         }
     }
     // A launcher's match card: act on it as on a click here, once the match is on the page (its
@@ -292,7 +300,7 @@ fun FootballScreen(
         }
     }
     val hold: (FootballViewModel.Item) -> Unit = { item ->
-        if (item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty()) picking = item
+        if (item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty()) picking = item else noChannel(item)
     }
     // The game the top of the page is about: the first live (or next) one, or the tab picked.
     var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }

@@ -8,6 +8,7 @@ package app.opentv.ui.football
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.opentv.core.QualityPreference
 import app.opentv.core.ServiceLocator
 import app.opentv.data.repo.FootballRepository
 import app.opentv.data.repo.FootballRepository.Match
@@ -304,7 +305,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Plays [first] of [item]. Channel up/down then moves between the games on now (and about to
-     * start), each from its own first feed; ☰ and Quality go along the playing game's feeds.
+     * start); ☰ and Quality go along the playing game's feeds. [item] keeps its ranking; the
+     * others go like TV channels: by their channels' order, the chosen servers first ([zapOrder]).
      */
     private fun handOver(item: Item, first: Channel) {
         store.pick(item.match.id, first.id)
@@ -317,14 +319,28 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             }
             .sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }, { it.match.id }))
         val games = on.mapNotNull { g ->
-            val order = sources(g).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(g) }
-            val ordered = if (g.match.id == item.match.id) listOf(first) + order.filter { it.id != first.id } else order
+            val ordered = if (g.match.id == item.match.id) {
+                val order = sources(g).filter { it.usable }.map { it.feed }.ifEmpty { feedsOf(g) }
+                listOf(first) + order.filter { it.id != first.id }
+            } else {
+                zapOrder(g)
+            }
             if (ordered.isEmpty()) return@mapNotNull null
             gameOf(g.match, ordered) to ordered.first()
         }.distinctBy { it.second.id } // one feed can't open two games: the queue keys on it
         MatchFeeds.set(games.map { it.first })
         PlaybackQueue.items = games.map { (g, lead) -> PlaybackQueue.Item(lead.id, g.title, lead.logoUrl) }
         _autoPlay.value = first
+    }
+
+    /**
+     * [g]'s feeds as a TV channel goes: the channels in the match's order, the chosen servers
+     * first; feeds a look found dead or on another game last.
+     */
+    private fun zapOrder(g: Item): List<Channel> {
+        val dead = sources(g).filter { it.looked && !it.usable }.mapTo(HashSet()) { it.feed.id }
+        val order = QualityPreference.bySource(toLook(g), graph.settings.preferredSources.value)
+        return order.filter { it.id !in dead } + order.filter { it.id in dead }
     }
 
     private fun startWorker() {
