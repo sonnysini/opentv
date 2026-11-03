@@ -155,7 +155,7 @@ internal fun VodHero(
             }
             Spacer(Modifier.height(10.dp))
             Crossfade(slide, animationSpec = tween(500), label = "heroTitle") { shown ->
-                TitleArt(shown.title, shown.logoUrl, LOGO_HEIGHT, 320.dp)
+                TitleArt(shown.title.replace(TRAILING_YEAR, "").ifBlank { shown.title }, shown.logoUrl, LOGO_HEIGHT, 320.dp)
             }
             Spacer(Modifier.height(8.dp))
             HeroMeta(
@@ -561,7 +561,7 @@ internal fun Movie.toSlide(): HeroSlide = HeroSlide(
     title = displayTitle,
     logoUrl = null,
     backdropUrl = backdropUrl,
-    year = year,
+    year = year ?: TRAILING_YEAR.find(displayTitle)?.groupValues?.get(0)?.filter { it.isDigit() }?.toIntOrNull(),
     genres = genre.orEmpty().split(',', '|', '/').map { it.trim() }.filter { it.isNotEmpty() }.take(2).joinToString(", "),
     runtimeMinutes = durationSeconds?.let { it / 60 },
     rating = rating?.takeIf { it in 0.1..9.9 },
