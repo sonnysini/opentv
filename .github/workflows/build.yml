@@ -1,8 +1,8 @@
 name: Build
 
+# No push trigger on main: a merge is followed by a tag, and the Release workflow builds and
+# tests that same commit. Branch builds are started by hand (workflow_dispatch).
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -38,19 +38,9 @@ jobs:
           ./gradlew kspReleaseKotlin --no-parallel
           ./gradlew test --stacktrace
 
-      - name: Assemble debug APK
-        run: ./gradlew assembleDebug --stacktrace
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: opentv-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
-      # Branch/main builds also get a release APK signed with the fork's fixed key, so a test
-      # build installs over the previous one and keeps its data. Skipped where secrets are not
-      # available (pull requests from forks).
+      # Branch builds get a release APK signed with the fork's fixed key, so a test build installs
+      # over the previous one and keeps its data. Where secrets are not available (pull requests
+      # from forks) a debug APK is built instead.
       - name: Decode signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -58,6 +48,18 @@ jobs:
         run: |
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
           echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Assemble debug APK
+        if: env.KEYSTORE_PATH == ''
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        if: env.KEYSTORE_PATH == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: opentv-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
       - name: Assemble signed release APK
         if: env.KEYSTORE_PATH != ''
