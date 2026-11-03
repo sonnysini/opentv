@@ -308,7 +308,8 @@ internal fun DetailHero(
                 maxLines = 1,
             )
             Spacer(Modifier.height(8.dp))
-            TitleArt(title, logoUrl, DETAIL_LOGO_HEIGHT, 380.dp)
+            // The year is on the meta line; provider names often carry it too ("Akka (2026)").
+            TitleArt(title.replace(TRAILING_YEAR, "").ifBlank { title }, logoUrl, DETAIL_LOGO_HEIGHT, 380.dp)
             Spacer(Modifier.height(8.dp))
             HeroMeta(meta, rating, qualities)
             overview?.takeIf { it.isNotBlank() }?.let {
@@ -577,6 +578,7 @@ private val HERO_HEIGHT = 272.dp
 private val LOGO_HEIGHT = 64.dp
 private val DETAIL_HEIGHT = 312.dp
 private val DETAIL_LOGO_HEIGHT = 80.dp
+private val TRAILING_YEAR = Regex("""\s*\((19|20)\d{2}\)\s*$""")
 private const val TURN_MILLIS = 8_000
 private val Accent = Color(0xFF57D9C5)
 private val AccentDark = Color(0xFF062320)

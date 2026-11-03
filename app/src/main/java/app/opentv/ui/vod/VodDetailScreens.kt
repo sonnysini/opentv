@@ -332,12 +332,11 @@ fun SeriesDetailScreen(
         }
     }
 
-    LaunchedEffect(s.id) {
+    // Focus Resume/Watch once there's an episode to go on with, the favourite until then.
+    val hasNext = next != null
+    LaunchedEffect(s.id, hasNext) {
         delay(60)
-        runCatching { favFocus.requestFocus() }
-    }
-    LaunchedEffect(next != null) {
-        if (next != null) runCatching { playFocus.requestFocus() }
+        runCatching { (if (hasNext) playFocus else favFocus).requestFocus() }
     }
 
     val castList = remember(s.cast) { splitNames(s.cast, ',') }
