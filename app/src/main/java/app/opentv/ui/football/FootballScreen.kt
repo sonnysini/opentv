@@ -223,7 +223,12 @@ fun FootballScreen(
     BackHandler(enabled = scan != null) { viewModel.cancelScan() }
     // Hold OK on a card: its feeds to pick from by hand.
     var picking by remember { mutableStateOf<FootballViewModel.Item?>(null) }
-    BackHandler(enabled = picking != null) { picking = null }
+    // The game whose picker was closed: focus goes back to it, not to the menu on the left.
+    var refocus by remember { mutableStateOf<Long?>(null) }
+    BackHandler(enabled = picking != null) {
+        refocus = picking?.match?.id
+        picking = null
+    }
     val noYoutube = stringResource(R.string.football_no_youtube)
     val noChannels = stringResource(R.string.football_no_channels)
     // A game no channel was found for: say so, rather than nothing happening on OK.
@@ -402,12 +407,14 @@ fun FootballScreen(
                             progress = progress,
                             onSelect = { selectedId = it },
                             onPick = { picking = heroItem },
+                            refocus = refocus,
+                            onRefocused = { refocus = null },
                         )
                     }
                     rowList.forEach { row ->
                         item(key = "row:${row.league}") {
                             CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
-                                MatchRow(row, viewModel, progress, looks, open, hold)
+                                MatchRow(row, viewModel, progress, looks, open, hold, refocus) { refocus = null }
                             }
                         }
                     }
@@ -559,12 +566,20 @@ private fun Hero(
     progress: FootballViewModel.Progress?,
     onSelect: (Long) -> Unit,
     onPick: () -> Unit,
+    refocus: Long? = null,
+    onRefocused: () -> Unit = {},
 ) {
     val m = item.match
     val watch = remember { FocusRequester() }
     val feeds = viewModel.feedsOf(item)
     val checked = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
     LaunchedEffect(firstId, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
+    LaunchedEffect(refocus) {
+        if (refocus == m.id && feeds.isNotEmpty()) {
+            runCatching { watch.requestFocus() }
+            onRefocused()
+        }
+    }
 
     Column(modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)) {
         if (tabs.size >= 2) {
@@ -926,6 +941,8 @@ private fun MatchRow(
     looks: Int,
     onOpen: (FootballViewModel.Item) -> Unit,
     onHold: (FootballViewModel.Item) -> Unit,
+    refocus: Long? = null,
+    onRefocused: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 48.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -957,7 +974,14 @@ private fun MatchRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(row.items, key = { it.match.id }) { item ->
-                MatchTile(item, corner(item, viewModel, progress, looks), onHold = { onHold(item) }) { onOpen(item) }
+                val me = remember { FocusRequester() }
+                LaunchedEffect(refocus) {
+                    if (refocus == item.match.id) {
+                        runCatching { me.requestFocus() }
+                        onRefocused()
+                    }
+                }
+                MatchTile(item, corner(item, viewModel, progress, looks), Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
             }
         }
     }
@@ -969,13 +993,19 @@ private fun MatchRow(
  * teams (and score) under it.
  */
 @Composable
-private fun MatchTile(item: FootballViewModel.Item, corner: String?, onHold: () -> Unit, onClick: () -> Unit) {
+private fun MatchTile(
+    item: FootballViewModel.Item,
+    corner: String?,
+    modifier: Modifier = Modifier,
+    onHold: () -> Unit,
+    onClick: () -> Unit,
+) {
     val m = item.match
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
     // The whole tile takes focus, name included: scrolling brings that into view too.
     Column(
-        Modifier
+        modifier
             .width(200.dp)
             .onFocusChanged { focused = it.isFocused }
             .onOkHeld(onHold)
