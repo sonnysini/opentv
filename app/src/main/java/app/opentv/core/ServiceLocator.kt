@@ -125,6 +125,7 @@ object ServiceLocator {
             app.opentv.data.repo.VodHomeRepository(
                 database.movies(),
                 database.series(),
+                database.categories(),
                 app.opentv.data.remote.TmdbLists(httpClient, settings, java.io.File(appContext.cacheDir, "tmdb")),
             )
         }

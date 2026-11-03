@@ -5,10 +5,13 @@
  */
 package app.opentv.data.repo
 
+import app.opentv.data.db.CategoryDao
 import app.opentv.data.db.MovieDao
 import app.opentv.data.db.SeriesDao
 import app.opentv.data.model.Movie
 import app.opentv.data.model.Series
+import app.opentv.data.model.StreamKind
+import app.opentv.data.parser.CategoryLanguage
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.VodTitleCleaner
 import app.opentv.data.remote.TmdbLists
@@ -73,6 +76,7 @@ typealias SeriesHome = ChartHome<SeriesHit>
 class VodHomeRepository(
     private val movieDao: MovieDao,
     private val seriesDao: SeriesDao,
+    private val categoryDao: CategoryDao,
     private val lists: TmdbLists,
 ) {
     private val lock = Mutex()
@@ -165,11 +169,12 @@ class VodHomeRepository(
         val byId = titles.map { it.id }.chunked(BIND_CHUNK)
             .flatMap { movieDao.byTmdbIds(it) }
             .groupBy { it.tmdbId }
+        val foreign = foreignCategories(StreamKind.MOVIE)
         var lookups = TITLE_LOOKUPS
         val seen = HashSet<Long>()
         return titles.mapNotNull { title ->
-            val copies = byId[title.id]
-                ?: if (lookups-- > 0) movieByTitle(title) else null
+            val copies = (byId[title.id] ?: if (lookups-- > 0) movieByTitle(title) else null)
+                ?.let { all -> all.filterNot { it.categoryId in foreign }.ifEmpty { all } }
             val group = copies?.takeIf { it.isNotEmpty() }?.let { collapseMovieVariants(it).first() }
                 ?: return@mapNotNull null
             if (!seen.add(group.primary.id)) return@mapNotNull null
@@ -179,7 +184,7 @@ class VodHomeRepository(
 
     /**
      * A TV chart cut to the provider's shows. A show often sits in more than one category (dubbed,
-     * subtitled); the newest copy stands for it, one card per title.
+     * subtitled, a German catalogue); the newest Italian copy stands for it, one card per title.
      */
     private suspend fun seriesChart(chart: Chart, pages: Int = 3): List<SeriesHit> {
         val titles = runCatching { lists.chart(TmdbLists.Kind.TV, chart, pages) }.getOrDefault(emptyList())
@@ -187,16 +192,24 @@ class VodHomeRepository(
         val byId = titles.map { it.id }.chunked(BIND_CHUNK)
             .flatMap { seriesDao.byTmdbIds(it) }
             .groupBy { it.tmdbId }
+        val foreign = foreignCategories(StreamKind.SERIES)
         var lookups = TITLE_LOOKUPS
         val seen = HashSet<Long>()
         return titles.mapNotNull { title ->
-            val copies = byId[title.id]
-                ?: if (lookups-- > 0) seriesByTitle(title) else null
+            val copies = (byId[title.id] ?: if (lookups-- > 0) seriesByTitle(title) else null)
+                ?.let { all -> all.filterNot { it.categoryId in foreign }.ifEmpty { all } }
             val show = copies?.maxByOrNull { it.addedMillis } ?: return@mapNotNull null
             if (!seen.add(show.id)) return@mapNotNull null
             SeriesHit(title, show)
         }
     }
+
+    /**
+     * Categories in another language ("🇩🇪 DE Netflix"): a chart title found there too is shown
+     * from its Italian copy. See [CategoryLanguage.isForeign].
+     */
+    private suspend fun foreignCategories(kind: StreamKind): Set<String> =
+        categoryDao.allByKind(kind).filter { CategoryLanguage.isForeign(it.name) }.mapTo(HashSet()) { it.id }
 
     /** The provider's copies of [title] found by name, for films it stamped no TMDB id on. */
     private suspend fun movieByTitle(title: TmdbTitle): List<Movie> =

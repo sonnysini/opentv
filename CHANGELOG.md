@@ -17,6 +17,8 @@
   Italy, Top rated. New episodes lists the shows you're watching whose furthest episode you
   finished and that have more after it: it shows the next one and how many are left. Their episode
   lists are refreshed once a session.
+- Charts and the film page's quality buttons use the Italian copy of a title when the provider also
+  has it in a foreign-language category ("🇩🇪 DE Netflix").
 - **New film and show pages.** The same hero as the home: backdrop, the title's own lettering,
   year, genres, running time or seasons, rating and the copies on offer, the plot. A film has
   Watch/Resume plus a button for each other copy (FHD, HD…), favourite and add-on sources, then cast

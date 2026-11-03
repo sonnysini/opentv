@@ -25,6 +25,7 @@ import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StreamKind
 import app.opentv.data.parser.CategoryFamily
+import app.opentv.data.parser.CategoryLanguage
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.M3uParser
 import app.opentv.data.parser.MergeSuggester
@@ -757,13 +758,16 @@ class CatalogRepository(
 
     /**
      * The other copies of [movie] — the same film in 4K, FHD, HD — best first, [movie] among them.
-     * Found by its TMDB id, else by name; [collapseMovieVariants] keeps only true quality variants.
+     * Found by its TMDB id, else by name; copies in foreign-language categories are left out and
+     * [collapseMovieVariants] keeps only true quality variants.
      */
     suspend fun movieVariants(movie: Movie): List<MovieVariant> = withContext(Dispatchers.IO) {
         val tmdbId = movie.tmdbId?.takeIf { it.isNotBlank() && it != "0" }
         val copies = if (tmdbId != null) movieDao.byTmdbIds(listOf(tmdbId))
         else movieDao.nameContains(VOD_YEAR.replace(VodTitleCleaner.clean(movie.name), " ").trim(), VARIANT_LOOKUP)
-        collapseMovieVariants((copies + movie).distinctBy { it.id })
+        val foreign = categoryDao.allByKind(StreamKind.MOVIE).filter { CategoryLanguage.isForeign(it.name) }.mapTo(HashSet()) { it.id }
+        val italian = copies.filter { it.id == movie.id || it.categoryId !in foreign }
+        collapseMovieVariants((italian + movie).distinctBy { it.id })
             .firstOrNull { g -> g.variants.any { it.movie.id == movie.id } }
             ?.variants.orEmpty()
     }
