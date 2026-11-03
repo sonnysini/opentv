@@ -754,7 +754,7 @@ private fun TrackPanel(
             val details = buildList {
                 // A track label that only repeats the language ("Italian", "ita") adds nothing.
                 format.label?.takeIf { label ->
-                    label.isNotBlank() && listOfNotNull(name, language, language?.let(::englishLanguageName))
+                    label.isNotBlank() && listOfNotNull(name, language, language?.let(::englishLanguageName), "forced")
                         .none { label.equals(it, ignoreCase = true) }
                 }?.let(::add)
                 codecName(format.sampleMimeType)?.let(::add)

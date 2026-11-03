@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.43.0 — 3 November 2026
+
+- **A proper film player.** With the bar hidden the remote works like a TV player: left/right jump
+  10 s at a time, faster while held (30 s, a minute, two), with the target time shown over the bar
+  before the jump happens; OK pauses; the media keys work everywhere. The bar opens on its seek bar,
+  down reaches play/pause, and the time on the right is what's left.
+- **Resuming a film is quick again.** Providers redirect each request to one of several servers
+  that don't all hold the same file; a resume or a seek used to mix two of them and stall for half a
+  minute or fail ("must be in a Cues"). The player now sticks to one server for the whole film.
+- **Films with DTS or TrueHD audio play with sound** on boxes that can't decode them (Fire TV): the
+  FFmpeg audio decoder steps in when the box has none. A codec that fails to start hands over to the
+  next one instead of stopping playback.
+- After a dropped connection a film carries on from where it stopped, not from where it was opened.
+  The film buffer is deeper (up to two minutes) but capped at 64 MB so a 4K file can't fill the
+  memory of a stick.
+- Audio and subtitle pickers name each track in your language with its format ("Italiano · Dolby
+  Digital+ · 5.1", forced subtitles marked), list your language first, and remember the pick for the
+  next film. Subtitles have a size (small, medium, large) and a background (shadow, box, outline).
+- A picture-format button (Fit, Fill, Stretch) in the film player, remembered apart from live TV.
+
 ## 0.42.0 — 3 November 2026
 
 - **Movies, redone in the live page's style.** A hero at the top turns over the week's most
