@@ -511,7 +511,7 @@ class ManagerServer(
     private fun handleRestore(output: OutputStream, body: String, query: Map<String, String>) {
         val file = SettingsBackup.decode(body)
         if (file == null) {
-            writeJson(output, RestoreDto(ok = false, error = "This isn't an OpenTV settings file."))
+            writeJson(output, RestoreDto(ok = false, error = "This isn't a MyTV settings file."))
             return
         }
         val withSettings = query["settings"] == "1" && file.settings != null

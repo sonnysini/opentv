@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.41.0 — 3 November 2026
+
+- **OpenTV is now MyTV.** New name, new teal logo (a screen with a play button) and a new wide
+  banner with the two-tone MyTV wordmark, matching My Launcher. The app id is unchanged, so it
+  updates in place and keeps every setting. About notes that MyTV is based on OpenTV.
+
 ## 0.39.1 — 2 November 2026
 
 - **Football: the scan server is asked first.** With a scan server set, the TV reads its rankings

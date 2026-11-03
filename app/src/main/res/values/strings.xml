@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OpenTV</string>
+    <string name="app_name">MyTV</string>
 
     <!-- ============================ Common / reused ============================ -->
     <string name="common_done">Done</string>
@@ -13,7 +13,7 @@
     <string name="common_stop">Stop</string>
     <string name="common_delete">Delete</string>
     <string name="common_selected">Selected</string>
-    <string name="exit_title">Leave OpenTV?</string>
+    <string name="exit_title">Leave MyTV?</string>
     <string name="exit_body">You\'ll go back to your TV\'s home screen.</string>
     <string name="exit_confirm">Leave</string>
     <string name="exit_cancel">Stay</string>
@@ -137,12 +137,12 @@
     <string name="rec_notification_one">Recording 1 programme</string>
     <string name="rec_notification_many">Recording %1$d programmes</string>
     <string name="rec_channel_name">Recording</string>
-    <string name="rec_channel_desc">Shown while OpenTV is recording</string>
+    <string name="rec_channel_desc">Shown while MyTV is recording</string>
     <string name="rec_error_nothing">Nothing was recorded</string>
     <string name="rec_error_usb_no_folder">No USB folder chosen. Open Recording settings and pick a folder on your drive.</string>
     <string name="rec_error_usb_unavailable">USB drive not available. Re-plug the drive and choose the folder again in Recording settings.</string>
     <string name="rec_background_prompt_title">Keep recording when you leave?</string>
-    <string name="rec_background_prompt_body">Android may stop this recording when the screen sleeps or you leave OpenTV. Allow OpenTV to ignore battery optimisation so recordings keep running, even in standby — the way a set-top box does.</string>
+    <string name="rec_background_prompt_body">Android may stop this recording when the screen sleeps or you leave MyTV. Allow MyTV to ignore battery optimisation so recordings keep running, even in standby — the way a set-top box does.</string>
     <string name="rec_background_prompt_allow">Allow</string>
     <string name="rec_background_prompt_not_now">Not now</string>
 
@@ -176,7 +176,7 @@
     <string name="settings_providers_subtitle">Add, remove and re-test your IPTV sources; choose what to download</string>
     <string name="settings_addons_title">Add-ons (Stremio)</string>
     <string name="settings_addons_subtitle">Play from Stremio add-ons you set up yourself</string>
-    <string name="addons_note">Add a Stremio add-on by pasting its manifest URL. OpenTV ships with none — you bring your own. If the add-on is debrid-backed, set your debrid key up on the add-on\'s own site and paste the personalised URL it gives you; your key stays there, never in OpenTV.</string>
+    <string name="addons_note">Add a Stremio add-on by pasting its manifest URL. MyTV ships with none — you bring your own. If the add-on is debrid-backed, set your debrid key up on the add-on\'s own site and paste the personalised URL it gives you; your key stays there, never in MyTV.</string>
     <string name="addons_url_label">Add-on manifest URL</string>
     <string name="addons_add">Add</string>
     <string name="addons_checking">Checking…</string>
@@ -334,7 +334,7 @@
     <string name="recset_usb_change">Change folder</string>
     <string name="recset_usb_saving_to">Saving to: %1$s</string>
     <string name="recset_usb_none">No folder chosen yet</string>
-    <string name="recset_usb_hint">Plug in a USB drive or external storage formatted exFAT or FAT32, then choose a folder on it. Recordings are written straight to that folder and still play back and delete inside OpenTV.</string>
+    <string name="recset_usb_hint">Plug in a USB drive or external storage formatted exFAT or FAT32, then choose a folder on it. Recordings are written straight to that folder and still play back and delete inside MyTV.</string>
     <string name="recset_usb_need_folder">Choose a folder before saving to USB.</string>
     <string name="recset_usb_no_picker">No folder picker is available on this device.</string>
     <string name="recset_nas_connection">NAS connection</string>
@@ -369,9 +369,9 @@
     <string name="recset_background_allowed">Allowed</string>
     <string name="recset_background_not_allowed">Not allowed</string>
     <string name="recset_background_fix">Fix</string>
-    <string name="recset_background_desc">Android may stop recordings when the device sleeps or you leave OpenTV, unless OpenTV is allowed to ignore battery optimisation. Allowing it keeps recordings running even in standby, like a set-top box.</string>
+    <string name="recset_background_desc">Android may stop recordings when the device sleeps or you leave MyTV, unless MyTV is allowed to ignore battery optimisation. Allowing it keeps recordings running even in standby, like a set-top box.</string>
     <string name="recset_background_on_title">Background recording is on</string>
-    <string name="recset_background_on_desc">Recordings will keep running when you leave OpenTV or the TV goes to sleep.</string>
+    <string name="recset_background_on_desc">Recordings will keep running when you leave MyTV or the TV goes to sleep.</string>
     <string name="recset_background_toast">Background recording enabled — recordings will keep going in the background.</string>
 
     <!-- ============================ TV guide (EPG) settings ============================ -->
@@ -395,7 +395,7 @@
     <string name="epg_add_guide">Add guide</string>
 
     <!-- ============================ Sync watch history ============================ -->
-    <string name="sync_desc">Copy your continue-watching between two OpenTV devices over your own wifi — nothing leaves the house, and no account is involved.</string>
+    <string name="sync_desc">Copy your continue-watching between two MyTV devices over your own wifi — nothing leaves the house, and no account is involved.</string>
     <string name="sync_share_from_here">Share from here</string>
     <string name="sync_receive">Receive</string>
     <string name="sync_ready_to_share">Ready to share</string>
@@ -422,8 +422,9 @@
     <string name="sync_nas_auto">Auto-sync when the app opens</string>
 
     <!-- ============================ About ============================ -->
-    <string name="about_title">About OpenTV</string>
+    <string name="about_title">About MyTV</string>
     <string name="about_version">Version</string>
+    <string name="about_based_on">Based on OpenTV, the open-source IPTV player, and released under the same GPLv3 licence.</string>
     <string name="about_update_available">Update available: %1$s — see the prompt to install.</string>
     <string name="about_up_to_date">You\'re on the latest version.</string>
     <string name="about_checking">Checking…</string>
@@ -431,7 +432,7 @@
     <string name="about_what_is_title">What it is</string>
     <string name="about_what_is_body">A free, open-source IPTV player for Android TV, Fire TV and phones. It\'s a player only — it doesn\'t supply channels; you connect the service you already pay for. Nothing you enter leaves your device except to talk to your own provider.</string>
     <string name="about_built_open_title">Built in the open</string>
-    <string name="about_built_open_body">OpenTV is developed openly, with AI doing a large share of the coding under human direction — that\'s stated plainly, not hidden. Because it\'s open source, no single person going away can take it down: anyone can read every line, build it, and carry it on.</string>
+    <string name="about_built_open_body">MyTV is developed openly, with AI doing a large share of the coding under human direction — that\'s stated plainly, not hidden. Because it\'s open source, no single person going away can take it down: anyone can read every line, build it, and carry it on.</string>
     <string name="about_support_title">Support the project</string>
     <string name="about_support_body">OpenTV is free and always will be — nothing is gated. If it\'s useful and you\'d like to chip in, GitHub Sponsors or a one-off tip keeps the updates coming: new features, fixes and support all come out of spare evenings. Entirely optional, and genuinely appreciated.</string>
     <string name="about_sponsor_github">GitHub Sponsors</string>
@@ -447,7 +448,7 @@
     <string name="onboarding_default_provider_name">My provider</string>
     <string name="onboarding_default_playlist_name">My playlist</string>
     <string name="onboarding_add_provider_title">Add your provider</string>
-    <string name="onboarding_add_provider_desc">OpenTV is a player. It doesn\'t supply channels — you connect the service you already pay for.</string>
+    <string name="onboarding_add_provider_desc">MyTV is a player. It doesn\'t supply channels — you connect the service you already pay for.</string>
     <string name="onboarding_xtream_login">Xtream Codes login</string>
     <string name="onboarding_m3u_url">M3U playlist URL</string>
     <string name="onboarding_stalker_portal">Stalker portal</string>
@@ -467,7 +468,7 @@
     <string name="onboarding_working">Working…</string>
     <string name="onboarding_save_load">Save and load</string>
     <string name="onboarding_use_phone">Use my phone instead</string>
-    <string name="onboarding_privacy_note">Your provider details are stored on this device only. OpenTV has no account system and no server of its own — nothing you type here is sent anywhere except to your provider.</string>
+    <string name="onboarding_privacy_note">Your provider details are stored on this device only. MyTV has no account system and no server of its own — nothing you type here is sent anywhere except to your provider.</string>
 
     <!-- ============================ Phone pairing ============================ -->
     <string name="pairing_stopped">Pairing stopped</string>
@@ -684,7 +685,7 @@
     <string name="grouping_channel_count">%1$s · %2$d + %3$d channels</string>
 
     <string name="update_available_title">Update available</string>
-    <string name="update_available_body">OpenTV %1$s is available. You have %2$s.</string>
+    <string name="update_available_body">MyTV %1$s is available. You have %2$s.</string>
     <string name="update_install">Update</string>
     <string name="update_later">Later</string>
     <string name="update_downloading">Downloading update…</string>
@@ -776,7 +777,7 @@
     <string name="default_provider_name">My provider</string>
     <string name="default_playlist_name">My playlist</string>
 
-    <string name="pp_title">Set up OpenTV</string>
+    <string name="pp_title">Set up MyTV</string>
     <string name="pp_sub">Filling this in here beats using the remote.</string>
     <string name="pp_kind_xtream">Xtream login</string>
     <string name="pp_kind_m3u">M3U playlist</string>
@@ -795,7 +796,7 @@
     <string name="pp_code">Code shown on the TV</string>
     <string name="pp_code_hint">This is what proves it\'s you standing in front of the telly.</string>
     <string name="pp_send">Send to TV</string>
-    <string name="pp_privacy">This page is served by your television, over your own network. What you type goes straight to it and nowhere else — there is no OpenTV account and no OpenTV server.</string>
+    <string name="pp_privacy">This page is served by your television, over your own network. What you type goes straight to it and nowhere else — there is no MyTV account and no MyTV server.</string>
     <string name="pp_too_many_title">Too many attempts</string>
     <string name="pp_too_many_body">Start pairing again on the TV to get a new code.</string>
     <string name="pp_wrong_code">That code doesn\'t match the one on the TV. %1$d attempts left.</string>

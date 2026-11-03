@@ -68,8 +68,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Movie
@@ -347,23 +350,25 @@ private fun NavRail(
             .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Brand: the logo mark alone when collapsed, the mark + "OpenTV" wordmark when open. The
-        // name stays on purpose — it's what people search for.
+        // Brand: the logo mark alone when collapsed, the mark + two-tone "MyTV" wordmark when open,
+        // as in the banner.
         Row(
             Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Image(
                 painter = painterResource(R.drawable.ic_opentv_logo),
-                contentDescription = "OpenTV",
+                contentDescription = "MyTV",
                 modifier = Modifier.size(34.dp),
             )
             if (expanded) {
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    "OpenTV",
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) { append("My") }
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("TV") }
+                    },
                     style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
