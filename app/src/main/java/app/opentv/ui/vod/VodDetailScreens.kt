@@ -5,6 +5,14 @@
  */
 package app.opentv.ui.vod
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
+import app.opentv.data.model.PlaybackPosition
+import app.opentv.data.repo.MovieVariant
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,10 +32,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,13 +48,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,10 +71,11 @@ import kotlinx.coroutines.launch
 import app.opentv.ui.theme.focusLift
 
 /**
- * A film's cinematic detail page: a backdrop hero with title, meta and Watch/Resume + favourite
- * over a gradient scrim, then synopsis, cast and director, and a "more like this" shelf. Opening it
- * enriches the row from the provider (backdrop/cast/genre) if those fields are still bare, so a card
- * that was plain in a grid fills out here.
+ * A film's page, in the home hero's clothes: the backdrop melting into the page, the film's own
+ * lettering, year · genres · running time · rating and the copies on offer, the plot, then Watch (or
+ * Resume), one button per other copy (FHD, HD…), favourite and add-on sources. Under it, cast and
+ * director and "more like this". Opening it enriches the row from the provider (backdrop, cast,
+ * genre) if those fields are still bare.
  */
 @Composable
 fun MovieDetailScreen(
@@ -87,6 +89,8 @@ fun MovieDetailScreen(
     var movie by remember(movieId) { mutableStateOf<Movie?>(null) }
     var moreLike by remember(movieId) { mutableStateOf<List<Movie>>(emptyList()) }
     var resumeExists by remember(movieId) { mutableStateOf(false) }
+    var variants by remember(movieId) { mutableStateOf<List<MovieVariant>>(emptyList()) }
+    var logo by remember(movieId) { mutableStateOf<String?>(null) }
     val playFocus = remember { FocusRequester() }
     val hasAddons by viewModel.hasAddons.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -99,6 +103,8 @@ fun MovieDetailScreen(
         movie = loaded
         if (loaded != null) {
             resumeExists = viewModel.resumePosition("movie:${loaded.id}")?.let { !it.isFinished } == true
+            variants = viewModel.movieVariants(loaded)
+            logo = viewModel.titleLogo(isMovie = true, tmdbId = loaded.tmdbId)
             moreLike = viewModel.moreLikeThis(loaded)
         }
     }
@@ -111,49 +117,59 @@ fun MovieDetailScreen(
         runCatching { playFocus.requestFocus() }
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "header") {
-            DetailBackdrop(title = m.displayTitle, backdropUrl = m.backdropUrl, posterUrl = m.posterUrl, meta = movieMeta(m)) {
-                DetailButton(
-                    icon = Icons.Filled.PlayArrow,
-                    label = stringResource(if (resumeExists) R.string.vod_resume else R.string.vod_watch_now),
-                    primary = true,
+            DetailHero(
+                kicker = stringResource(R.string.vod_kicker_movie),
+                title = m.displayTitle,
+                logoUrl = logo,
+                backdropUrl = m.backdropUrl,
+                posterUrl = m.posterUrl,
+                meta = listOfNotNull(
+                    m.year?.toString(),
+                    genreLine(m.genre),
+                    m.durationSeconds?.takeIf { it > 0 }?.let { formatRuntime(it) },
+                ),
+                rating = m.rating,
+                qualities = variants.map { it.qualityLabel }.filter { it.isNotBlank() }.distinct(),
+                overview = m.plot,
+            ) {
+                HeroButton(
+                    text = "▶  " + stringResource(if (resumeExists) R.string.vod_resume else R.string.vod_watch_now),
+                    onClick = { onPlay(m) },
                     modifier = Modifier.focusRequester(playFocus),
-                ) { onPlay(m) }
-                DetailButton(
-                    icon = if (m.favourite) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                    label = stringResource(if (m.favourite) R.string.common_remove_favourite else R.string.common_favourite),
-                ) {
-                    viewModel.toggleMovieFavourite(m)
-                    movie = m.copy(favourite = !m.favourite)
+                )
+                variants.filter { it.movie.id != m.id && it.qualityLabel.isNotBlank() }.forEach { v ->
+                    HeroButton(text = v.qualityLabel, onClick = { onPlay(v.movie) })
                 }
+                HeroButton(
+                    text = (if (m.favourite) "★  " else "☆  ") +
+                        stringResource(if (m.favourite) R.string.common_remove_favourite else R.string.common_favourite),
+                    onClick = {
+                        viewModel.toggleMovieFavourite(m)
+                        movie = m.copy(favourite = !m.favourite)
+                    },
+                )
                 // Only when the user has add-ons set up — queries them for this film's streams.
                 if (hasAddons) {
-                    DetailButton(
-                        icon = Icons.Filled.Extension,
-                        label = stringResource(R.string.vod_addon_sources),
-                    ) {
-                        addonLoading = true
-                        scope.launch {
-                            addonStreams = viewModel.addonStreams(m)
-                            addonLoading = false
-                        }
-                    }
+                    HeroButton(
+                        text = stringResource(R.string.vod_addon_sources),
+                        onClick = {
+                            addonLoading = true
+                            scope.launch {
+                                addonStreams = viewModel.addonStreams(m)
+                                addonLoading = false
+                            }
+                        },
+                    )
                 }
             }
         }
         item(key = "info") {
-            DetailInfo(
-                plot = m.plot,
-                cast = m.cast,
-                director = m.director,
-                genre = m.genre,
-                onOpenPerson = onOpenPerson,
-            )
+            DetailInfo(plot = null, cast = m.cast, director = m.director, genre = null, onOpenPerson = onOpenPerson)
         }
         if (moreLike.isNotEmpty()) {
             item(key = "more") {
-                Spacer(Modifier.height(4.dp))
                 MoviePosterRow(stringResource(R.string.vod_more_like_this), moreLike, onOpenMovie)
             }
         }
@@ -252,11 +268,19 @@ private fun AddonStreamRow(stream: StremioStream, onPick: (StremioStream) -> Uni
     }
 }
 
+/** A tab on a show's page: one season, the cast, or similar shows. */
+private sealed interface ShowTab {
+    data class Season(val number: Int) : ShowTab
+    data object Cast : ShowTab
+    data object Similar : ShowTab
+}
+
 /**
- * A show's detail page: the same cinematic header (backdrop, title, meta, synopsis, cast, favourite)
- * above the episode list grouped by season, with a "more like this" shelf at the bottom. Episodes
- * are fetched on demand — pulling every episode of every series up front is what makes a first sync
- * take twenty minutes on a large provider, and most of it is never looked at.
+ * A show's page: the same hero as a film's, with Resume (or Watch) on the episode to go on with,
+ * then tabs — one per season, Cast, Similar. A season is a row of episode cards: the still, a bar
+ * of how far you got, "✓ Seen" or the minutes left. It opens on the season of the episode to go on
+ * with. Episodes are fetched on demand — pulling every episode of every series up front is what
+ * makes a first sync take twenty minutes on a large provider.
  */
 @Composable
 fun SeriesDetailScreen(
@@ -268,13 +292,16 @@ fun SeriesDetailScreen(
 ) {
     var series by remember(seriesId) { mutableStateOf<Series?>(null) }
     var moreLike by remember(seriesId) { mutableStateOf<List<Series>>(emptyList()) }
+    var logo by remember(seriesId) { mutableStateOf<String?>(null) }
     val favFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
 
     LaunchedEffect(seriesId) {
         val loaded = viewModel.seriesDetail(seriesId)
         series = loaded
         if (loaded != null) {
             viewModel.loadEpisodes(loaded)
+            logo = viewModel.titleLogo(isMovie = false, tmdbId = loaded.tmdbId)
             moreLike = viewModel.moreLikeThisSeries(loaded)
         }
     }
@@ -282,205 +309,232 @@ fun SeriesDetailScreen(
     val s = series
     val episodes by (s?.let { viewModel.episodes(it) } ?: viewModel.noEpisodes)
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    val positions by produceState(emptyMap<String, PlaybackPosition>(), episodes) {
+        value = if (episodes.isEmpty()) emptyMap() else viewModel.positions(episodes.map { "ep:${it.id}" })
+    }
 
     if (s == null) { LoadingDetail(); return }
 
-    LaunchedEffect(s.id) {
-        delay(60)
-        runCatching { favFocus.requestFocus() }
-    }
-
-    // Group episodes by season (seasons ascending, episodes ordered within each) — the classic
-    // "episode-by-season" list.
     val seasons = remember(episodes) {
         episodes.groupBy { it.season }
             .mapValues { (_, eps) -> eps.sortedBy { it.episodeNumber } }
             .toSortedMap()
     }
+    // The episode to go on with: the last one played if unfinished, else the one after it, else the first.
+    val next: Pair<Episode, PlaybackPosition?>? = remember(seasons, positions) {
+        val ordered = seasons.values.flatten()
+        val last = ordered.mapNotNull { e -> positions["ep:${e.id}"]?.let { e to it } }
+            .maxByOrNull { it.second.updatedAtMillis }
+        when {
+            last == null -> ordered.firstOrNull()?.let { it to null }
+            !last.second.isFinished -> last
+            else -> (ordered.getOrNull(ordered.indexOf(last.first) + 1) ?: last.first) to null
+        }
+    }
 
-    LazyColumn(Modifier.fillMaxSize()) {
+    LaunchedEffect(s.id) {
+        delay(60)
+        runCatching { favFocus.requestFocus() }
+    }
+    LaunchedEffect(next != null) {
+        if (next != null) runCatching { playFocus.requestFocus() }
+    }
+
+    val castList = remember(s.cast) { splitNames(s.cast, ',') }
+    val tabs = buildList {
+        seasons.keys.forEach { add(ShowTab.Season(it)) }
+        if (castList.isNotEmpty()) add(ShowTab.Cast)
+        if (moreLike.isNotEmpty()) add(ShowTab.Similar)
+    }
+    val labels = tabs.map {
+        when (it) {
+            is ShowTab.Season -> stringResource(R.string.vod_season, it.number)
+            ShowTab.Cast -> stringResource(R.string.vod_cast)
+            ShowTab.Similar -> stringResource(R.string.vod_similar)
+        }
+    }
+    var picked by remember(seriesId) { mutableStateOf<ShowTab?>(null) }
+    val tab = picked?.takeIf { it in tabs }
+        ?: next?.first?.season?.let { ShowTab.Season(it) }?.takeIf { it in tabs }
+        ?: tabs.firstOrNull()
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "header") {
-            DetailBackdrop(title = s.displayTitle, backdropUrl = s.backdropUrl, posterUrl = s.posterUrl, meta = seriesMeta(s)) {
-                DetailButton(
-                    icon = if (s.favourite) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                    label = stringResource(if (s.favourite) R.string.common_remove_favourite else R.string.common_favourite),
-                    primary = true,
-                    modifier = Modifier.focusRequester(favFocus),
-                ) {
-                    viewModel.toggleSeriesFavourite(s)
-                    series = s.copy(favourite = !s.favourite)
+            DetailHero(
+                kicker = stringResource(R.string.vod_kicker_series),
+                title = s.displayTitle,
+                logoUrl = logo,
+                backdropUrl = s.backdropUrl,
+                posterUrl = s.posterUrl,
+                meta = listOfNotNull(
+                    s.year?.toString(),
+                    genreLine(s.genre),
+                    seasons.size.takeIf { it > 0 }?.let {
+                        if (it == 1) stringResource(R.string.vod_one_season) else stringResource(R.string.vod_seasons, it)
+                    },
+                ),
+                rating = s.rating,
+                qualities = emptyList(),
+                overview = s.plot,
+            ) {
+                next?.let { (ep, pos) ->
+                    val left = pos?.let { ((it.durationMillis - it.positionMillis) / 60_000).toInt().coerceAtLeast(1) }
+                    HeroButton(
+                        text = "▶  " + if (left != null) {
+                            stringResource(R.string.vod_resume_episode, ep.season, ep.episodeNumber, left)
+                        } else {
+                            stringResource(R.string.vod_watch_episode, ep.season, ep.episodeNumber)
+                        },
+                        onClick = { onPlayEpisode("ep:${ep.id}", ep.streamUrl, episodePlayerTitle(ep)) },
+                        modifier = Modifier.focusRequester(playFocus),
+                    )
                 }
+                HeroButton(
+                    text = (if (s.favourite) "★  " else "☆  ") +
+                        stringResource(if (s.favourite) R.string.common_remove_favourite else R.string.common_favourite),
+                    onClick = {
+                        viewModel.toggleSeriesFavourite(s)
+                        series = s.copy(favourite = !s.favourite)
+                    },
+                    modifier = Modifier.focusRequester(favFocus),
+                )
             }
         }
-        item(key = "info") {
-            DetailInfo(
-                plot = s.plot,
-                cast = s.cast,
-                director = null,
-                genre = s.genre,
-                onOpenPerson = onOpenPerson,
-            )
+        if (tabs.isNotEmpty()) item(key = "tabs") {
+            VodTabs(labels, tabs.indexOf(tab), { picked = tabs[it] }, Modifier.padding(top = 4.dp))
         }
-
-        if (episodes.isEmpty()) {
-            item(key = "eploading") {
+        when (tab) {
+            is ShowTab.Season -> {
+                val eps = seasons[tab.number].orEmpty()
+                item(key = "season:${tab.number}") {
+                    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        SectionHeader(stringResource(R.string.vod_season_episodes, tab.number, eps.size))
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(eps, key = { it.id }) { ep ->
+                                EpisodeCard(ep, s.backdropUrl, positions["ep:${ep.id}"]) {
+                                    onPlayEpisode("ep:${ep.id}", ep.streamUrl, episodePlayerTitle(ep))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ShowTab.Cast -> item(key = "cast") {
+                DetailInfo(plot = null, cast = s.cast, director = null, genre = null, onOpenPerson = onOpenPerson)
+            }
+            ShowTab.Similar -> item(key = "more") {
+                SeriesPosterRow(stringResource(R.string.vod_more_like_this), moreLike, onOpenSeries)
+            }
+            null -> item(key = "eploading") {
                 Text(
                     stringResource(R.string.vod_loading_episodes),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp),
                 )
-            }
-        } else {
-            seasons.forEach { (season, eps) ->
-                item(key = "season:$season") {
-                    Spacer(Modifier.height(8.dp))
-                    SectionHeader(stringResource(R.string.vod_season, season))
-                }
-                items(eps, key = { it.id }) { ep ->
-                    EpisodeRow(ep, onPlayEpisode)
-                }
-            }
-        }
-
-        if (moreLike.isNotEmpty()) {
-            item(key = "more") {
-                Spacer(Modifier.height(12.dp))
-                SeriesPosterRow(stringResource(R.string.vod_more_like_this), moreLike, onOpenSeries)
             }
         }
     }
 }
+
+/**
+ * One episode as a landscape card: its still (the show's backdrop when it has none), a teal bar of
+ * how far it was watched, "2. Chapter 2" and "44 min · 31 min left" or "✓ Seen".
+ */
+@Composable
+private fun EpisodeCard(ep: Episode, fallbackArt: String?, position: PlaybackPosition?, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "episodeScale")
+    val minutes = ep.durationSeconds?.takeIf { it > 0 }?.div(60)
+        ?: position?.durationMillis?.takeIf { it > 0 }?.div(60_000)?.toInt()
+    val progress = position?.let {
+        if (it.isFinished) 1f else if (it.durationMillis > 0) (it.positionMillis.toFloat() / it.durationMillis).coerceIn(0f, 1f) else null
+    }
+    Column(
+        Modifier
+            .width(EPISODE_WIDTH)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(4.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(
+                    if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                    else Modifier,
+                ),
+        ) {
+            val art = remember(ep.stillUrl, fallbackArt) { listOfNotNull(ep.stillUrl, fallbackArt).distinct() }
+            var artIndex by remember(art) { mutableStateOf(0) }
+            art.getOrNull(artIndex)?.let {
+                AsyncImage(
+                    model = it,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onError = { if (artIndex < art.lastIndex) artIndex++ },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            progress?.let {
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color.Black.copy(alpha = 0.5f))) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(it).background(MaterialTheme.colorScheme.primary))
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${ep.episodeNumber}. " + (episodeName(ep) ?: stringResource(R.string.vod_episode_n, ep.episodeNumber)),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (focused) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val parts = listOfNotNull(
+            minutes?.let { stringResource(R.string.vod_minutes, it) },
+            when {
+                position == null -> null
+                position.isFinished -> stringResource(R.string.vod_ep_watched)
+                position.durationMillis > 0 -> stringResource(
+                    R.string.vod_ep_left,
+                    ((position.durationMillis - position.positionMillis) / 60_000).toInt().coerceAtLeast(1),
+                )
+                else -> null
+            },
+        )
+        if (parts.isNotEmpty()) {
+            Text(
+                parts.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** Provider episode titles repeat the show and the code ("Bleach (2004) - S01E03 - Title"): keep the title. */
+private val EPISODE_PREFIX = Regex("""^.*?\bS\d{1,3}\s*E\d{1,4}\b[\s\-–:·.]*""", RegexOption.IGNORE_CASE)
+
+private fun episodeName(ep: Episode): String? = EPISODE_PREFIX.replace(ep.title, "").trim().takeIf { it.isNotEmpty() }
+
+private fun episodePlayerTitle(ep: Episode): String = "S${ep.season}E${ep.episodeNumber} · ${episodeName(ep) ?: ep.title}"
+
+/** The first two of a provider genre string ("Crime, Dramma"), or null. */
+private fun genreLine(raw: String?): String? =
+    splitNames(raw, ',', '|', '/').take(2).joinToString(", ").takeIf { it.isNotEmpty() }
+
+private val EPISODE_WIDTH = 220.dp
 
 // ---- Shared detail pieces ----------------------------------------------------------------------
-
-/**
- * The hero header, Plex-style: the poster always shown as an elevated card on the left, with the
- * title, meta line and action buttons beside it, over a backdrop background that falls back to the
- * poster and then to a plain gradient.
- *
- * Built so the hero is **never blank**. Two independent failure modes are covered: a provider that
- * ships a non-null but dead `backdropUrl` (real on the user's box — a good poster, a blank blue
- * hero) now falls the *background* through backdrop → poster → gradient via Coil's `onError`; and
- * the poster *card* falls back to a titled gradient tile if its own URL is missing or dead. So even
- * a title with no backdrop at all and a broken poster still shows its name over the app gradient
- * beside an intentional-looking placeholder card, never an empty rectangle.
- */
-@Composable
-private fun DetailBackdrop(
-    title: String,
-    backdropUrl: String?,
-    posterUrl: String?,
-    meta: String,
-    actions: @Composable RowScope.() -> Unit,
-) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(360.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        // Background: try the backdrop, fall back to the poster on load error, then to the gradient
-        // alone. Coil silently renders nothing on a failed load, so we drive the fallback from the
-        // error callback rather than trusting a non-null URL to actually resolve.
-        val bgCandidates = remember(backdropUrl, posterUrl) { listOfNotNull(backdropUrl, posterUrl).distinct() }
-        var bgIndex by remember(bgCandidates) { mutableStateOf(0) }
-        bgCandidates.getOrNull(bgIndex)?.let { model ->
-            AsyncImage(
-                model = model,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-                onError = { if (bgIndex < bgCandidates.lastIndex) bgIndex++ },
-            )
-        }
-        // Scrim: keeps text readable over any art, and — with no art at all — is itself the tasteful
-        // gradient the hero falls back to.
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.verticalGradient(
-                    0f to Color.Black.copy(alpha = 0.20f),
-                    0.5f to Color.Black.copy(alpha = 0.45f),
-                    1f to Color.Black.copy(alpha = 0.92f),
-                ),
-            ),
-        )
-        Row(
-            Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            HeroPosterCard(posterUrl = posterUrl, title = title)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (meta.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(meta, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.85f))
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    content = actions,
-                )
-            }
-        }
-    }
-}
-
-/**
- * The poster shown as an elevated, rounded card in the hero — the piece that guarantees the header
- * always has real art. When the poster URL is missing or fails to load, it falls back to a gradient
- * tile carrying the title's initial, so the card still reads as intentional rather than broken. Not
- * focusable by design: it is decoration, and the Watch/Resume and favourite buttons remain the
- * hero's d-pad targets.
- */
-@Composable
-private fun HeroPosterCard(posterUrl: String?, title: String) {
-    var posterFailed by remember(posterUrl) { mutableStateOf(false) }
-    Box(
-        Modifier
-            .width(128.dp)
-            .height(192.dp)
-            .shadow(12.dp, RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (posterUrl != null && !posterFailed) {
-            AsyncImage(
-                model = posterUrl,
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-                onError = { posterFailed = true },
-            )
-        } else {
-            Box(
-                Modifier.matchParentSize().background(
-                    Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-                        1f to MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    title.trim().take(1).uppercase(),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = Color.White,
-                )
-            }
-        }
-    }
-}
 
 /**
  * The body under the hero: a genre chip row, the synopsis, and Plex-style **clickable** Cast and
@@ -611,86 +665,6 @@ private fun PersonChip(name: String, onClick: () -> Unit) {
     )
 }
 
-/** A focusable pill button for the hero — Watch/Resume and the favourite toggle. */
-@Composable
-private fun DetailButton(
-    icon: ImageVector,
-    label: String,
-    modifier: Modifier = Modifier,
-    primary: Boolean = false,
-    onClick: () -> Unit,
-) {
-    var focused by remember { mutableStateOf(false) }
-    val container = when {
-        focused -> MaterialTheme.colorScheme.primary
-        primary -> MaterialTheme.colorScheme.primaryContainer
-        else -> Color.White.copy(alpha = 0.16f)
-    }
-    val content = when {
-        focused -> MaterialTheme.colorScheme.onPrimary
-        primary -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> Color.White
-    }
-    Row(
-        modifier
-            .onFocusChanged { focused = it.isFocused }
-            .focusLift(focused)
-            .clip(RoundedCornerShape(12.dp))
-            .background(container)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                else Modifier,
-            )
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = content)
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.titleMedium, color = content)
-    }
-}
-
-/** One episode row: season/episode marker, title, and a focus highlight; plays on click. */
-@Composable
-private fun EpisodeRow(ep: Episode, onPlay: (mediaKey: String, url: String, title: String) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 3.dp)
-            .onFocusChanged { focused = it.isFocused }
-            .focusLift(focused)
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (focused) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
-            )
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
-            )
-            .clickable(interactionSource = null, indication = null) {
-                onPlay("ep:${ep.id}", ep.streamUrl, "S${ep.season}E${ep.episodeNumber} · ${ep.title}")
-            }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "S${ep.season}E${ep.episodeNumber}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.width(72.dp),
-        )
-        Text(
-            ep.title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
 @Composable
 private fun LoadingDetail() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -701,22 +675,6 @@ private fun LoadingDetail() {
         }
     }
 }
-
-// ---- Meta lines --------------------------------------------------------------------------------
-
-/** "2021  ·  ★ 7.8  ·  1h 52m" — each part dropped when the provider didn't give it. Genre is shown
- *  separately as its own chip row (see [DetailInfo]), so it stays off this line. */
-private fun movieMeta(m: Movie): String = listOfNotNull(
-    m.year?.toString(),
-    m.rating?.takeIf { it > 0.0 }?.let { "★ ${formatRating(it)}" },
-    m.durationSeconds?.takeIf { it > 0 }?.let { formatRuntime(it) },
-).joinToString("  ·  ")
-
-/** "2021  ·  ★ 8.1" — series carry no runtime; genre is its own chip row. */
-private fun seriesMeta(s: Series): String = listOfNotNull(
-    s.year?.toString(),
-    s.rating?.takeIf { it > 0.0 }?.let { "★ ${formatRating(it)}" },
-).joinToString("  ·  ")
 
 /** Seconds to a compact "1h 52m" / "45m". */
 private fun formatRuntime(seconds: Int): String {

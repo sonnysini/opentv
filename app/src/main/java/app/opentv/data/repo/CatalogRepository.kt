@@ -19,6 +19,7 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.Episode
 import app.opentv.data.model.LiveStreamFormat
 import app.opentv.data.model.Movie
+import app.opentv.data.model.PlaybackPosition
 import app.opentv.data.model.Series
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
@@ -749,6 +750,24 @@ class CatalogRepository(
 
     private val Episode.order: Int get() = season * 10_000 + episodeNumber
 
+    /** [profileId]'s resume points for [keys] ("ep:12", "movie:7"), by key. */
+    suspend fun positions(profileId: Long, keys: List<String>): Map<String, PlaybackPosition> = withContext(Dispatchers.IO) {
+        keys.chunked(SQL_CHUNK).flatMap { positionDao.forKeys(profileId, it) }.associateBy { it.mediaKey }
+    }
+
+    /**
+     * The other copies of [movie] — the same film in 4K, FHD, HD — best first, [movie] among them.
+     * Found by its TMDB id, else by name; [collapseMovieVariants] keeps only true quality variants.
+     */
+    suspend fun movieVariants(movie: Movie): List<MovieVariant> = withContext(Dispatchers.IO) {
+        val tmdbId = movie.tmdbId?.takeIf { it.isNotBlank() && it != "0" }
+        val copies = if (tmdbId != null) movieDao.byTmdbIds(listOf(tmdbId))
+        else movieDao.nameContains(VOD_YEAR.replace(VodTitleCleaner.clean(movie.name), " ").trim(), VARIANT_LOOKUP)
+        collapseMovieVariants((copies + movie).distinctBy { it.id })
+            .firstOrNull { g -> g.variants.any { it.movie.id == movie.id } }
+            ?.variants.orEmpty()
+    }
+
     /**
      * Live catalogue for one source, honouring the Live TV toggle. Used by the periodic worker and
      * by a manual refresh; VOD follows separately through [syncVodCatalogue].
@@ -1252,6 +1271,9 @@ class CatalogRepository(
 
         /** Episode resume points scanned for "New episodes" (the most recent ones). */
         private const val RECENT_EPISODE_POSITIONS = 200
+
+        /** Copies looked at by name when a film has no TMDB id. */
+        private const val VARIANT_LOOKUP = 40
 
         /** How many sibling logos the Change logo picker offers at most. */
         private const val SIMILAR_LOGOS_LIMIT = 48

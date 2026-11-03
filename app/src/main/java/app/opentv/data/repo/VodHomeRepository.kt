@@ -108,6 +108,12 @@ class VodHomeRepository(
         }
     }
 
+    /** A title's lettering for its page (see [TmdbLists.logoUrl]); null with no key or none on TMDB. */
+    suspend fun logoUrl(kind: TmdbLists.Kind, tmdbId: String?): String? = withContext(Dispatchers.IO) {
+        val id = tmdbId?.takeIf { it.isNotBlank() && it != "0" } ?: return@withContext null
+        runCatching { lists.logoUrl(kind, id) }.getOrNull()
+    }
+
     /** One genre tab: TMDB's most popular films of [genreId] that the provider has. */
     suspend fun movieGenre(genreId: Int, catalogueSize: Int): List<MovieHit> = withContext(Dispatchers.IO) {
         if (!lists.isConfigured()) return@withContext emptyList()

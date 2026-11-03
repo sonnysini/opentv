@@ -153,34 +153,18 @@ internal fun VodHero(
             }
             Spacer(Modifier.height(10.dp))
             Crossfade(slide, animationSpec = tween(500), label = "heroTitle") { shown ->
-                Box(Modifier.height(LOGO_HEIGHT), contentAlignment = Alignment.CenterStart) {
-                    var logoFailed by remember(shown.logoUrl) { mutableStateOf(false) }
-                    if (shown.logoUrl != null && !logoFailed) {
-                        AsyncImage(
-                            model = shown.logoUrl,
-                            contentDescription = shown.title,
-                            contentScale = ContentScale.Fit,
-                            alignment = Alignment.CenterStart,
-                            onError = { logoFailed = true },
-                            modifier = Modifier.heightIn(max = LOGO_HEIGHT).widthIn(max = 320.dp),
-                        )
-                    } else {
-                        Text(
-                            shown.title.uppercase(),
-                            fontFamily = Oswald,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 42.sp,
-                            lineHeight = 46.sp,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth(0.62f),
-                        )
-                    }
-                }
+                TitleArt(shown.title, shown.logoUrl, LOGO_HEIGHT, 320.dp)
             }
             Spacer(Modifier.height(8.dp))
-            HeroMeta(slide)
+            HeroMeta(
+                listOfNotNull(
+                    slide.year?.toString(),
+                    slide.genres.takeIf { it.isNotBlank() },
+                    slide.runtimeMinutes?.takeIf { it > 0 }?.let { "${it / 60}h ${"%02d".format(it % 60)}" },
+                ),
+                slide.rating,
+                slide.qualities,
+            )
             slide.overview?.let {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -213,26 +197,51 @@ internal fun VodHero(
     }
 }
 
+/** The title's own lettering from TMDB, or its name in Oswald capitals when there is none. */
+@Composable
+private fun TitleArt(title: String, logoUrl: String?, height: androidx.compose.ui.unit.Dp, maxWidth: androidx.compose.ui.unit.Dp) {
+    Box(Modifier.height(height), contentAlignment = Alignment.CenterStart) {
+        var logoFailed by remember(logoUrl) { mutableStateOf(false) }
+        if (logoUrl != null && !logoFailed) {
+            AsyncImage(
+                model = logoUrl,
+                contentDescription = title,
+                contentScale = ContentScale.Fit,
+                alignment = Alignment.CenterStart,
+                onError = { logoFailed = true },
+                modifier = Modifier.heightIn(max = height).widthIn(max = maxWidth),
+            )
+        } else {
+            Text(
+                title.uppercase(),
+                fontFamily = Oswald,
+                fontWeight = FontWeight.Bold,
+                fontSize = 42.sp,
+                lineHeight = 46.sp,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(0.62f),
+            )
+        }
+    }
+}
+
 /** "2026 · Horror, Thriller · 1h 47 · ★ 7.3" and the copies on offer, boxed: 4K FHD HD. */
 @Composable
-private fun HeroMeta(slide: HeroSlide) {
+private fun HeroMeta(parts: List<String>, rating: Double?, qualities: List<String>) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        val parts = listOfNotNull(
-            slide.year?.toString(),
-            slide.genres.takeIf { it.isNotBlank() },
-            slide.runtimeMinutes?.takeIf { it > 0 }?.let { "${it / 60}h ${"%02d".format(it % 60)}" },
-        )
         Text(
             parts.joinToString("  ·  "),
             style = MaterialTheme.typography.bodyLarge,
             color = Color.White.copy(alpha = 0.88f),
             maxLines = 1,
         )
-        slide.rating?.let {
-            Text("·", color = Color.White.copy(alpha = 0.5f))
+        rating?.takeIf { it > 0.0 && it < 10.0 }?.let {
+            if (parts.isNotEmpty()) Text("·", color = Color.White.copy(alpha = 0.5f))
             Text("★ ${formatRating(it)}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = Gold)
         }
-        slide.qualities.take(3).forEach {
+        qualities.take(3).forEach {
             Text(
                 it,
                 fontSize = 10.sp,
@@ -242,6 +251,79 @@ private fun HeroMeta(slide: HeroSlide) {
                     .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 5.dp, vertical = 0.dp),
             )
+        }
+    }
+}
+
+/**
+ * The top of a film's or a show's page, the home hero standing still: the backdrop over the right
+ * melting into the page (the poster when the backdrop won't load), a kicker, the title's lettering,
+ * year · genres · … · rating and the copies on offer, three lines of plot, then [actions].
+ */
+@Composable
+internal fun DetailHero(
+    kicker: String,
+    title: String,
+    logoUrl: String?,
+    backdropUrl: String?,
+    posterUrl: String?,
+    meta: List<String>,
+    rating: Double?,
+    qualities: List<String>,
+    overview: String?,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    val page = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth().height(DETAIL_HEIGHT).clipToBounds()) {
+        val art = remember(backdropUrl, posterUrl) { listOfNotNull(backdropUrl, posterUrl).distinct() }
+        var artIndex by remember(art) { mutableIntStateOf(0) }
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .fillMaxHeight()
+                .aspectRatio(16f / 9f)
+                .drawWithContent {
+                    drawContent()
+                    drawRect(Brush.horizontalGradient(0f to page, 0.3f to page.copy(alpha = 0.55f), 0.65f to Color.Transparent))
+                    drawRect(Brush.verticalGradient(0.55f to Color.Transparent, 1f to page))
+                },
+        ) {
+            art.getOrNull(artIndex)?.let {
+                AsyncImage(
+                    model = it,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onError = { if (artIndex < art.lastIndex) artIndex++ },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Column(Modifier.align(Alignment.BottomStart).padding(start = 32.dp, end = 32.dp, bottom = 12.dp)) {
+            Text(
+                kicker.uppercase(),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 2.sp,
+                color = Color.White.copy(alpha = 0.8f),
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(8.dp))
+            TitleArt(title, logoUrl, DETAIL_LOGO_HEIGHT, 380.dp)
+            Spacer(Modifier.height(8.dp))
+            HeroMeta(meta, rating, qualities)
+            overview?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(0.55f),
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
         }
     }
 }
@@ -268,7 +350,13 @@ private fun HeroBackdrop(slide: HeroSlide, modifier: Modifier) {
 
 /** The football/live page button: translucent grey, white with black text in focus. */
 @Composable
-private fun HeroButton(text: String, onClick: () -> Unit, onLeft: () -> Boolean, onRight: () -> Boolean) {
+internal fun HeroButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLeft: () -> Boolean = { false },
+    onRight: () -> Boolean = { false },
+) {
     var focused by remember { mutableStateOf(false) }
     val scale = if (focused) 1.05f else 1f
     Text(
@@ -277,7 +365,7 @@ private fun HeroButton(text: String, onClick: () -> Unit, onLeft: () -> Boolean,
         fontWeight = FontWeight.Bold,
         color = if (focused) Color.Black else Color.White,
         maxLines = 1,
-        modifier = Modifier
+        modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(8.dp))
             .background(if (focused) Color.White else Color(0x736E7672))
@@ -487,6 +575,8 @@ internal fun Series.toSlide(): HeroSlide = HeroSlide(
 internal val ROW_POSTER_WIDTH = 104.dp
 private val HERO_HEIGHT = 272.dp
 private val LOGO_HEIGHT = 64.dp
+private val DETAIL_HEIGHT = 312.dp
+private val DETAIL_LOGO_HEIGHT = 80.dp
 private const val TURN_MILLIS = 8_000
 private val Accent = Color(0xFF57D9C5)
 private val AccentDark = Color(0xFF062320)

@@ -865,6 +865,9 @@ interface PlaybackPositionDao {
     )
     suspend fun recentEpisodes(profileId: Long, limit: Int): List<PlaybackPosition>
 
+    @Query("SELECT * FROM playback_positions WHERE profileId = :profileId AND mediaKey IN (:keys)")
+    suspend fun forKeys(profileId: Long, keys: List<String>): List<PlaybackPosition>
+
     @Query("SELECT * FROM playback_positions")
     suspend fun all(): List<PlaybackPosition>
 

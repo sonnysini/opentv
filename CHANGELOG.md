@@ -17,6 +17,13 @@
   Italy, Top rated. New episodes lists the shows you're watching whose furthest episode you
   finished and that have more after it: it shows the next one and how many are left. Their episode
   lists are refreshed once a session.
+- **New film and show pages.** The same hero as the home: backdrop, the title's own lettering,
+  year, genres, running time or seasons, rating and the copies on offer, the plot. A film has
+  Watch/Resume plus a button for each other copy (FHD, HD…), favourite and add-on sources, then cast
+  and similar films. A show has Resume S3 · E2 (or Watch the next episode), then tabs: one per
+  season, Cast, Similar. Seasons are rows of episode cards with the still, a bar of how far you got,
+  the length and "✓ Seen" or the minutes left; the page opens on the season you're in. Episode
+  titles drop the show name and code the provider puts in front.
 - **TMDB key from the remote.** The key field now saves on the TV keyboard's Done and DOWN moves
   on to Save; before, a key typed with the remote could never be saved.
 - Posters no longer show the providers' fake ★ 10.0.

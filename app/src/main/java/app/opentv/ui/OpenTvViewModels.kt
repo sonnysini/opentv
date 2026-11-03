@@ -1430,6 +1430,20 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     /** Loads a series, lazily enriching backdrop/cast/genre on first open. See CatalogRepository.seriesDetail. */
     suspend fun seriesDetail(id: Long): Series? = graph.catalogRepository.seriesDetail(id)
 
+    /** The profile's resume points for these media keys, by key — the episode cards' seen/progress. */
+    suspend fun positions(keys: List<String>): Map<String, PlaybackPosition> =
+        graph.catalogRepository.positions(settings.activeProfileId.value, keys)
+
+    /** The film's copies by quality, best first, for the page's 4K/FHD/HD buttons. */
+    suspend fun movieVariants(movie: Movie): List<app.opentv.data.repo.MovieVariant> =
+        runCatching { graph.catalogRepository.movieVariants(movie) }.getOrDefault(emptyList())
+
+    /** The title's own lettering from TMDB for its page, when there's a key and a TMDB id. */
+    suspend fun titleLogo(isMovie: Boolean, tmdbId: String?): String? = graph.vodHomeRepository.logoUrl(
+        if (isMovie) app.opentv.data.remote.TmdbLists.Kind.MOVIE else app.opentv.data.remote.TmdbLists.Kind.TV,
+        tmdbId,
+    )
+
     /** "More like this" for the movie detail screen. */
     suspend fun moreLikeThis(movie: Movie): List<Movie> = graph.catalogRepository.moreLikeThis(movie)
 
