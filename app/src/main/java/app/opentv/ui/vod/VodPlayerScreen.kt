@@ -166,6 +166,10 @@ fun VodPlayerScreen(
     var paused by remember { mutableStateOf(false) }
     var vodPanel by remember { mutableStateOf(VodPanel.NONE) }
     val panelFocus = remember { FocusRequester() }
+    val subtitlesChipFocus = remember { FocusRequester() }
+    val audioChipFocus = remember { FocusRequester() }
+    // Closing a picker puts focus back on the button that opened it, not on the seek bar.
+    var lastPanel by remember { mutableStateOf(VodPanel.NONE) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var bufferedMs by remember { mutableLongStateOf(0L) }
@@ -178,6 +182,9 @@ fun VodPlayerScreen(
     var interaction by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val seekFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
+    // The bar's buttons take focus a beat after it appears; until then the screen itself holds it,
+    // and presses in that gap must still seek/pause rather than fall through.
+    var rootFocused by remember { mutableStateOf(false) }
 
     fun reveal() { controlsVisible = true; interaction++ }
 
@@ -305,8 +312,17 @@ fun VodPlayerScreen(
     LaunchedEffect(controlsVisible, vodPanel) {
         if (controlsVisible) {
             delay(40)
-            runCatching { if (vodPanel != VodPanel.NONE) panelFocus.requestFocus() else seekFocus.requestFocus() }
+            runCatching {
+                when {
+                    vodPanel != VodPanel.NONE -> panelFocus.requestFocus()
+                    lastPanel == VodPanel.SUBTITLES -> subtitlesChipFocus.requestFocus()
+                    lastPanel == VodPanel.AUDIO -> audioChipFocus.requestFocus()
+                    else -> seekFocus.requestFocus()
+                }
+            }
+            if (vodPanel != VodPanel.NONE) lastPanel = vodPanel
         } else {
+            lastPanel = VodPanel.NONE
             runCatching { rootFocus.requestFocus() }
         }
     }
@@ -340,7 +356,7 @@ fun VodPlayerScreen(
                     else -> when {
                         // With the bar hidden: left/right seek straight away, OK pauses, anything
                         // else just brings the bar up.
-                        !controlsVisible -> {
+                        !controlsVisible || rootFocused -> {
                             when (event.key) {
                                 Key.DirectionLeft -> nudgeSeek(forward = false, repeat)
                                 Key.DirectionRight -> nudgeSeek(forward = true, repeat)
@@ -353,6 +369,7 @@ fun VodPlayerScreen(
                     }
                 }
             }
+            .onFocusChanged { rootFocused = it.isFocused }
             .focusRequester(rootFocus)
             .focusable()
             .pointerInput(Unit) {
@@ -509,12 +526,12 @@ fun VodPlayerScreen(
                         if (growingRec) seekRelative(15_000) else controller.seekForward(); interaction++
                     }
                     Spacer(Modifier.width(20.dp))
-                    VodChip(Icons.Filled.ClosedCaption, stringResource(R.string.player_subtitles)) {
+                    VodChip(Icons.Filled.ClosedCaption, stringResource(R.string.player_subtitles), subtitlesChipFocus) {
                         vodPanel = if (vodPanel == VodPanel.SUBTITLES) VodPanel.NONE else VodPanel.SUBTITLES
                         interaction++
                     }
                     Spacer(Modifier.width(10.dp))
-                    VodChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio)) {
+                    VodChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), audioChipFocus) {
                         vodPanel = if (vodPanel == VodPanel.AUDIO) VodPanel.NONE else VodPanel.AUDIO
                         interaction++
                     }
@@ -721,7 +738,11 @@ private fun TrackPanel(
             val language = format.language?.takeIf { it.isNotBlank() && it != "und" }
             val name = language?.let(::languageName)
             val details = buildList {
-                format.label?.takeIf { it.isNotBlank() && !it.equals(name, ignoreCase = true) }?.let(::add)
+                // A track label that only repeats the language ("Italian", "ita") adds nothing.
+                format.label?.takeIf { label ->
+                    label.isNotBlank() && listOfNotNull(name, language, language?.let(::englishLanguageName))
+                        .none { label.equals(it, ignoreCase = true) }
+                }?.let(::add)
                 codecName(format.sampleMimeType)?.let(::add)
                 if (trackType == C.TRACK_TYPE_AUDIO) when (format.channelCount) {
                     1 -> add(mono)
@@ -822,6 +843,9 @@ private fun languageName(code: String): String =
             .takeIf { it.isNotBlank() && !it.equals(code, ignoreCase = true) }
             ?.replaceFirstChar { it.titlecase(java.util.Locale.getDefault()) }
     }.getOrNull() ?: code
+
+private fun englishLanguageName(code: String): String? =
+    runCatching { java.util.Locale(code).getDisplayLanguage(java.util.Locale.ENGLISH) }.getOrNull()
 
 /** What a viewer calls the codec — the bit that tells a Dolby track from a stereo AAC one. */
 private fun codecName(mime: String?): String? = when (mime) {
