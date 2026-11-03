@@ -26,6 +26,8 @@
   season, Cast, Similar. Seasons are rows of episode cards with the still, a bar of how far you got,
   the length and "✓ Seen" or the minutes left; the page opens on the season you're in. Episode
   titles drop the show name and code the provider puts in front.
+- Without a TMDB key the Movies hero no longer goes missing: a film with no wide art shows its
+  poster instead.
 - **TMDB key from the remote.** The key field now saves on the TV keyboard's Done and DOWN moves
   on to Save; before, a key typed with the remote could never be saved.
 - Posters no longer show the providers' fake ★ 10.0.

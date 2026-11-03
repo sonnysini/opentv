@@ -119,7 +119,7 @@ fun MoviesScreen(
         chartHero.map { h ->
             val rank = top.indexOfFirst { it.movie.id == h.hit.movie.id }.takeIf { it >= 0 }?.plus(1)
             h.hit.toSlide(rank, h.logoUrl, h.genres)
-        }.ifEmpty { recentlyAdded.filter { it.backdropUrl != null }.take(6).map { it.toSlide() } }
+        }.ifEmpty { recentlyAdded.filter { it.backdropUrl != null || it.posterUrl != null }.take(6).map { it.toSlide() } }
     }
     val kicker = stringResource(
         if (chartHero.isNotEmpty()) R.string.vod_hero_trending_movies else R.string.vod_hero_new_movies,
@@ -286,7 +286,7 @@ fun SeriesScreen(
         chartHero.map { h ->
             val rank = top.indexOfFirst { it.key == h.hit.key }.takeIf { it >= 0 }?.plus(1)
             h.hit.toSlide(rank, h.logoUrl, h.genres)
-        }.ifEmpty { recentlyAdded.filter { it.backdropUrl != null }.take(6).map { it.toSlide() } }
+        }.ifEmpty { recentlyAdded.filter { it.backdropUrl != null || it.posterUrl != null }.take(6).map { it.toSlide() } }
     }
     val kicker = stringResource(
         if (chartHero.isNotEmpty()) R.string.vod_hero_trending_shows else R.string.vod_hero_new_shows,

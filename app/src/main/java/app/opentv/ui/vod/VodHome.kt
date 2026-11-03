@@ -97,6 +97,8 @@ data class HeroSlide(
     val rank: Int?,
     val movie: Movie? = null,
     val series: Series? = null,
+    /** Shown in place of a missing backdrop, whole, at the right — provider films often have none. */
+    val posterUrl: String? = null,
 )
 
 /**
@@ -342,8 +344,20 @@ private fun HeroBackdrop(slide: HeroSlide, modifier: Modifier) {
                     drawRect(Brush.verticalGradient(0.55f to Color.Transparent, 1f to page))
                 },
         ) {
-            shown.backdropUrl?.let {
-                AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            when {
+                shown.backdropUrl != null -> AsyncImage(
+                    model = shown.backdropUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                shown.posterUrl != null -> AsyncImage(
+                    model = shown.posterUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.CenterEnd,
+                    modifier = Modifier.fillMaxSize().padding(end = 48.dp, top = 16.dp, bottom = 16.dp),
+                )
             }
         }
     }
@@ -555,6 +569,7 @@ internal fun Movie.toSlide(): HeroSlide = HeroSlide(
     overview = plot,
     rank = null,
     movie = this,
+    posterUrl = posterUrl,
 )
 
 /** A slide for a show straight from the catalogue — the Shows hero with no TMDB key. */
@@ -571,6 +586,7 @@ internal fun Series.toSlide(): HeroSlide = HeroSlide(
     overview = plot,
     rank = null,
     series = this,
+    posterUrl = posterUrl,
 )
 
 internal val ROW_POSTER_WIDTH = 104.dp
