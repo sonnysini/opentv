@@ -9,6 +9,8 @@
 - **Changing game in the player goes like a TV channel.** Channel up/down to another game starts
   from its first channel, with the servers chosen in the settings ahead of the rest. The game
   started with OK keeps the best feed the scan found.
+- **Closing "Pick source" goes back to the game.** Back out of the list of a game's feeds and
+  focus returns to its card, not to the menu on the left.
 
 ## 0.44.0 — 3 November 2026
 
