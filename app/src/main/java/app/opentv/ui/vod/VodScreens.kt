@@ -388,6 +388,7 @@ internal fun MoviePosterRow(title: String, movies: List<Movie>, onOpenMovie: (Mo
                     subtitle = movie.year?.toString(),
                     rating = movie.rating,
                     onClick = { onOpenMovie(movie) },
+                    modifier = Modifier.width(ROW_POSTER_WIDTH),
                 )
             }
         }
