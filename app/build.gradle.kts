@@ -14,8 +14,8 @@ android {
         applicationId = "app.opentv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 105
-        versionName = "0.42.0"
+        versionCode = 107
+        versionName = "0.44.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -139,6 +139,8 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
     implementation(libs.media3.datasource.okhttp)
+    // Software audio for what the box can't decode itself (DTS, TrueHD, AC-3 on boxes without it).
+    implementation(libs.media3.ffmpeg.decoder)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

@@ -8,6 +8,8 @@ activityCompose = "1.9.3"
 composeBom = "2024.11.00"
 tvCompose = "1.0.0"
 media3 = "1.5.0"
+# Jellyfin's build of the Media3 FFmpeg audio extension; its version tracks media3 ("+1" = their build).
+media3Ffmpeg = "1.5.0+1"
 room = "2.6.1"
 okhttp = "4.12.0"
 serialization = "1.7.3"
@@ -52,6 +54,7 @@ media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "medi
 media3-ui-compose = { group = "androidx.media3", name = "media3-ui-compose", version.ref = "media3" }
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "media3" }
+media3-ffmpeg-decoder = { group = "org.jellyfin.media3", name = "media3-ffmpeg-decoder", version.ref = "media3Ffmpeg" }
 
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }

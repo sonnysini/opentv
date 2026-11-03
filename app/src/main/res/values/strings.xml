@@ -169,6 +169,17 @@
     <string name="player_aspect_ratio_title">Aspect ratio</string>
     <string name="player_none_available">None available</string>
     <string name="player_subtitles_off">Off</string>
+    <string name="vod_subtitle_size">Size</string>
+    <string name="vod_subtitle_size_small">Small</string>
+    <string name="vod_subtitle_size_medium">Medium</string>
+    <string name="vod_subtitle_size_large">Large</string>
+    <string name="vod_subtitle_background">Background</string>
+    <string name="vod_subtitle_bg_shadow">Shadow</string>
+    <string name="vod_subtitle_bg_box">Box</string>
+    <string name="vod_subtitle_bg_outline">Outline</string>
+    <string name="vod_subtitle_forced">forced</string>
+    <string name="vod_track_mono">Mono</string>
+    <string name="vod_track_stereo">Stereo</string>
 
     <!-- ============================ Settings hub ============================ -->
     <string name="settings_providers_title">Providers</string>

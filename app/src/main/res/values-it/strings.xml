@@ -155,6 +155,17 @@
     <string name="player_aspect_ratio_title">Proporzioni</string>
     <string name="player_none_available">Nessuno disponibile</string>
     <string name="player_subtitles_off">Disattivati</string>
+    <string name="vod_subtitle_size">Dimensione</string>
+    <string name="vod_subtitle_size_small">Piccola</string>
+    <string name="vod_subtitle_size_medium">Media</string>
+    <string name="vod_subtitle_size_large">Grande</string>
+    <string name="vod_subtitle_background">Sfondo</string>
+    <string name="vod_subtitle_bg_shadow">Ombra</string>
+    <string name="vod_subtitle_bg_box">Riquadro</string>
+    <string name="vod_subtitle_bg_outline">Contorno</string>
+    <string name="vod_subtitle_forced">forzati</string>
+    <string name="vod_track_mono">Mono</string>
+    <string name="vod_track_stereo">Stereo</string>
     <string name="settings_providers_title">Fornitori</string>
     <string name="settings_providers_subtitle">Aggiungi, rimuovi e ritesta i tuoi fornitori IPTV; scegli cosa scaricare</string>
     <string name="settings_addons_title">Add-on (Stremio)</string>

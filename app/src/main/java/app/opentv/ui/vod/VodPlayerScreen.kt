@@ -13,11 +13,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,26 +41,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -84,8 +87,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import app.opentv.R
 import app.opentv.core.ServiceLocator
@@ -94,6 +100,7 @@ import app.opentv.core.findActivity
 import app.opentv.player.PlayerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -107,8 +114,9 @@ import app.opentv.core.AppText
  *
  * The bar is drawn in Compose rather than left to the Media3 view's own controller, because that
  * controller needs the embedded view to hold d-pad focus to be summoned — which it doesn't, on a
- * TV inside Compose, so it reads as "no controls". This is the same self-drawn, auto-hiding bar as
- * the live player, with a seek bar added since a film needs scrubbing.
+ * TV inside Compose, so it reads as "no controls". With the bar hidden the remote works the way
+ * TV players do: left/right seek (accelerating while held), OK pauses. Audio and subtitle picks
+ * are remembered for the next film, as are the subtitle look and the picture format.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -138,7 +146,8 @@ fun VodPlayerScreen(
             growingDataSourceFactory =
                 app.opentv.player.GrowingRecordingDataSource.Factory(context.applicationContext),
             liveRecording = growingRec,
-        )
+            vod = !growingRec,
+        ).also { it.setPreferredLanguages(settings.vodAudioLanguage.value, settings.vodSubtitleLanguage.value) }
     }
     // Skip forward/back within the recorded portion. For a growing recording ExoPlayer won't report
     // the item as seekable (no fixed length), so we seek directly, clamped to what's on disk.
@@ -150,21 +159,80 @@ fun VodPlayerScreen(
     }
     val state by controller.state.collectAsStateWithLifecycle()
     val tracks by controller.tracks.collectAsStateWithLifecycle()
+    val resizeMode by settings.vodResizeMode.collectAsStateWithLifecycle()
+    val subtitleSize by settings.subtitleSize.collectAsStateWithLifecycle()
+    val subtitleBackground by settings.subtitleBackground.collectAsStateWithLifecycle()
 
     var paused by remember { mutableStateOf(false) }
     var vodPanel by remember { mutableStateOf(VodPanel.NONE) }
     val panelFocus = remember { FocusRequester() }
+    val subtitlesChipFocus = remember { FocusRequester() }
+    val audioChipFocus = remember { FocusRequester() }
+    // Closing a picker puts focus back on the button that opened it, not on the seek bar.
+    var lastPanel by remember { mutableStateOf(VodPanel.NONE) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
-    var scrubbing by remember { mutableStateOf(false) }
-    var scrubValue by remember { mutableFloatStateOf(0f) }
+    var bufferedMs by remember { mutableLongStateOf(0L) }
+    // Where a run of left/right presses has got to; the player only seeks once they stop, so
+    // holding the button glides the marker instead of rebuffering at every step.
+    var pendingSeekMs by remember { mutableStateOf<Long?>(null) }
+    var seekCommit by remember { mutableStateOf<Job?>(null) }
+
+    // Bumped by the format button; the new format's name shows next to it for a moment.
+    var aspectHint by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var aspectHintVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(aspectHint) {
+        if (aspectHint == 0) return@LaunchedEffect
+        aspectHintVisible = true
+        delay(1_500)
+        aspectHintVisible = false
+    }
 
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val barFocus = remember { FocusRequester() }
+    val seekFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
+    // The bar's buttons take focus a beat after it appears; until then the screen itself holds it,
+    // and presses in that gap must still seek/pause rather than fall through.
+    var rootFocused by remember { mutableStateOf(false) }
 
     fun reveal() { controlsVisible = true; interaction++ }
+
+    fun togglePause() {
+        paused = !paused
+        controller.player.playWhenReady = !paused
+        reveal()
+    }
+
+    /**
+     * One left/right press (or one auto-repeat of a held button). The step grows the longer the
+     * button is held — 10 s taps, then 30 s, a minute, two — so crossing a whole film takes seconds.
+     */
+    fun nudgeSeek(forward: Boolean, repeatCount: Int) {
+        if (growingRec) {
+            seekRelative(if (forward) 15_000 else -15_000); reveal(); return
+        }
+        if (!controller.isSeekable || durationMs <= 0) { reveal(); return }
+        val step = when {
+            repeatCount < 4 -> 10_000L
+            repeatCount < 12 -> 30_000L
+            repeatCount < 24 -> 60_000L
+            else -> 120_000L
+        }
+        val from = pendingSeekMs ?: positionMs
+        pendingSeekMs = (from + if (forward) step else -step).coerceIn(0L, durationMs)
+        reveal()
+        seekCommit?.cancel()
+        seekCommit = scope.launch {
+            delay(SEEK_COMMIT_DELAY_MILLIS)
+            pendingSeekMs?.let { target ->
+                controller.player.seekTo(target)
+                positionMs = target
+            }
+            pendingSeekMs = null
+        }
+    }
 
     suspend fun savePosition() {
         val player = controller.player
@@ -230,24 +298,23 @@ fun VodPlayerScreen(
     // Poll position/duration for the seek bar while the film plays.
     LaunchedEffect(Unit) {
         while (isActive) {
-            if (!scrubbing) {
-                positionMs = controller.player.currentPosition.coerceAtLeast(0)
-                // A growing recording has no fixed length; the recorded-so-far extent (how far you
-                // can skip ahead) is what's been read into the buffer.
-                durationMs = if (growingRec) controller.player.bufferedPosition.coerceAtLeast(0)
-                else controller.player.duration.takeIf { it > 0 } ?: 0
-            }
+            val p = controller.player
+            positionMs = p.currentPosition.coerceAtLeast(0)
+            bufferedMs = p.bufferedPosition.coerceAtLeast(0)
+            // A growing recording has no fixed length; the recorded-so-far extent (how far you
+            // can skip ahead) is what's been read into the buffer.
+            durationMs = if (growingRec) bufferedMs else p.duration.takeIf { it > 0 } ?: 0
             delay(500)
         }
     }
 
-    // Auto-hide when playing and not paused/scrubbing and no picker open. A growing recording dips in
+    // Auto-hide when playing and not paused/seeking and no picker open. A growing recording dips in
     // and out of Buffering as it rides the write head, so for that case Buffering counts as "playing"
     // here — otherwise a single hiccup would pin the transport bar on screen for the rest of the watch.
-    LaunchedEffect(controlsVisible, interaction, state, paused, scrubbing, vodPanel) {
+    LaunchedEffect(controlsVisible, interaction, state, paused, pendingSeekMs, vodPanel) {
         val activelyPlaying = state is PlayerController.State.Playing ||
             (growingRec && state is PlayerController.State.Buffering)
-        if (controlsVisible && !paused && !scrubbing && vodPanel == VodPanel.NONE && activelyPlaying) {
+        if (controlsVisible && !paused && pendingSeekMs == null && vodPanel == VodPanel.NONE && activelyPlaying) {
             delay(5_000)
             controlsVisible = false
         }
@@ -256,8 +323,17 @@ fun VodPlayerScreen(
     LaunchedEffect(controlsVisible, vodPanel) {
         if (controlsVisible) {
             delay(40)
-            runCatching { if (vodPanel != VodPanel.NONE) panelFocus.requestFocus() else barFocus.requestFocus() }
+            runCatching {
+                when {
+                    vodPanel != VodPanel.NONE -> panelFocus.requestFocus()
+                    lastPanel == VodPanel.SUBTITLES -> subtitlesChipFocus.requestFocus()
+                    lastPanel == VodPanel.AUDIO -> audioChipFocus.requestFocus()
+                    else -> seekFocus.requestFocus()
+                }
+            }
+            if (vodPanel != VodPanel.NONE) lastPanel = vodPanel
         } else {
+            lastPanel = VodPanel.NONE
             runCatching { rootFocus.requestFocus() }
         }
     }
@@ -267,6 +343,7 @@ fun VodPlayerScreen(
             (growingRec && state is PlayerController.State.Buffering)
         when {
             vodPanel != VodPanel.NONE -> vodPanel = VodPanel.NONE
+            pendingSeekMs != null -> { seekCommit?.cancel(); pendingSeekMs = null; interaction++ }
             controlsVisible && activelyPlaying && !paused -> controlsVisible = false
             else -> onBack()
         }
@@ -277,13 +354,33 @@ fun VodPlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
             .onPreviewKeyEvent { event ->
-                when {
-                    event.key == Key.Back || event.key == Key.Escape -> false
-                    event.type == KeyEventType.KeyDown && !controlsVisible -> { reveal(); true }
-                    event.type == KeyEventType.KeyDown -> { interaction++; false }
-                    else -> false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val repeat = event.nativeKeyEvent.repeatCount
+                when (event.key) {
+                    Key.Back, Key.Escape -> false
+                    // Remote media keys work whatever has focus.
+                    Key.MediaPlayPause -> { togglePause(); true }
+                    Key.MediaPlay -> { if (paused) togglePause() else reveal(); true }
+                    Key.MediaPause -> { if (!paused) togglePause() else reveal(); true }
+                    Key.MediaFastForward -> { nudgeSeek(forward = true, repeat); true }
+                    Key.MediaRewind -> { nudgeSeek(forward = false, repeat); true }
+                    else -> when {
+                        // With the bar hidden: left/right seek straight away, OK pauses, anything
+                        // else just brings the bar up.
+                        !controlsVisible || rootFocused -> {
+                            when (event.key) {
+                                Key.DirectionLeft -> nudgeSeek(forward = false, repeat)
+                                Key.DirectionRight -> nudgeSeek(forward = true, repeat)
+                                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> togglePause()
+                                else -> reveal()
+                            }
+                            true
+                        }
+                        else -> { interaction++; false }
+                    }
                 }
             }
+            .onFocusChanged { rootFocused = it.isFocused }
             .focusRequester(rootFocus)
             .focusable()
             .pointerInput(Unit) {
@@ -296,13 +393,19 @@ fun VodPlayerScreen(
                 PlayerView(ctx).apply {
                     player = controller.player
                     useController = false
-                    subtitleView?.setUserDefaultStyle()
-                    subtitleView?.setUserDefaultTextSize()
+                    // The viewer's size and background win over styling baked into the file.
+                    subtitleView?.setApplyEmbeddedStyles(false)
+                    subtitleView?.setApplyEmbeddedFontSizes(false)
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     )
                 }
+            },
+            update = {
+                it.resizeMode = resizeMode
+                it.subtitleView?.setStyle(subtitleStyle(subtitleBackground))
+                it.subtitleView?.setFractionalTextSize(SUBTITLE_SIZES[subtitleSize.coerceIn(SUBTITLE_SIZES.indices)])
             },
         )
 
@@ -360,6 +463,14 @@ fun VodPlayerScreen(
                         controller = controller,
                         tracks = tracks,
                         firstFocus = panelFocus,
+                        subtitleSize = subtitleSize,
+                        subtitleBackground = subtitleBackground,
+                        onPicked = { type, language ->
+                            if (type == C.TRACK_TYPE_AUDIO) settings.setVodAudioLanguage(language)
+                            else settings.setVodSubtitleLanguage(language)
+                        },
+                        onSubtitleSize = { settings.setSubtitleSize(it); interaction++ },
+                        onSubtitleBackground = { settings.setSubtitleBackground(it); interaction++ },
                         onDone = { vodPanel = VodPanel.NONE; interaction++ },
                     )
                     Spacer(Modifier.height(16.dp))
@@ -383,57 +494,87 @@ fun VodPlayerScreen(
                     Spacer(Modifier.height(4.dp))
                 }
                 Text(title, style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                Spacer(Modifier.height(12.dp))
+
+                // Full-width seek bar. It holds focus when the bar comes up: left/right seek (faster
+                // the longer they're held), OK pauses, down reaches the buttons.
+                val shownPosition = pendingSeekMs ?: positionMs
+                SeekBar(
+                    positionMs = positionMs,
+                    bufferedMs = bufferedMs,
+                    durationMs = durationMs,
+                    pendingMs = pendingSeekMs,
+                    focusRequester = seekFocus,
+                    downFocus = playFocus,
+                    onSeek = { forward, repeat -> nudgeSeek(forward, repeat) },
+                    onToggle = { togglePause() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
                 Spacer(Modifier.height(8.dp))
 
-                // Seek bar with times either side. Left/right on the remote scrubs.
+                // Icon-only buttons with the times on the right, after NuvioTV's player controls
+                // (github.com/NuvioMedia/NuvioTV, GPL-3.0). Up goes back to the seek bar, down puts
+                // the bar away.
+                fun hideFromButtons() { vodPanel = VodPanel.NONE; controlsVisible = false }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatDuration(if (scrubbing) scrubValue.toLong() else positionMs), color = Color.White)
-                    Spacer(Modifier.width(12.dp))
-                    Slider(
-                        value = if (scrubbing) scrubValue else positionMs.toFloat(),
-                        valueRange = 0f..(durationMs.takeIf { it > 0 }?.toFloat() ?: 1f),
-                        onValueChange = { scrubbing = true; scrubValue = it; interaction++ },
-                        onValueChangeFinished = {
-                            controller.player.seekTo(scrubValue.toLong())
-                            positionMs = scrubValue.toLong()
-                            scrubbing = false
-                            interaction++
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(formatDuration(durationMs), color = Color.White)
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    VodChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind)) {
+                    // Kept for touch screens, where the seek bar can't be dragged; on a TV the bar
+                    // itself is quicker.
+                    VodIconButton(Icons.Filled.Replay10, stringResource(R.string.player_rewind), seekFocus, ::hideFromButtons) {
                         if (growingRec) seekRelative(-15_000) else controller.seekBackward(); interaction++
                     }
-                    Spacer(Modifier.width(10.dp))
-                    VodChip(
+                    VodIconButton(
                         icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         label = if (paused) stringResource(R.string.common_play) else stringResource(R.string.player_pause),
-                        focusRequester = barFocus,
-                    ) {
-                        paused = !paused
-                        controller.player.playWhenReady = !paused
-                        interaction++
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    VodChip(Icons.Filled.FastForward, stringResource(R.string.player_forward)) {
+                        upFocus = seekFocus,
+                        onDown = ::hideFromButtons,
+                        focusRequester = playFocus,
+                    ) { togglePause() }
+                    VodIconButton(Icons.Filled.Forward10, stringResource(R.string.player_forward), seekFocus, ::hideFromButtons) {
                         if (growingRec) seekRelative(15_000) else controller.seekForward(); interaction++
                     }
-                    Spacer(Modifier.width(20.dp))
-                    VodChip(Icons.Filled.ClosedCaption, stringResource(R.string.player_subtitles)) {
+                    Spacer(Modifier.width(16.dp))
+                    VodIconButton(
+                        Icons.Filled.ClosedCaption, stringResource(R.string.player_subtitles), seekFocus, ::hideFromButtons,
+                        subtitlesChipFocus, active = vodPanel == VodPanel.SUBTITLES,
+                    ) {
                         vodPanel = if (vodPanel == VodPanel.SUBTITLES) VodPanel.NONE else VodPanel.SUBTITLES
                         interaction++
                     }
-                    Spacer(Modifier.width(10.dp))
-                    VodChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio)) {
+                    VodIconButton(
+                        Icons.Filled.Audiotrack, stringResource(R.string.player_audio), seekFocus, ::hideFromButtons,
+                        audioChipFocus, active = vodPanel == VodPanel.AUDIO,
+                    ) {
                         vodPanel = if (vodPanel == VodPanel.AUDIO) VodPanel.NONE else VodPanel.AUDIO
                         interaction++
+                    }
+                    // One press steps Fit → Fill → Stretch; the new format's name shows briefly beside it.
+                    VodIconButton(Icons.Filled.AspectRatio, resizeLabel(resizeMode), seekFocus, ::hideFromButtons) {
+                        settings.setVodResizeMode(nextResizeMode(resizeMode))
+                        aspectHint++
+                        interaction++
+                    }
+                    AnimatedVisibility(visible = aspectHintVisible, enter = fadeIn(), exit = fadeOut()) {
+                        Text(
+                            resizeLabel(resizeMode),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            modifier = Modifier.padding(start = 4.dp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        formatDuration(shownPosition) + " / " + formatDuration(durationMs),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                    )
+                    // Time left reads better than the total when deciding whether to finish tonight.
+                    if (durationMs > 0 && !growingRec) {
+                        Text(
+                            "  −" + formatDuration(durationMs - shownPosition),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.6f),
+                        )
                     }
                 }
             }
@@ -441,38 +582,178 @@ fun VodPlayerScreen(
     }
 }
 
+private const val SEEK_COMMIT_DELAY_MILLIS = 800L
+
+/** Subtitle text size as a fraction of the video height: small, medium (Media3's default), large. */
+private val SUBTITLE_SIZES = floatArrayOf(0.045f, 0.0533f, 0.068f)
+
+@OptIn(UnstableApi::class)
+private fun subtitleStyle(background: Int): CaptionStyleCompat = when (background) {
+    1 -> CaptionStyleCompat(
+        android.graphics.Color.WHITE, 0xB3000000.toInt(), android.graphics.Color.TRANSPARENT,
+        CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.BLACK, null,
+    )
+    2 -> CaptionStyleCompat(
+        android.graphics.Color.WHITE, android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT,
+        CaptionStyleCompat.EDGE_TYPE_OUTLINE, android.graphics.Color.BLACK, null,
+    )
+    else -> CaptionStyleCompat(
+        android.graphics.Color.WHITE, android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT,
+        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW, android.graphics.Color.BLACK, null,
+    )
+}
+
+@OptIn(UnstableApi::class)
+private fun nextResizeMode(mode: Int): Int = when (mode) {
+    AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}
+
+@OptIn(UnstableApi::class)
 @Composable
-private fun VodChip(
+private fun resizeLabel(mode: Int): String = when (mode) {
+    AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> stringResource(R.string.player_aspect_fill)
+    AspectRatioFrameLayout.RESIZE_MODE_FILL -> stringResource(R.string.player_aspect_stretch)
+    else -> stringResource(R.string.player_aspect_fit)
+}
+
+/**
+ * The film's timeline: played, buffered and the rest, with the target of a seek in progress shown
+ * as a marker and a time bubble above it. Drawn by hand because Material's Slider doesn't take the
+ * d-pad on a TV the way a remote expects.
+ */
+@Composable
+private fun SeekBar(
+    positionMs: Long,
+    bufferedMs: Long,
+    durationMs: Long,
+    pendingMs: Long?,
+    focusRequester: FocusRequester,
+    downFocus: FocusRequester,
+    onSeek: (forward: Boolean, repeatCount: Int) -> Unit,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.primary
+    fun fraction(ms: Long) = if (durationMs > 0) (ms.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    BoxWithConstraints(
+        modifier
+            .height(44.dp)
+            .focusRequester(focusRequester)
+            // Down lands on play/pause, not on whichever button sits under the bar's middle.
+            .focusProperties { down = downFocus }
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onSeek(false, event.nativeKeyEvent.repeatCount); true }
+                    Key.DirectionRight -> { onSeek(true, event.nativeKeyEvent.repeatCount); true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        if (event.nativeKeyEvent.repeatCount == 0) onToggle(); true
+                    }
+                    else -> false
+                }
+            }
+            .focusable(),
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        val barHeight = if (focused) 8.dp else 5.dp
+        val markerFraction = fraction(pendingMs ?: positionMs)
+        Box(
+            Modifier
+                .padding(bottom = 8.dp)
+                .fillMaxWidth()
+                .height(barHeight)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.White.copy(alpha = 0.22f)),
+        ) {
+            Box(Modifier.fillMaxWidth(fraction(bufferedMs)).fillMaxHeight().background(Color.White.copy(alpha = 0.35f)))
+            Box(Modifier.fillMaxWidth(fraction(positionMs)).fillMaxHeight().background(accent))
+        }
+        val knob = if (focused) 16.dp else 0.dp
+        if (knob > 0.dp) {
+            Box(
+                Modifier
+                    .padding(bottom = 8.dp + barHeight / 2 - knob / 2)
+                    .offset(x = maxWidth * markerFraction - knob / 2)
+                    .size(knob)
+                    .clip(CircleShape)
+                    .background(if (pendingMs != null) Color.White else accent),
+            )
+        }
+        if (pendingMs != null) {
+            val bubbleWidth = 132.dp
+            Text(
+                formatDuration(pendingMs) + "  " + formatDelta(pendingMs - positionMs),
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.Black,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = (maxWidth * markerFraction - bubbleWidth / 2).coerceAtMost(maxWidth - bubbleWidth).coerceAtLeast(0.dp), y = (-14).dp)
+                    .width(bubbleWidth)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White)
+                    .padding(vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A round, icon-only transport button: see-through at rest, a white disc with a black icon when
+ * focused (after NuvioTV's ControlButton). [active] marks the button whose picker is open.
+ */
+@Composable
+private fun VodIconButton(
     icon: ImageVector,
     label: String,
+    upFocus: FocusRequester,
+    onDown: () -> Unit,
     focusRequester: FocusRequester? = null,
+    active: Boolean = false,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val container = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.14f)
-    val content = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
-    Row(
+    val container = when {
+        focused -> Color.White
+        active -> Color.White.copy(alpha = 0.22f)
+        else -> Color.Transparent
+    }
+    Box(
         modifier = Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusProperties { up = upFocus }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) { onDown(); true } else false
+            }
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
-            .clip(RoundedCornerShape(12.dp))
+            .size(52.dp)
+            .clip(CircleShape)
             .background(container)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                else Modifier,
-            )
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = label, tint = content)
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = content)
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (focused) Color.Black else Color.White,
+            modifier = Modifier.size(28.dp),
+        )
     }
 }
 
 private enum class VodPanel { NONE, SUBTITLES, AUDIO }
+
+private data class TrackOption(
+    val label: String,
+    val detail: String?,
+    val selected: Boolean,
+    val onClick: () -> Unit,
+)
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -481,29 +762,69 @@ private fun TrackPanel(
     controller: PlayerController,
     tracks: Tracks,
     firstFocus: FocusRequester,
+    subtitleSize: Int,
+    subtitleBackground: Int,
+    onPicked: (trackType: Int, language: String) -> Unit,
+    onSubtitleSize: (Int) -> Unit,
+    onSubtitleBackground: (Int) -> Unit,
     onDone: () -> Unit,
 ) {
     val trackType = if (panel == VodPanel.SUBTITLES) C.TRACK_TYPE_TEXT else C.TRACK_TYPE_AUDIO
     val groups = tracks.groups.filter { it.type == trackType }
-    val options = mutableListOf<Triple<String, Boolean, () -> Unit>>()
+    val options = mutableListOf<TrackOption>()
+    val forced = stringResource(R.string.vod_subtitle_forced)
+    val mono = stringResource(R.string.vod_track_mono)
+    val stereo = stringResource(R.string.vod_track_stereo)
 
     if (panel == VodPanel.SUBTITLES) {
         val anySelected = groups.any { g -> (0 until g.length).any { g.isTrackSelected(it) } }
-        options += Triple(stringResource(R.string.player_subtitles_off), !anySelected) { controller.disableText(); onDone() }
+        options += TrackOption(stringResource(R.string.player_subtitles_off), null, !anySelected) {
+            controller.disableText(); onPicked(trackType, ""); onDone()
+        }
     }
-    groups.forEach { group ->
-        for (i in 0 until group.length) {
-            if (!group.isTrackSupported(i)) continue
+    // Tracks in the viewer's own language first — a film can carry twenty subtitle languages.
+    val ownLanguage = java.util.Locale.getDefault().isO3Language
+    val ordered = groups.flatMap { group -> (0 until group.length).map { group to it } }
+        .sortedBy { (group, i) ->
+            val code = group.getTrackFormat(i).language
+            if (code != null && runCatching { java.util.Locale(code).isO3Language }.getOrNull() == ownLanguage) 0 else 1
+        }
+    ordered.forEach { (group, i) ->
+        run {
+            if (!group.isTrackSupported(i)) return@run
             val format = group.getTrackFormat(i)
-            options += Triple(vodTrackLabel(format.label, format.language, options.size), group.isTrackSelected(i)) {
-                controller.selectTrack(group, i); onDone()
+            val language = format.language?.takeIf { it.isNotBlank() && it != "und" }
+            val name = language?.let(::languageName)
+            val details = buildList {
+                // A track label that only repeats the language ("Italian", "ita") adds nothing.
+                format.label?.takeIf { label ->
+                    label.isNotBlank() && listOfNotNull(name, language, language?.let(::englishLanguageName), "forced")
+                        .none { label.equals(it, ignoreCase = true) }
+                }?.let(::add)
+                codecName(format.sampleMimeType)?.let(::add)
+                if (trackType == C.TRACK_TYPE_AUDIO) when (format.channelCount) {
+                    1 -> add(mono)
+                    2 -> add(stereo)
+                    6 -> add("5.1")
+                    8 -> add("7.1")
+                }
+                if ((format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0) add(forced)
+            }
+            options += TrackOption(
+                label = name ?: format.label?.takeIf { it.isNotBlank() } ?: AppText.get(R.string.track_n, options.size + 1),
+                detail = details.joinToString(" · ").ifBlank { null },
+                selected = group.isTrackSelected(i),
+            ) {
+                controller.selectTrack(group, i)
+                onPicked(trackType, language ?: if (trackType == C.TRACK_TYPE_TEXT) "und" else "")
+                onDone()
             }
         }
     }
 
     Column(
         Modifier
-            .widthIn(max = 420.dp)
+            .widthIn(max = 460.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black.copy(alpha = 0.92f))
             .padding(16.dp),
@@ -514,24 +835,47 @@ private fun TrackPanel(
             color = Color.White.copy(alpha = 0.7f),
         )
         Spacer(Modifier.height(8.dp))
-        Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
             if (options.isEmpty()) {
                 Text(stringResource(R.string.player_none_available), color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
             }
-            options.forEachIndexed { index, (label, selected, onClick) ->
-                TrackRow(label, selected, onClick, if (index == 0) firstFocus else null)
+            options.forEachIndexed { index, option ->
+                TrackRow(option.label, option.detail, option.selected, option.onClick, if (index == 0) firstFocus else null)
+            }
+            if (panel == VodPanel.SUBTITLES) {
+                // The look of the subtitles, a press steps to the next choice.
+                Spacer(Modifier.height(8.dp))
+                val sizes = listOf(
+                    stringResource(R.string.vod_subtitle_size_small),
+                    stringResource(R.string.vod_subtitle_size_medium),
+                    stringResource(R.string.vod_subtitle_size_large),
+                )
+                val backgrounds = listOf(
+                    stringResource(R.string.vod_subtitle_bg_shadow),
+                    stringResource(R.string.vod_subtitle_bg_box),
+                    stringResource(R.string.vod_subtitle_bg_outline),
+                )
+                TrackRow(
+                    stringResource(R.string.vod_subtitle_size), sizes[subtitleSize.coerceIn(sizes.indices)], false,
+                    { onSubtitleSize((subtitleSize + 1) % sizes.size) }, if (options.isEmpty()) firstFocus else null,
+                )
+                TrackRow(
+                    stringResource(R.string.vod_subtitle_background), backgrounds[subtitleBackground.coerceIn(backgrounds.indices)], false,
+                    { onSubtitleBackground((subtitleBackground + 1) % backgrounds.size) }, null,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun TrackRow(label: String, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester?) {
+private fun TrackRow(label: String, detail: String?, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester?) {
     var focused by remember { mutableStateOf(false) }
     val bg = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f)
     val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
     Row(
         Modifier
+            .padding(vertical = 2.dp)
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
@@ -542,18 +886,50 @@ private fun TrackRow(label: String, selected: Boolean, onClick: () -> Unit, focu
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = fg, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.titleMedium, color = fg)
+            if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = fg.copy(alpha = 0.7f))
+        }
         if (selected) Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.common_selected), tint = fg)
     }
 }
 
-private fun vodTrackLabel(label: String?, language: String?, index: Int): String {
-    if (!label.isNullOrBlank()) return label
-    if (!language.isNullOrBlank() && language != "und") {
-        return runCatching { java.util.Locale(language).displayLanguage.ifBlank { language } }.getOrDefault(language)
-    }
-    return AppText.get(R.string.track_n, index + 1)
+/** "ita" / "it" → "Italiano", in the app's language. */
+private fun languageName(code: String): String =
+    runCatching {
+        java.util.Locale(code).getDisplayLanguage(java.util.Locale.getDefault())
+            .takeIf { it.isNotBlank() && !it.equals(code, ignoreCase = true) }
+            ?.replaceFirstChar { it.titlecase(java.util.Locale.getDefault()) }
+    }.getOrNull() ?: code
+
+private fun englishLanguageName(code: String): String? =
+    runCatching { java.util.Locale(code).getDisplayLanguage(java.util.Locale.ENGLISH) }.getOrNull()
+
+/** What a viewer calls the codec — the bit that tells a Dolby track from a stereo AAC one. */
+private fun codecName(mime: String?): String? = when (mime) {
+    MimeTypes.AUDIO_AC3 -> "Dolby Digital"
+    MimeTypes.AUDIO_E_AC3 -> "Dolby Digital+"
+    MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Atmos"
+    MimeTypes.AUDIO_AC4 -> "Dolby AC-4"
+    MimeTypes.AUDIO_TRUEHD -> "Dolby TrueHD"
+    MimeTypes.AUDIO_DTS -> "DTS"
+    MimeTypes.AUDIO_DTS_HD -> "DTS-HD"
+    MimeTypes.AUDIO_DTS_EXPRESS -> "DTS Express"
+    MimeTypes.AUDIO_AAC -> "AAC"
+    MimeTypes.AUDIO_MPEG, MimeTypes.AUDIO_MPEG_L2 -> "MP3"
+    MimeTypes.AUDIO_OPUS -> "Opus"
+    MimeTypes.AUDIO_VORBIS -> "Vorbis"
+    MimeTypes.AUDIO_FLAC -> "FLAC"
+    MimeTypes.TEXT_SSA -> "ASS"
+    MimeTypes.APPLICATION_SUBRIP -> "SRT"
+    MimeTypes.TEXT_VTT -> "WebVTT"
+    MimeTypes.APPLICATION_PGS -> "PGS"
+    MimeTypes.APPLICATION_VOBSUB -> "VobSub"
+    MimeTypes.APPLICATION_DVBSUBS -> "DVB"
+    else -> null
 }
+
+private fun formatDelta(ms: Long): String = (if (ms < 0) "−" else "+") + formatDuration(kotlin.math.abs(ms))
 
 private fun formatDuration(ms: Long): String {
     if (ms <= 0) return "0:00"

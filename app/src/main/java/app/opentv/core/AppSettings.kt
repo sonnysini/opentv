@@ -685,6 +685,52 @@ class AppSettings private constructor(context: Context) {
         _playerResizeMode.value = mode
     }
 
+    /** Video scaling in the film player — kept apart from live, where Fill suits 16:9 channels but crops a scope film. */
+    private val _vodResizeMode = pref { prefs.getInt(KEY_VOD_RESIZE_MODE, 0) }
+    val vodResizeMode: StateFlow<Int> = _vodResizeMode.asStateFlow()
+
+    fun setVodResizeMode(mode: Int) {
+        prefs.edit().putInt(KEY_VOD_RESIZE_MODE, mode).apply()
+        _vodResizeMode.value = mode
+    }
+
+    /**
+     * The audio and subtitle languages last picked in the film player, so the next film opens in
+     * them. Audio "" = the stream's default; subtitles "" = off.
+     */
+    private val _vodAudioLanguage = pref { prefs.getString(KEY_VOD_AUDIO_LANG, "").orEmpty() }
+    val vodAudioLanguage: StateFlow<String> = _vodAudioLanguage.asStateFlow()
+
+    fun setVodAudioLanguage(language: String) {
+        prefs.edit().putString(KEY_VOD_AUDIO_LANG, language).apply()
+        _vodAudioLanguage.value = language
+    }
+
+    private val _vodSubtitleLanguage = pref { prefs.getString(KEY_VOD_SUBTITLE_LANG, "").orEmpty() }
+    val vodSubtitleLanguage: StateFlow<String> = _vodSubtitleLanguage.asStateFlow()
+
+    fun setVodSubtitleLanguage(language: String) {
+        prefs.edit().putString(KEY_VOD_SUBTITLE_LANG, language).apply()
+        _vodSubtitleLanguage.value = language
+    }
+
+    /** Subtitle look in the film player: size 0 small / 1 medium / 2 large, background 0 shadow / 1 box / 2 none. */
+    private val _subtitleSize = pref { prefs.getInt(KEY_SUBTITLE_SIZE, 1) }
+    val subtitleSize: StateFlow<Int> = _subtitleSize.asStateFlow()
+
+    fun setSubtitleSize(size: Int) {
+        prefs.edit().putInt(KEY_SUBTITLE_SIZE, size).apply()
+        _subtitleSize.value = size
+    }
+
+    private val _subtitleBackground = pref { prefs.getInt(KEY_SUBTITLE_BACKGROUND, 0) }
+    val subtitleBackground: StateFlow<Int> = _subtitleBackground.asStateFlow()
+
+    fun setSubtitleBackground(background: Int) {
+        prefs.edit().putInt(KEY_SUBTITLE_BACKGROUND, background).apply()
+        _subtitleBackground.value = background
+    }
+
     private fun readThemeMode(): ThemeMode =
         runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "") }
             .getOrDefault(ThemeMode.SYSTEM)
@@ -1024,6 +1070,11 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_RECENT_CHANNELS = "recent_channel_ids"
         private const val RECENT_CHANNELS = 12
         private const val KEY_RESIZE_MODE = "player_resize_mode"
+        private const val KEY_VOD_RESIZE_MODE = "vod_resize_mode"
+        private const val KEY_VOD_AUDIO_LANG = "vod_audio_language"
+        private const val KEY_VOD_SUBTITLE_LANG = "vod_subtitle_language"
+        private const val KEY_SUBTITLE_SIZE = "subtitle_size"
+        private const val KEY_SUBTITLE_BACKGROUND = "subtitle_background"
         private const val KEY_LANGUAGE = "language_tag"
 
         /**
@@ -1089,12 +1140,13 @@ class AppSettings private constructor(context: Context) {
             listOf(
                 KEY_RESIZE_MODE, KEY_PAD_START, KEY_PAD_END, KEY_QUALITY_FALLBACK_MILLIS,
                 KEY_STALL_FALLBACK_MILLIS, KEY_UI_SCALE, KEY_CONTROLS_TIMEOUT, KEY_HICCUP_LIMIT,
-                KEY_LIVE_OFFSET_SECONDS,
+                KEY_LIVE_OFFSET_SECONDS, KEY_VOD_RESIZE_MODE, KEY_SUBTITLE_SIZE, KEY_SUBTITLE_BACKGROUND,
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
                 KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_SCAN_SERVER_URL, KEY_LOGO_SOURCE,
                 KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE, KEY_PREFERRED_SOURCES, KEY_PICKED_VARIANTS,
+                KEY_VOD_AUDIO_LANG, KEY_VOD_SUBTITLE_LANG,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }

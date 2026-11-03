@@ -24,6 +24,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -31,12 +32,15 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.util.concurrent.atomic.AtomicLong
 
@@ -59,7 +63,7 @@ import java.util.concurrent.atomic.AtomicLong
 class PlayerController(
     context: Context,
     private val scope: CoroutineScope,
-    httpClient: OkHttpClient,
+    private val httpClient: OkHttpClient,
     subtitlesEnabled: Boolean = true,
     /**
      * Tunes the player for the guide's muted preview pane: a shallow start buffer so a highlighted
@@ -92,6 +96,11 @@ class PlayerController(
      * is a network round-trip — rides over the gaps instead of stalling on every one.
      */
     private val liveRecording: Boolean = false,
+    /**
+     * A film or episode: a deeper, byte-bounded buffer (a 4K remux would otherwise fill the heap on
+     * a stick), and recovery that picks up where it dropped instead of from the resume point.
+     */
+    private val vod: Boolean = false,
 ) {
 
     /** Channel-surf debounce for this controller — longer for the preview so browsing is calm. */
@@ -206,7 +215,16 @@ class PlayerController(
             .build()
     }
 
-    val player: ExoPlayer = ExoPlayer.Builder(context)
+    /**
+     * Platform decoders first, FFmpeg only for what the box can't do itself — DTS and TrueHD on a
+     * Fire TV, which otherwise plays those films in silence. Decoder fallback lets a codec that fails
+     * to start hand over to the next one instead of failing playback.
+     */
+    private val renderersFactory = DefaultRenderersFactory(context)
+        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        .setEnableDecoderFallback(true)
+
+    val player: ExoPlayer = ExoPlayer.Builder(context, renderersFactory)
         .setSeekBackIncrementMs(SEEK_INCREMENT_MILLIS)
         .setSeekForwardIncrementMs(SEEK_INCREMENT_MILLIS)
         .setMediaSourceFactory(
@@ -217,9 +235,14 @@ class PlayerController(
         .setLoadControl(
             DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    if (preview) PREVIEW_MIN_BUFFER_MILLIS else MIN_BUFFER_MILLIS,
+                    when {
+                        preview -> PREVIEW_MIN_BUFFER_MILLIS
+                        vod -> VOD_MIN_BUFFER_MILLIS
+                        else -> MIN_BUFFER_MILLIS
+                    },
                     when {
                         preview -> PREVIEW_MAX_BUFFER_MILLIS
+                        vod -> VOD_MAX_BUFFER_MILLIS
                         dvr -> DVR_MAX_BUFFER_MILLIS
                         liveRecording -> LIVE_REC_MAX_BUFFER_MILLIS
                         else -> MAX_BUFFER_MILLIS
@@ -237,6 +260,9 @@ class PlayerController(
                 )
                 // Retain the last few minutes so pause/rewind of live TV has something to seek into.
                 .apply { if (dvr) setBackBuffer(DVR_BACK_BUFFER_MILLIS, true) }
+                // Bytes, not seconds, are what run out on a stick: cap the VOD buffer so a high
+                // bitrate film stops loading early rather than taking the heap with it.
+                .apply { if (vod) setTargetBufferBytes(VOD_TARGET_BUFFER_BYTES) }
                 .build(),
         )
         .build()
@@ -281,7 +307,8 @@ class PlayerController(
 
                 override fun onPlayerError(error: PlaybackException) {
                     consecutiveFailures++
-                    val request = current
+                    val request = current?.let { resumable(it) }
+                    current = request
                     _state.value = State.Error(
                         title = request?.title.orEmpty(),
                         message = PlaybackErrors.describe(error),
@@ -322,8 +349,10 @@ class PlayerController(
             bytesLoaded.set(0)
             _state.value = State.Buffering(request.title)
 
+            val uri = if (vod && !request.isLive) pinnedUrl(request) else request.url
+
             val mediaItem = MediaItem.Builder()
-                .setUri(request.url)
+                .setUri(uri)
                 .apply {
                     // Only meaningful for live streams; setting it on VOD skews seeking.
                     val offset = request.liveOffsetMillis
@@ -349,6 +378,34 @@ class PlayerController(
                 prepare()
             }
         }
+    }
+
+    /**
+     * Where a film's address finally lands, so every read of it goes to the same server.
+     *
+     * Xtream panels redirect each request to one of several edge servers, and those don't all hold
+     * the same encode of a title — the same id comes back with different file sizes. Starting from
+     * the top that goes unnoticed, but a resume or a seek mixes reads from two different files: the
+     * index points into the wrong one and Matroska fails with "must be in a Cues", or the extractor
+     * churns through data that never lines up. Pinning the redirect target keeps one file per play;
+     * a restart resolves again from the original address. Any failure falls back to that address.
+     */
+    private suspend fun pinnedUrl(request: Request): String {
+        if (!request.url.startsWith("http")) return request.url
+        return withTimeoutOrNull(PIN_TIMEOUT_MILLIS) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val probe = okhttp3.Request.Builder()
+                        .url(request.url)
+                        .header("User-Agent", request.userAgent)
+                        .header("Range", "bytes=0-0")
+                        .build()
+                    httpClient.newCall(probe).execute().use { response ->
+                        response.request.url.toString().takeIf { response.isSuccessful }
+                    }
+                }.getOrNull()
+            }
+        } ?: request.url
     }
 
     /** Playback position, frames drawn so far and whether there's a picture, for [StallWatch]. */
@@ -427,7 +484,17 @@ class PlayerController(
     }
 
     fun retry() {
-        current?.let { play(it, debounce = false) }
+        current?.let { play(resumable(it), debounce = false) }
+    }
+
+    /**
+     * A film restarted after an error carries on from where it was, not from where it was opened.
+     * The position is only trusted once playback got going, so a failed start keeps its resume point.
+     */
+    private fun resumable(request: Request): Request {
+        if (request.isLive) return request
+        val position = player.currentPosition
+        return if (position > 0 && player.duration > 0) request.copy(startPositionMillis = position) else request
     }
 
     /**
@@ -459,6 +526,20 @@ class PlayerController(
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, trackIndex))
             .setTrackTypeDisabled(group.type, false)
+            .build()
+    }
+
+    /**
+     * The languages the film player remembers, as selector preferences rather than overrides, so
+     * they apply to whatever tracks the stream turns out to carry. Blank audio keeps the stream's
+     * default; blank text means subtitles off, "und" a track with no language.
+     */
+    fun setPreferredLanguages(audio: String, text: String) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguage(audio.ifBlank { null })
+            .setPreferredTextLanguage(text.ifBlank { null }?.takeIf { it != "und" })
+            .setSelectUndeterminedTextLanguage(text.isNotBlank())
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, text.isBlank())
             .build()
     }
 
@@ -522,6 +603,13 @@ class PlayerController(
          */
         const val MIN_BUFFER_MILLIS = 15_000
         const val MAX_BUFFER_MILLIS = 60_000
+
+        // Films: start as quickly as live does but build a couple of minutes of reservoir, bounded by
+        // bytes (see setTargetBufferBytes) so the duration only binds on ordinary bitrates.
+        const val VOD_MIN_BUFFER_MILLIS = 30_000
+        const val VOD_MAX_BUFFER_MILLIS = 120_000
+        const val VOD_TARGET_BUFFER_BYTES = 64 * 1024 * 1024
+        const val PIN_TIMEOUT_MILLIS = 6_000L
         const val BUFFER_FOR_PLAYBACK_MILLIS = 2_500
         const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MILLIS = 5_000
 
