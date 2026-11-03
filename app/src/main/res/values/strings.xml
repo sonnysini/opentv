@@ -545,6 +545,15 @@
     <string name="vod_tab_all">All</string>
     <string name="vod_genre_loading">Looking for these films in your list…</string>
     <string name="vod_genre_empty">None of this genre\'s popular films are in your list.</string>
+    <string name="vod_hero_trending_shows">Shows · trending this week</string>
+    <string name="vod_hero_new_shows">Shows · new in your list</string>
+    <string name="vod_top10_shows">Top 10 shows this week</string>
+    <string name="vod_tab_all_shows">All</string>
+    <string name="vod_genre_loading_shows">Looking for these shows in your list…</string>
+    <string name="vod_genre_empty_shows">None of this genre\'s popular shows are in your list.</string>
+    <string name="vod_new_episodes">New episodes</string>
+    <string name="vod_new_episodes_badge">NEW</string>
+    <string name="vod_new_episodes_more">%1$s · +%2$d more</string>
     <string name="vod_categories">Categories</string>
     <string name="vod_watch_now">Watch now</string>
     <string name="vod_resume">Resume</string>

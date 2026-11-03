@@ -179,5 +179,19 @@ class TmdbLists(
             27 to "Horror", 10402 to "Musica", 9648 to "Mistero", 10749 to "Romance",
             878 to "Fantascienza", 10770 to "Film TV", 53 to "Thriller", 10752 to "Guerra", 37 to "Western",
         )
+
+        /** The genre tabs on the Shows page. TMDB's TV genres are their own list (Sci-Fi & Fantasy is one). */
+        val TV_GENRES = linkedMapOf(
+            80 to "Crime", 18 to "Drammatico", 35 to "Commedia", 10765 to "Sci-Fi e Fantasy",
+            16 to "Animazione", 10759 to "Azione e Avventura", 9648 to "Mistero",
+        )
+
+        /** Every TMDB TV genre's Italian name, for the Shows hero. */
+        val TV_GENRE_NAMES = mapOf(
+            10759 to "Azione e Avventura", 16 to "Animazione", 35 to "Commedia", 80 to "Crime",
+            99 to "Documentario", 18 to "Dramma", 10751 to "Famiglia", 10762 to "Bambini", 9648 to "Mistero",
+            10763 to "News", 10764 to "Reality", 10765 to "Sci-Fi e Fantasy", 10766 to "Soap",
+            10767 to "Talk show", 10768 to "Guerra e Politica", 37 to "Western",
+        )
     }
 }

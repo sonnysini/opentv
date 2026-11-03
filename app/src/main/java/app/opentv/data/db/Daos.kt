@@ -778,6 +778,9 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE id = :id")
     suspend fun byId(id: Long): Series?
 
+    @Query("SELECT * FROM series WHERE sourceId = :sourceId AND seriesId = :seriesId LIMIT 1")
+    suspend fun byProviderId(sourceId: Long, seriesId: String): Series?
+
     /** Every copy of the shows with these TMDB ids. See [MovieDao.byTmdbIds]. */
     @Query("SELECT * FROM series WHERE tmdbId IN (:tmdbIds)")
     suspend fun byTmdbIds(tmdbIds: List<String>): List<Series>
@@ -829,6 +832,9 @@ interface EpisodeDao {
     @Query("SELECT * FROM episodes WHERE sourceId = :sourceId AND seriesId = :seriesId ORDER BY season, episodeNumber")
     fun observeForSeries(sourceId: Long, seriesId: String): Flow<List<Episode>>
 
+    @Query("SELECT * FROM episodes WHERE sourceId = :sourceId AND seriesId = :seriesId ORDER BY season, episodeNumber")
+    suspend fun forSeries(sourceId: Long, seriesId: String): List<Episode>
+
     @Query("SELECT * FROM episodes WHERE id = :id")
     suspend fun byId(id: Long): Episode?
 
@@ -852,6 +858,12 @@ interface PlaybackPositionDao {
             "ORDER BY updatedAtMillis DESC LIMIT :limit",
     )
     fun observeRecent(profileId: Long, limit: Int = 30): Flow<List<PlaybackPosition>>
+
+    @Query(
+        "SELECT * FROM playback_positions WHERE profileId = :profileId AND mediaKey LIKE 'ep:%' " +
+            "ORDER BY updatedAtMillis DESC LIMIT :limit",
+    )
+    suspend fun recentEpisodes(profileId: Long, limit: Int): List<PlaybackPosition>
 
     @Query("SELECT * FROM playback_positions")
     suspend fun all(): List<PlaybackPosition>

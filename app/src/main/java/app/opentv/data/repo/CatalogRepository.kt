@@ -714,6 +714,41 @@ class CatalogRepository(
             .onFailure { Log.w(TAG, "Episode fetch failed for series $seriesId", it) }
     }
 
+    /** A show the profile follows with episodes past the furthest one it has finished. */
+    data class NewEpisodes(val series: Series, val next: Episode, val count: Int)
+
+    /** Shows whose episode lists were refreshed this session, so a tab re-open costs no request. */
+    private val refreshedSeries = java.util.concurrent.ConcurrentHashMap.newKeySet<Pair<Long, String>>()
+
+    /**
+     * "New episodes": the shows [profileId] has been watching, most recent first, where the furthest
+     * episode reached is finished and the provider lists more after it. Each show's episode list is
+     * fetched again once a session ([ensureEpisodes]); nothing else is looked up.
+     */
+    suspend fun newEpisodes(profileId: Long, maxShows: Int = 12): List<NewEpisodes> = withContext(Dispatchers.IO) {
+        val furthest = LinkedHashMap<Pair<Long, String>, Pair<Episode, Boolean>>()
+        for (pos in positionDao.recentEpisodes(profileId, RECENT_EPISODE_POSITIONS)) {
+            val ep = pos.mediaKey.removePrefix("ep:").toLongOrNull()?.let { episodeDao.byId(it) } ?: continue
+            val show = ep.sourceId to ep.seriesId
+            val seen = furthest[show]
+            if (seen == null) {
+                if (furthest.size < maxShows) furthest[show] = ep to pos.isFinished
+            } else if (ep.order > seen.first.order) {
+                furthest[show] = ep to pos.isFinished
+            }
+        }
+        furthest.mapNotNull { (show, reached) ->
+            val (last, finished) = reached
+            if (!finished) return@mapNotNull null
+            if (refreshedSeries.add(show)) sourceDao.byId(show.first)?.let { ensureEpisodes(it, show.second) }
+            val after = episodeDao.forSeries(show.first, show.second).filter { it.order > last.order }
+            val series = seriesDao.byProviderId(show.first, show.second) ?: return@mapNotNull null
+            after.firstOrNull()?.let { NewEpisodes(series, it, after.size) }
+        }
+    }
+
+    private val Episode.order: Int get() = season * 10_000 + episodeNumber
+
     /**
      * Live catalogue for one source, honouring the Live TV toggle. Used by the periodic worker and
      * by a manual refresh; VOD follows separately through [syncVodCatalogue].
@@ -1214,6 +1249,9 @@ class CatalogRepository(
 
     companion object {
         private const val TAG = "CatalogRepository"
+
+        /** Episode resume points scanned for "New episodes" (the most recent ones). */
+        private const val RECENT_EPISODE_POSITIONS = 200
 
         /** How many sibling logos the Change logo picker offers at most. */
         private const val SIMILAR_LOGOS_LIMIT = 48

@@ -70,13 +70,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.opentv.R
 import app.opentv.data.model.Movie
+import app.opentv.data.model.Series
 import app.opentv.data.parser.displayTitle
+import app.opentv.data.repo.ChartHit
 import app.opentv.data.repo.MovieHit
+import app.opentv.data.repo.SeriesHit
 import coil.compose.AsyncImage
 
 /**
  * One turn of the VOD hero, whatever fed it: a TMDB chart hit or, with no TMDB key, a title the
  * provider added lately. [rank] is its place in the week's chart, null when it isn't from one.
+ * Exactly one of [movie] and [series] is set.
  */
 @androidx.compose.runtime.Immutable
 data class HeroSlide(
@@ -91,15 +95,16 @@ data class HeroSlide(
     val qualities: List<String>,
     val overview: String?,
     val rank: Int?,
-    val movie: Movie,
+    val movie: Movie? = null,
+    val series: Series? = null,
 )
 
 /**
- * The top of the Movies page, the live page's prime-time banner made for films: the backdrop over
- * the right melting into the page, the film's own lettering (or its name in Oswald), year · genres ·
+ * The top of the Movies and Shows pages, the live page's prime-time banner made for VOD: the backdrop
+ * over the right melting into the page, the title's own lettering (or its name in Oswald), year · genres ·
  * running time · rating · the copies on offer, two lines of plot, then Watch and Details.
  *
- * Turns over every few seconds by itself. RIGHT from Details steps to the next film, LEFT from
+ * Turns over every few seconds by itself. RIGHT from Details steps to the next title, LEFT from
  * Watch to the previous one (from the first, LEFT goes on to the menu as anywhere else).
  */
 @Composable
@@ -348,7 +353,7 @@ internal fun VodTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Uni
 
 /** "Top 10": big outlined numerals, each with its poster leaning on it. */
 @Composable
-internal fun TopTenRow(title: String, hits: List<MovieHit>, onOpen: (Movie) -> Unit) {
+internal fun <T : ChartHit> TopTenRow(title: String, hits: List<T>, onOpen: (T) -> Unit) {
     if (hits.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
@@ -356,7 +361,7 @@ internal fun TopTenRow(title: String, hits: List<MovieHit>, onOpen: (Movie) -> U
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            itemsIndexed(hits, key = { _, it -> it.movie.id }) { i, hit ->
+            itemsIndexed(hits, key = { _, it -> it.key }) { i, hit ->
                 Row(verticalAlignment = Alignment.Top) {
                     Text(
                         "${i + 1}",
@@ -378,7 +383,7 @@ internal fun TopTenRow(title: String, hits: List<MovieHit>, onOpen: (Movie) -> U
 
 /** A titled shelf of chart hits. */
 @Composable
-internal fun HitRow(title: String, hits: List<MovieHit>, onOpen: (Movie) -> Unit) {
+internal fun <T : ChartHit> HitRow(title: String, hits: List<T>, onOpen: (T) -> Unit) {
     if (hits.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
@@ -386,14 +391,14 @@ internal fun HitRow(title: String, hits: List<MovieHit>, onOpen: (Movie) -> Unit
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            itemsIndexed(hits, key = { _, it -> it.movie.id }) { _, hit -> HitPoster(hit, onOpen) }
+            itemsIndexed(hits, key = { _, it -> it.key }) { _, hit -> HitPoster(hit, onOpen) }
         }
     }
 }
 
-/** A genre tab's films as rows of posters, so the whole tab scrolls as one page under the hero. */
+/** A genre tab's titles as rows of posters, so the whole tab scrolls as one page under the hero. */
 @Composable
-internal fun HitGridRow(hits: List<MovieHit>, onOpen: (Movie) -> Unit) {
+internal fun <T : ChartHit> HitGridRow(hits: List<T>, onOpen: (T) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -403,14 +408,14 @@ internal fun HitGridRow(hits: List<MovieHit>, onOpen: (Movie) -> Unit) {
 }
 
 @Composable
-private fun HitPoster(hit: MovieHit, onOpen: (Movie) -> Unit) {
+private fun <T : ChartHit> HitPoster(hit: T, onOpen: (T) -> Unit) {
     PosterCard(
         title = hit.tmdb.title,
-        posterUrl = hit.movie.posterUrl ?: hit.tmdb.posterUrl,
-        subtitle = hit.tmdb.year?.toString() ?: hit.movie.year?.toString(),
+        posterUrl = hit.posterUrl,
+        subtitle = hit.tmdb.year?.toString(),
         rating = hit.tmdb.rating,
-        qualityBadge = hit.qualities.firstOrNull(),
-        onClick = { onOpen(hit.movie) },
+        qualityBadge = hit.badge,
+        onClick = { onOpen(hit) },
         modifier = Modifier.width(ROW_POSTER_WIDTH),
     )
 }
@@ -420,7 +425,7 @@ internal fun MovieHit.toSlide(rank: Int?, logoUrl: String?, genres: String): Her
     key = movie.id,
     title = tmdb.title,
     logoUrl = logoUrl,
-    backdropUrl = tmdb.backdropUrl ?: movie.backdropUrl,
+    backdropUrl = backdropUrl,
     year = tmdb.year ?: movie.year,
     genres = genres,
     runtimeMinutes = movie.durationSeconds?.let { it / 60 },
@@ -429,6 +434,22 @@ internal fun MovieHit.toSlide(rank: Int?, logoUrl: String?, genres: String): Her
     overview = tmdb.overview ?: movie.plot,
     rank = rank,
     movie = movie,
+)
+
+/** A slide for a show off the week's TV chart. Shows carry no running time. */
+internal fun SeriesHit.toSlide(rank: Int?, logoUrl: String?, genres: String): HeroSlide = HeroSlide(
+    key = series.id,
+    title = tmdb.title,
+    logoUrl = logoUrl,
+    backdropUrl = backdropUrl,
+    year = tmdb.year ?: series.year,
+    genres = genres,
+    runtimeMinutes = null,
+    rating = tmdb.rating,
+    qualities = emptyList(),
+    overview = tmdb.overview ?: series.plot,
+    rank = rank,
+    series = series,
 )
 
 /** A slide for a film straight from the catalogue — the hero with no TMDB key. */
@@ -445,6 +466,22 @@ internal fun Movie.toSlide(): HeroSlide = HeroSlide(
     overview = plot,
     rank = null,
     movie = this,
+)
+
+/** A slide for a show straight from the catalogue — the Shows hero with no TMDB key. */
+internal fun Series.toSlide(): HeroSlide = HeroSlide(
+    key = id,
+    title = displayTitle,
+    logoUrl = null,
+    backdropUrl = backdropUrl,
+    year = year,
+    genres = genre.orEmpty().split(',', '|', '/').map { it.trim() }.filter { it.isNotEmpty() }.take(2).joinToString(", "),
+    runtimeMinutes = null,
+    rating = rating?.takeIf { it in 0.1..9.9 },
+    qualities = emptyList(),
+    overview = plot,
+    rank = null,
+    series = this,
 )
 
 internal val ROW_POSTER_WIDTH = 104.dp

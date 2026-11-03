@@ -11,6 +11,12 @@
   (matched by TMDB id, else by name and year); they are cached for 12 hours. All is the provider's
   own categories, as before. Without a TMDB key the hero shows the latest arrivals and the shelves
   are the catalogue's own.
+- **Shows, the same way.** The week's trending series in the hero (Details opens the show), TMDB's
+  TV genres as tabs (Crime, Drama, Comedy, Sci-Fi & Fantasy, Animation, Action & Adventure,
+  Mystery, All), and shelves: Continue watching, New episodes, Top 10, Recently added, Popular in
+  Italy, Top rated. New episodes lists the shows you're watching whose furthest episode you
+  finished and that have more after it: it shows the next one and how many are left. Their episode
+  lists are refreshed once a session.
 - **TMDB key from the remote.** The key field now saves on the TV keyboard's Done and DOWN moves
   on to Save; before, a key typed with the remote could never be saved.
 - Posters no longer show the providers' fake ★ 10.0.

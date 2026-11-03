@@ -1193,15 +1193,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * Recomputes the computed home rows (Recommended + by-genre) with bounded queries.
-     *
-     * The reactive rows (recently-added, continue-watching) keep themselves current, so this only
-     * covers the computed feeds. A `(profile, movieCount, seriesCount)` guard skips the work
-     * entirely unless the profile changed or the catalogue size moved — so re-opening Movies/Shows
-     * is free and a post-sync refresh still fills the rows in.
-     */
-    // ---- TMDB charts on the Movies home (see VodHomeRepository) ----------------------------------
+    // ---- TMDB charts on the Movies and Shows homes (see VodHomeRepository) -----------------------
 
     /** True once the user has a TMDB key: the home is then built from TMDB's charts. */
     val tmdbEnabled: StateFlow<Boolean> =
@@ -1232,6 +1224,48 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val _seriesHome = MutableStateFlow<app.opentv.data.repo.SeriesHome?>(null)
+    val seriesHome: StateFlow<app.opentv.data.repo.SeriesHome?> = _seriesHome.asStateFlow()
+
+    private val _seriesGenreHits = MutableStateFlow<Map<Int, List<app.opentv.data.repo.SeriesHit>>>(emptyMap())
+    val seriesGenreHits: StateFlow<Map<Int, List<app.opentv.data.repo.SeriesHit>>> = _seriesGenreHits.asStateFlow()
+
+    fun loadSeriesHome() {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.seriesCount() }.getOrDefault(0)
+            if (count == 0) return@launch
+            _seriesHome.value = runCatching { graph.vodHomeRepository.seriesHome(count) }.getOrNull()
+        }
+    }
+
+    fun loadSeriesGenre(genreId: Int) {
+        viewModelScope.launch {
+            val count = runCatching { graph.catalogRepository.seriesCount() }.getOrDefault(0)
+            val hits = runCatching { graph.vodHomeRepository.seriesGenre(genreId, count) }.getOrDefault(emptyList())
+            _seriesGenreHits.value = _seriesGenreHits.value + (genreId to hits)
+        }
+    }
+
+    private val _newEpisodes = MutableStateFlow<List<CatalogRepository.NewEpisodes>>(emptyList())
+    /** Shows the profile follows with episodes it hasn't reached yet. See [CatalogRepository.newEpisodes]. */
+    val newEpisodes: StateFlow<List<CatalogRepository.NewEpisodes>> = _newEpisodes.asStateFlow()
+
+    fun loadNewEpisodes() {
+        viewModelScope.launch {
+            _newEpisodes.value = runCatching {
+                graph.catalogRepository.newEpisodes(settings.activeProfileId.value)
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    /**
+     * Recomputes the computed home rows (Recommended + by-genre) with bounded queries.
+     *
+     * The reactive rows (recently-added, continue-watching) keep themselves current, so this only
+     * covers the computed feeds. A `(profile, movieCount, seriesCount)` guard skips the work
+     * entirely unless the profile changed or the catalogue size moved — so re-opening Movies/Shows
+     * is free and a post-sync refresh still fills the rows in.
+     */
     fun loadHomeFeeds() {
         viewModelScope.launch {
             homeFeedsMutex.withLock {

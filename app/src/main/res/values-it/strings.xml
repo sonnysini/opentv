@@ -492,6 +492,15 @@
     <string name="vod_tab_all">Tutti</string>
     <string name="vod_genre_loading">Cerco questi film nella tua lista…</string>
     <string name="vod_genre_empty">Nessuno dei film più popolari di questo genere è nella tua lista.</string>
+    <string name="vod_hero_trending_shows">Serie TV · tendenza della settimana</string>
+    <string name="vod_hero_new_shows">Serie TV · novità nella tua lista</string>
+    <string name="vod_top10_shows">Top 10 serie della settimana</string>
+    <string name="vod_tab_all_shows">Tutte</string>
+    <string name="vod_genre_loading_shows">Cerco queste serie nella tua lista…</string>
+    <string name="vod_genre_empty_shows">Nessuna delle serie più popolari di questo genere è nella tua lista.</string>
+    <string name="vod_new_episodes">Nuovi episodi</string>
+    <string name="vod_new_episodes_badge">NUOVO</string>
+    <string name="vod_new_episodes_more">%1$s · altri %2$d</string>
     <string name="vod_categories">Categorie</string>
     <string name="vod_watch_now">Guarda ora</string>
     <string name="vod_resume">Riprendi</string>

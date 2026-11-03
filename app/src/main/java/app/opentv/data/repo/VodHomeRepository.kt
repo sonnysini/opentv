@@ -6,7 +6,9 @@
 package app.opentv.data.repo
 
 import app.opentv.data.db.MovieDao
+import app.opentv.data.db.SeriesDao
 import app.opentv.data.model.Movie
+import app.opentv.data.model.Series
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.VodTitleCleaner
 import app.opentv.data.remote.TmdbLists
@@ -17,26 +19,51 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/** What the chart shelves need of a hit, film or show: TMDB's title, a key, the art, a corner badge. */
+interface ChartHit {
+    val tmdb: TmdbTitle
+    val key: Long
+    val posterUrl: String?
+    val backdropUrl: String?
+    val badge: String?
+}
+
 /** A chart entry the provider really has: TMDB's title and art, the catalogue's copies to play. */
 @androidx.compose.runtime.Immutable
-data class MovieHit(val tmdb: TmdbTitle, val group: MovieVariantGroup) {
+data class MovieHit(override val tmdb: TmdbTitle, val group: MovieVariantGroup) : ChartHit {
     val movie: Movie get() = group.primary
     /** "4K", "FHD", "HD" — the copies on offer, best first. */
     val qualities: List<String> get() = group.variants.map { it.qualityLabel }.filter { it.isNotBlank() }.distinct()
+    override val key: Long get() = movie.id
+    override val posterUrl: String? get() = movie.posterUrl ?: tmdb.posterUrl
+    override val backdropUrl: String? get() = tmdb.backdropUrl ?: movie.backdropUrl
+    override val badge: String? get() = qualities.firstOrNull()
 }
 
-/** One turn of the Movies hero: the hit, the film's own lettering when TMDB has it, its genres. */
+/** A TV chart entry the provider has: TMDB's title and art, the catalogue's show to open. */
 @androidx.compose.runtime.Immutable
-data class HeroMovie(val hit: MovieHit, val logoUrl: String?, val genres: String)
+data class SeriesHit(override val tmdb: TmdbTitle, val series: Series) : ChartHit {
+    override val key: Long get() = series.id
+    override val posterUrl: String? get() = series.posterUrl ?: tmdb.posterUrl
+    override val backdropUrl: String? get() = tmdb.backdropUrl ?: series.backdropUrl
+    override val badge: String? get() = null
+}
 
-/** Everything the Movies home shows above "Recently added", built from TMDB's charts. */
+/** One turn of a VOD hero: the hit, the title's own lettering when TMDB has it, its genres. */
 @androidx.compose.runtime.Immutable
-data class MoviesHome(
-    val hero: List<HeroMovie>,
-    val top10: List<MovieHit>,
-    val popular: List<MovieHit>,
-    val topRated: List<MovieHit>,
+data class HeroHit<T : ChartHit>(val hit: T, val logoUrl: String?, val genres: String)
+
+/** Everything a VOD home shows from TMDB's charts: hero, the week's Top 10, popular, best rated. */
+@androidx.compose.runtime.Immutable
+data class ChartHome<T : ChartHit>(
+    val hero: List<HeroHit<T>>,
+    val top10: List<T>,
+    val popular: List<T>,
+    val topRated: List<T>,
 )
+
+typealias MoviesHome = ChartHome<MovieHit>
+typealias SeriesHome = ChartHome<SeriesHit>
 
 /**
  * TMDB's charts, cut down to what the user's provider can play. A chart title is found by the TMDB
@@ -45,11 +72,14 @@ data class MoviesHome(
  */
 class VodHomeRepository(
     private val movieDao: MovieDao,
+    private val seriesDao: SeriesDao,
     private val lists: TmdbLists,
 ) {
     private val lock = Mutex()
     private var moviesHome: Pair<Int, MoviesHome>? = null
+    private var seriesHome: Pair<Int, SeriesHome>? = null
     private val movieGenres = HashMap<Int, Pair<Int, List<MovieHit>>>()
+    private val seriesGenres = HashMap<Int, Pair<Int, List<SeriesHit>>>()
 
     fun isConfigured(): Boolean = lists.isConfigured()
 
@@ -61,23 +91,19 @@ class VodHomeRepository(
         if (!lists.isConfigured()) return@withContext null
         lock.withLock {
             moviesHome?.takeIf { it.first == catalogueSize }?.let { return@withContext it.second }
-            val trending = movieChart(Chart.Trending)
-            val hero = trending.filter { it.tmdb.backdropUrl != null || it.movie.backdropUrl != null }
-                .take(HERO_SIZE)
-                .map { hit ->
-                    HeroMovie(
-                        hit = hit,
-                        logoUrl = runCatching { lists.logoUrl(TmdbLists.Kind.MOVIE, hit.tmdb.id) }.getOrNull(),
-                        genres = hit.tmdb.genreIds.mapNotNull { TmdbLists.MOVIE_GENRE_NAMES[it] }.take(2).joinToString(", "),
-                    )
-                }
-            val home = MoviesHome(
-                hero = hero,
-                top10 = trending.take(10),
-                popular = movieChart(Chart.PopularInItaly).take(ROW_SIZE),
-                topRated = movieChart(Chart.TopRated).take(ROW_SIZE),
-            )
+            val home = buildHome(TmdbLists.Kind.MOVIE, TmdbLists.MOVIE_GENRE_NAMES) { movieChart(it) }
             moviesHome = catalogueSize to home
+            home
+        }
+    }
+
+    /** The Shows home, as [moviesHome] for TV. */
+    suspend fun seriesHome(catalogueSize: Int): SeriesHome? = withContext(Dispatchers.IO) {
+        if (!lists.isConfigured()) return@withContext null
+        lock.withLock {
+            seriesHome?.takeIf { it.first == catalogueSize }?.let { return@withContext it.second }
+            val home = buildHome(TmdbLists.Kind.TV, TmdbLists.TV_GENRE_NAMES) { seriesChart(it) }
+            seriesHome = catalogueSize to home
             home
         }
     }
@@ -93,6 +119,40 @@ class VodHomeRepository(
         }
     }
 
+    /** One genre tab of the Shows page. See [movieGenre]. */
+    suspend fun seriesGenre(genreId: Int, catalogueSize: Int): List<SeriesHit> = withContext(Dispatchers.IO) {
+        if (!lists.isConfigured()) return@withContext emptyList()
+        lock.withLock {
+            seriesGenres[genreId]?.takeIf { it.first == catalogueSize }?.let { return@withContext it.second }
+            val hits = seriesChart(Chart.Genre(genreId), pages = 5).take(GENRE_SIZE)
+            seriesGenres[genreId] = catalogueSize to hits
+            hits
+        }
+    }
+
+    private suspend fun <T : ChartHit> buildHome(
+        kind: TmdbLists.Kind,
+        genreNames: Map<Int, String>,
+        chart: suspend (Chart) -> List<T>,
+    ): ChartHome<T> {
+        val trending = chart(Chart.Trending)
+        val hero = trending.filter { it.backdropUrl != null }
+            .take(HERO_SIZE)
+            .map { hit ->
+                HeroHit(
+                    hit = hit,
+                    logoUrl = runCatching { lists.logoUrl(kind, hit.tmdb.id) }.getOrNull(),
+                    genres = hit.tmdb.genreIds.mapNotNull { genreNames[it] }.take(2).joinToString(", "),
+                )
+            }
+        return ChartHome(
+            hero = hero,
+            top10 = trending.take(10),
+            popular = chart(Chart.PopularInItaly).take(ROW_SIZE),
+            topRated = chart(Chart.TopRated).take(ROW_SIZE),
+        )
+    }
+
     private suspend fun movieChart(chart: Chart, pages: Int = 3): List<MovieHit> {
         val titles = runCatching { lists.chart(TmdbLists.Kind.MOVIE, chart, pages) }.getOrDefault(emptyList())
         if (titles.isEmpty()) return emptyList()
@@ -103,7 +163,7 @@ class VodHomeRepository(
         val seen = HashSet<Long>()
         return titles.mapNotNull { title ->
             val copies = byId[title.id]
-                ?: if (lookups-- > 0) byTitle(title) else null
+                ?: if (lookups-- > 0) movieByTitle(title) else null
             val group = copies?.takeIf { it.isNotEmpty() }?.let { collapseMovieVariants(it).first() }
                 ?: return@mapNotNull null
             if (!seen.add(group.primary.id)) return@mapNotNull null
@@ -111,11 +171,38 @@ class VodHomeRepository(
         }
     }
 
+    /**
+     * A TV chart cut to the provider's shows. A show often sits in more than one category (dubbed,
+     * subtitled); the newest copy stands for it, one card per title.
+     */
+    private suspend fun seriesChart(chart: Chart, pages: Int = 3): List<SeriesHit> {
+        val titles = runCatching { lists.chart(TmdbLists.Kind.TV, chart, pages) }.getOrDefault(emptyList())
+        if (titles.isEmpty()) return emptyList()
+        val byId = titles.map { it.id }.chunked(BIND_CHUNK)
+            .flatMap { seriesDao.byTmdbIds(it) }
+            .groupBy { it.tmdbId }
+        var lookups = TITLE_LOOKUPS
+        val seen = HashSet<Long>()
+        return titles.mapNotNull { title ->
+            val copies = byId[title.id]
+                ?: if (lookups-- > 0) seriesByTitle(title) else null
+            val show = copies?.maxByOrNull { it.addedMillis } ?: return@mapNotNull null
+            if (!seen.add(show.id)) return@mapNotNull null
+            SeriesHit(title, show)
+        }
+    }
+
     /** The provider's copies of [title] found by name, for films it stamped no TMDB id on. */
-    private suspend fun byTitle(title: TmdbTitle): List<Movie> {
+    private suspend fun movieByTitle(title: TmdbTitle): List<Movie> =
+        byTitle(title) { probe -> movieDao.nameContains(probe, NAME_LIMIT).filter { matchesTitle(it.name, it.year, it.tmdbId, title) } }
+
+    private suspend fun seriesByTitle(title: TmdbTitle): List<Series> =
+        byTitle(title) { probe -> seriesDao.nameContains(probe, NAME_LIMIT).filter { matchesTitle(it.name, it.year, it.tmdbId, title) } }
+
+    private suspend fun <T> byTitle(title: TmdbTitle, find: suspend (String) -> List<T>): List<T> {
         for (name in listOfNotNull(title.title, title.originalTitle)) {
             val probe = name.trim().takeIf { it.length >= MIN_PROBE } ?: continue
-            val found = movieDao.nameContains(probe, NAME_LIMIT).filter { matchesTitle(it.name, it.year, it.tmdbId, title) }
+            val found = find(probe)
             if (found.isNotEmpty()) return found
         }
         return emptyList()
