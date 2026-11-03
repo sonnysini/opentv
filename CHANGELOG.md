@@ -11,6 +11,9 @@
   (matched by TMDB id, else by name and year); they are cached for 12 hours. All is the provider's
   own categories, as before. Without a TMDB key the hero shows the latest arrivals and the shelves
   are the catalogue's own.
+- **TMDB key from the remote.** The key field now saves on the TV keyboard's Done and DOWN moves
+  on to Save; before, a key typed with the remote could never be saved.
+- Posters no longer show the providers' fake ★ 10.0.
 
 ## 0.41.0 — 3 November 2026
 

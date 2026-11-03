@@ -129,7 +129,7 @@ internal fun VodHero(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 slide.rank?.let {
                     Text(
-                        stringResource(R.string.vod_hero_rank, it),
+                        stringResource(R.string.vod_hero_rank, it).uppercase(),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.sp,
@@ -448,7 +448,7 @@ internal fun Movie.toSlide(): HeroSlide = HeroSlide(
 )
 
 internal val ROW_POSTER_WIDTH = 104.dp
-private val HERO_HEIGHT = 300.dp
+private val HERO_HEIGHT = 272.dp
 private val LOGO_HEIGHT = 64.dp
 private const val TURN_MILLIS = 8_000
 private val Accent = Color(0xFF57D9C5)

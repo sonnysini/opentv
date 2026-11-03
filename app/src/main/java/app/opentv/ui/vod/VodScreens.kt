@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -169,7 +171,17 @@ fun MoviesScreen(
         return
     }
 
+    // The hero lands after the first rows when the charts come in late: bring the page back to
+    // the top then, unless someone has already scrolled down.
+    val listState = rememberLazyListState()
+    val hasHero = slides.isNotEmpty()
+    LaunchedEffect(hasHero) {
+        if (hasHero && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val columns = ((maxWidth - 32.dp + 12.dp) / (ROW_POSTER_WIDTH + 12.dp)).toInt().coerceAtLeast(3)
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize(),
@@ -206,11 +218,12 @@ fun MoviesScreen(
             when {
                 hits == null -> item(key = "wait") { GenreNote(stringResource(R.string.vod_genre_loading)) }
                 hits.isEmpty() -> item(key = "none") { GenreNote(stringResource(R.string.vod_genre_empty)) }
-                else -> items(hits.chunked(GRID_COLUMNS), key = { "r:${it.first().movie.id}" }) { row ->
+                else -> items(hits.chunked(columns), key = { "r:${it.first().movie.id}" }) { row ->
                     HitGridRow(row, onOpenMovie)
                 }
             }
         }
+    }
     }
 }
 
@@ -222,8 +235,6 @@ private fun GenreNote(text: String) {
         modifier = Modifier.padding(horizontal = 36.dp, vertical = 24.dp),
     )
 }
-
-private const val GRID_COLUMNS = 7
 
 /**
  * Shows: the same row-based home as Movies (Continue Watching, Recently added, genre rows) with the
@@ -463,7 +474,8 @@ internal fun PosterCard(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            rating?.takeIf { it > 0.0 }?.let {
+            // A flat 10.0 is a provider placeholder, not a score.
+            rating?.takeIf { it > 0.0 && it < 10.0 }?.let {
                 Badge(
                     text = "★ ${formatRating(it)}",
                     modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),

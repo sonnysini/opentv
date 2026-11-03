@@ -537,19 +537,35 @@ private fun TmdbKeySection(settings: AppSettings) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
+        val save = {
+            settings.setTmdbApiKey(field)
+            Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
+        }
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         OutlinedTextField(
             value = field,
             onValueChange = { field = it.trim() },
             singleLine = true,
             label = { Text(stringResource(R.string.settings_tmdb_key_label)) },
-            modifier = Modifier.fillMaxWidth(),
+            // The TV keyboard's Next/Done saves, and DOWN leaves the field for the button: a
+            // text field otherwise keeps the d-pad, and the key never got saved from a remote.
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onPreviewKeyEvent { e ->
+                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                        e.key == androidx.compose.ui.input.key.Key.DirectionDown
+                    ) {
+                        focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+                    } else {
+                        false
+                    }
+                },
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = {
-                settings.setTmdbApiKey(field)
-                Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
-            }) { Text(stringResource(R.string.settings_tmdb_save)) }
+            OutlinedButton(onClick = save) { Text(stringResource(R.string.settings_tmdb_save)) }
             if (savedKey.isNotBlank()) {
                 Spacer(Modifier.width(12.dp))
                 Text(
