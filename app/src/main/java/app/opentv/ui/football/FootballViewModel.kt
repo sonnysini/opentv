@@ -549,6 +549,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val italian = repo.italianTeams()
+        graph.settings.setCrests(repo.crests())
         fun italianIn(m: Match) = m.home.id in italian || m.away.id in italian
         // A cup's goal show matters when an Italian team is among its games.
         fun relevant(m: Match) = m.league == FootballRepository.SERIE_A || italianIn(m) ||

@@ -33,11 +33,17 @@ enum class LogoSource { PROVIDER, PROVIDER_THEN_EXTERNAL, EXTERNAL_THEN_PROVIDER
  * paths resolve against the index URL. A DAZN team feed (`DAZN SERIE A 3 MILAN`) takes its
  * team's logo even when the list has no bare `Milan` channel to fold it into.
  *
- * [custom] rides along: logos picked by hand for single channels, group key → URL.
+ * [custom] rides along: logos picked by hand for single channels, group key → URL. So do
+ * [crests]: the Serie A teams' crests off FotMob (team key → URL), ahead of the pack's on the
+ * team channels ("Milan", "DAZN SERIE A 3 MILAN").
  */
-class LogoPack(val byKey: Map<String, String>, val custom: Map<String, String> = emptyMap()) {
+class LogoPack(
+    val byKey: Map<String, String>,
+    val custom: Map<String, String> = emptyMap(),
+    val crests: Map<String, String> = emptyMap(),
+) {
     /** Every logo URL in the pack, so the UI can tell a pack logo from a provider's. */
-    val urls: Set<String> = byKey.values.toSet()
+    val urls: Set<String> = byKey.values.toSet() + crests.values
 
     /**
      * The logo for a channel with this group key, or null: one the user picked for that exact
@@ -48,11 +54,18 @@ class LogoPack(val byKey: Map<String, String>, val custom: Map<String, String> =
     /** The logo picked by hand for this exact channel, if any. */
     fun customFor(groupKey: String): String? = if (groupKey.isEmpty()) null else custom[groupKey]
 
-    /** The pack's logo for this channel, if the pack names it. */
+    /** The pack's logo for this channel, if the pack names it: a team's crest first. */
     fun packFor(groupKey: String): String? {
-        if (groupKey.isEmpty() || byKey.isEmpty()) return null
+        if (groupKey.isEmpty() || (byKey.isEmpty() && crests.isEmpty())) return null
         val base = groupKey.substringBefore('+')
-        return byKey[base] ?: ChannelNameNormalizer.teamOf(base)?.let(byKey::get)
+        return crestFor(groupKey) ?: byKey[base] ?: ChannelNameNormalizer.teamOf(base)?.let(byKey::get)
+    }
+
+    /** The team's crest for a team channel ("Milan", "DAZN SERIE A 3 MILAN"), if it is one. */
+    fun crestFor(groupKey: String): String? {
+        if (groupKey.isEmpty() || crests.isEmpty()) return null
+        val base = groupKey.substringBefore('+')
+        return crests[base] ?: ChannelNameNormalizer.teamOf(base)?.let(crests::get)
     }
 
     @Serializable

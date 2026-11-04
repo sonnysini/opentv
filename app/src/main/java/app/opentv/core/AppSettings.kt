@@ -108,6 +108,7 @@ class AppSettings private constructor(context: Context) {
         LogoPack(
             readJson(KEY_LOGO_PACK) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap(),
             readJson(KEY_CUSTOM_LOGOS) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap(),
+            readJson(KEY_CRESTS) { addonJson.decodeFromString<Map<String, String>>(it) } ?: emptyMap(),
         )
     }
     val logoPack: StateFlow<LogoPack> = _logoPack.asStateFlow()
@@ -121,7 +122,15 @@ class AppSettings private constructor(context: Context) {
 
     fun setLogoPack(byKey: Map<String, String>) {
         prefs.edit().putString(KEY_LOGO_PACK, addonJson.encodeToString(byKey)).apply()
-        _logoPack.value = LogoPack(byKey, _logoPack.value.custom)
+        _logoPack.value = LogoPack(byKey, _logoPack.value.custom, _logoPack.value.crests)
+    }
+
+    /** The Serie A crests for the team channels (see [LogoPack.crests]), kept from the last calendar read. */
+    fun setCrests(crests: Map<String, String>) {
+        val current = _logoPack.value
+        if (crests.isEmpty() || crests == current.crests) return
+        prefs.edit().putString(KEY_CRESTS, addonJson.encodeToString(crests)).apply()
+        _logoPack.value = LogoPack(current.byKey, current.custom, crests)
     }
 
     /** Logos picked by hand for single channels: group key → URL. Null [url] goes back to automatic. */
@@ -130,7 +139,7 @@ class AppSettings private constructor(context: Context) {
         val current = _logoPack.value
         val next = if (url.isNullOrBlank()) current.custom - groupKey else current.custom + (groupKey to url)
         prefs.edit().putString(KEY_CUSTOM_LOGOS, addonJson.encodeToString(next)).apply()
-        _logoPack.value = LogoPack(current.byKey, next)
+        _logoPack.value = LogoPack(current.byKey, next, current.crests)
     }
 
     /** Whether the selected channel plays live inside the guide's preview pane. */
@@ -1125,6 +1134,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_SCAN_SERVER_URL = "scan_server_url"
         private const val KEY_LOGO_PACK = "logo_pack"
         private const val KEY_CUSTOM_LOGOS = "custom_logos"
+        private const val KEY_CRESTS = "team_crests"
 
         /** What [backupSettings] carries, by pref type. See there for what is left out and why. */
         private val BACKUP_KEYS: Map<String, SettingsBackup.Kind> = buildMap {

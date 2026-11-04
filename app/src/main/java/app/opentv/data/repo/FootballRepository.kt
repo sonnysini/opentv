@@ -163,6 +163,20 @@ class FootballRepository(
     suspend fun italianTeams(): Set<Long> = lock.withLock { disk().italian }
 
     /**
+     * The crests of the teams in the Serie A games on disk, by the channel keys a team channel
+     * goes by: the whole name's ("hellasverona") and each word that tells it apart ("verona").
+     */
+    suspend fun crests(): Map<String, String> = withContext(Dispatchers.IO) { lock.withLock {
+        disk().days.values.flatMap { it.matches }.filter { it.league == SERIE_A && !it.goals }
+            .flatMap { listOf(it.home, it.away) }.distinctBy { it.id }
+            .flatMap { t ->
+                (listOf(ChannelNameNormalizer.groupKeyOf(t.name)) + teamKeys(t.name).filter { it.length >= 3 })
+                    .filter { it.isNotEmpty() }.map { it to t.crestUrl }
+            }
+            .toMap()
+    } }
+
+    /**
      * The finished Serie A matches of the latest matchday played before today, latest first: a row
      * to watch highlights from on days without games.
      */

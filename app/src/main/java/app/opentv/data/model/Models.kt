@@ -230,10 +230,12 @@ val Channel.shownName: String get() = customName?.takeIf { it.isNotBlank() } ?: 
 
 /**
  * The logo to show: one picked by hand for this channel, else as [source] says — the provider's
- * alone, or the provider's and the outside ones (logo pack, then the guide's) in either order.
+ * alone, or the provider's and the outside ones (logo pack, then the guide's) in either order. A
+ * team channel takes its team's crest over the provider's whenever outside logos are on.
  */
 fun Channel.logo(source: LogoSource, pack: LogoPack = LogoPack.EMPTY): String? {
     pack.customFor(groupKey)?.let { return it }
+    if (source != LogoSource.PROVIDER) pack.crestFor(groupKey)?.let { return it }
     val provider = logoUrl?.takeIf { it.isNotBlank() }
     val external = { pack.packFor(groupKey) ?: guideLogoUrl?.takeIf { it.isNotBlank() } }
     return when (source) {

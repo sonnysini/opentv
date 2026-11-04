@@ -14,6 +14,9 @@
 - **Champions League first on Champions nights.** The rows go by the day a competition plays next,
   then Champions, Europa, Conference, Serie A: an odd Europa game kicking off earlier on a
   Wednesday no longer puts its row on top.
+- **Team channels wear their club's crest.** "Milan", "DAZN Serie A 3 Milan" and the like now
+  show the Serie A team's crest from FotMob — the same ones as on the football page — ahead of
+  the provider's logo and of a logo pack, whenever outside logos are on (Settings › Logos).
 - **Back up to the top shows the whole card again.** Coming back up from the rows, the page
   scrolled only as far as the buttons and left the top of the game's card off screen.
 
