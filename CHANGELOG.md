@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.46.1 — 4 November 2026
+
+- **The scan screen's left side, reordered.** On top the competition's logo with its name and
+  matchday ("CHAMPIONS LEAGUE · 4ª GIORNATA"), then the teams one under the other, each with its
+  crest, then "Finding the best source" in the theme's colour.
+
 ## 0.46.0 — 4 November 2026
 
 - **One button on the football page: "▶ Watch".** OK finds the best feed and plays it, as before;
