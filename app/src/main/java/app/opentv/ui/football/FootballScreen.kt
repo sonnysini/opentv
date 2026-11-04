@@ -1119,14 +1119,18 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
             .focusable()
             .onPreviewKeyEvent { e -> e.key != Key.Back },
     ) {
-        // Behind it all: the last picture, blurred and dark.
+        // Behind it all: the last picture, blurred and dark. Modifier.blur needs Android 12 (the
+        // Fire Sticks are 7–9): the picture is read a few pixels wide and stretched, which blurs
+        // it on any box.
         scan.frame?.let { file ->
             AsyncImage(
                 model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
-                    .memoryCacheKey("${file.path}#${file.lastModified()}").build(),
+                    .size(BLURRED_WIDTH, BLURRED_WIDTH * 9 / 16)
+                    .memoryCacheKey("${file.path}#${file.lastModified()}#blurred").build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = 0.35f }.blur(28.dp),
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
+                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = 0.3f }.blur(28.dp),
             )
         }
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to surface.copy(alpha = 0.2f), 0.5f to surface.copy(alpha = 0.6f), 0.62f to surface)))
@@ -1362,6 +1366,9 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
         )
     }
 }
+
+/** The scan screen's background picture is read this many pixels wide, to come out blurred. */
+private const val BLURRED_WIDTH = 24
 
 /** A feed that won't play says so this long before it leaves. */
 private const val LEAVE_PAUSE_MILLIS = 500L
