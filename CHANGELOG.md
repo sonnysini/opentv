@@ -14,8 +14,17 @@
   the last picture a look caught with the feed being checked, how many are done and a thin bar;
   the right lists the feeds as the picker does. Each one that plays gets its badges one after
   another and slides to its place in the ranking, the best on top; one that won't play says so
-  and leaves to the right. At the end "Found" names the feed, which starts a moment later. Back
-  cancels, as before. Start-up times and scoreboard codes are no longer shown.
+  and leaves to the right. At the end "Found": the best feed lights up on top, the rest fades and
+  its picture grows to the whole screen, where the player picks it up — the same picture held
+  until the game's first frame, so there's no jump. The screen is full screen on black, over the
+  side menu too. Back cancels, as before. Start-up times and scoreboard codes are no longer shown.
+- **New game cards.** Big crests and a chip top left: the time ("OGGI 21:00", "SAB 15:00"), the
+  minute in red while live, "FINITA" once over, a white "▶ HIGHLIGHTS" when they're ready. The
+  teams under the card, centred; the ready-feeds count and the line under finished games are gone.
+- **One Diretta Gol card per competition.** Instead of one per kick-off: the competition's logo
+  and "DIRETTA GOL" on its colour, no chip. Watch opens the slot on now, or the next one.
+- **Competition logos drawn for the dark page**, without the white box, over each row.
+- **A wider source picker**: long badges such as "AUDIO HD 5.1" fit whole.
 
 ## 0.45.0 — 4 November 2026
 
