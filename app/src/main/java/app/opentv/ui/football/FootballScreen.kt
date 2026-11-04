@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -233,6 +234,18 @@ fun FootballScreen(
     var refocus by remember { mutableStateOf<Long?>(null) }
     var pickedOnTop by remember { mutableStateOf(false) }
     var refocusTop by remember { mutableStateOf(0) }
+    // The scan screen takes the focus: when it goes (cancelled, or the game opened), focus goes
+    // back to where it was started from — the carousel, or the game's card.
+    var scanOnTop by remember { mutableStateOf(true) }
+    var scanned by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(scan?.match?.id) {
+        val id = scan?.match?.id
+        val was = scanned
+        if (id == null && was != null) {
+            if (scanOnTop) refocusTop++ else refocus = was
+        }
+        scanned = id
+    }
     BackHandler(enabled = picking != null) {
         if (pickedOnTop) refocusTop++ else refocus = picking?.match?.id
         pickedOnTop = false
@@ -275,7 +288,10 @@ fun FootballScreen(
         val highlight = item.highlights
         when {
             item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
-            item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> viewModel.autoWatch(item)
+            item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> {
+                scanOnTop = false
+                viewModel.autoWatch(item)
+            }
             else -> noChannel(item)
         }
     }
@@ -448,7 +464,10 @@ fun FootballScreen(
                                 }
                             },
                             onKey = { turnKicked++ },
-                            onWatch = { if (viewModel.feedsOf(heroItem).isNotEmpty()) viewModel.autoWatch(heroItem) else noChannel(heroItem) },
+                            onWatch = {
+                                scanOnTop = true
+                                if (viewModel.feedsOf(heroItem).isNotEmpty()) viewModel.autoWatch(heroItem) else noChannel(heroItem)
+                            },
                             onPick = {
                                 if (viewModel.feedsOf(heroItem).isNotEmpty()) {
                                     pickedOnTop = true
@@ -472,6 +491,7 @@ fun FootballScreen(
         scan?.let { ScanOverlay(it) }
         picking?.let { item ->
             SourcePicker(item, viewModel, looks, onRescan = {
+                scanOnTop = pickedOnTop
                 picking = null
                 viewModel.rescan(item)
             }) { feed ->
@@ -1075,8 +1095,30 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
     val waiting = scan.sources.filter { !it.looked }
     val shown = plays + dying + waiting
     val checking = scan.sources.firstOrNull { it.feed.id == scan.checking }
+    // The screen holds the focus while it's up: no key goes to the page or the menu under it
+    // (Back still reaches its handler).
+    val holder = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { holder.requestFocus() } }
+    // A long list: it follows the feed being looked at down, and goes back to the top at the end.
+    val list = rememberLazyListState()
+    LaunchedEffect(scan.checking, scan.finished) {
+        if (scan.finished) {
+            list.animateScrollToItem(0)
+            return@LaunchedEffect
+        }
+        val at = shown.indexOfFirst { it.feed.id == scan.checking }
+        if (at < 0) return@LaunchedEffect
+        val seen = list.layoutInfo.visibleItemsInfo
+        val last = seen.lastOrNull()?.index ?: return@LaunchedEffect
+        if (at >= last - 1) list.animateScrollToItem((at - (seen.size - 3)).coerceAtLeast(0))
+    }
 
-    Box(Modifier.fillMaxSize().background(surface)) {
+    Box(
+        Modifier.fillMaxSize().background(surface)
+            .focusRequester(holder)
+            .focusable()
+            .onPreviewKeyEvent { e -> e.key != Key.Back },
+    ) {
         // Behind it all: the last picture, blurred and dark.
         scan.frame?.let { file ->
             AsyncImage(
@@ -1089,7 +1131,7 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
         }
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to surface.copy(alpha = 0.2f), 0.5f to surface.copy(alpha = 0.6f), 0.62f to surface)))
 
-        Column(Modifier.padding(start = 100.dp, top = 55.dp).width(410.dp)) {
+        Column(Modifier.padding(start = 48.dp, top = 55.dp).width(410.dp)) {
             Text(
                 stringResource(if (scan.finished) R.string.football_scan_found else R.string.football_scan_searching).uppercase(),
                 color = if (scan.finished) scheme.primary else scheme.onSurfaceVariant,
@@ -1164,7 +1206,7 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
             }
         }
         Row(
-            Modifier.align(Alignment.BottomStart).padding(start = 100.dp, bottom = 28.dp),
+            Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 28.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
@@ -1182,6 +1224,7 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
             ListLabel(stringResource(R.string.football_sources))
             LazyColumn(
                 Modifier.weight(1f),
+                state = list,
                 userScrollEnabled = false,
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
