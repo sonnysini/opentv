@@ -42,8 +42,11 @@ class LogoPack(
     val custom: Map<String, String> = emptyMap(),
     val crests: Map<String, String> = emptyMap(),
 ) {
-    /** Every logo URL in the pack, so the UI can tell a pack logo from a provider's. */
-    val urls: Set<String> = byKey.values.toSet() + crests.values
+    /**
+     * Every logo URL in the pack, so the UI can tell a pack logo from a provider's. Not the
+     * crests: they go on the page as they are, transparent, as on the football page.
+     */
+    val urls: Set<String> = byKey.values.toSet()
 
     /**
      * The logo for a channel with this group key, or null: one the user picked for that exact
