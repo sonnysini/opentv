@@ -64,7 +64,7 @@ class LeagueRowsTest {
     }
 
     @Test fun postponedLeftOut() {
-        val rows = FootballViewModel.leagueRows(listOf(game(1, FootballRepository.SERIE_A, tue2100, Phase.OFF))))
+        val rows = FootballViewModel.leagueRows(listOf(game(1, FootballRepository.SERIE_A, tue2100, Phase.OFF)))
         assertEquals(emptyList<Int>(), order(rows))
     }
 
