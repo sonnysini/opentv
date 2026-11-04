@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.46.2 — 4 November 2026
+
+- **Leaving the app lets go of the stream.** Home, the box going to standby or another app now stop
+  the channel (or pause the film) and free the account's one connection; coming back puts the
+  channel on again, or the film at the same point, paused. Before, a box in standby kept streaming
+  in the background and another TV's channel got cut every few seconds.
+- **No automatic picture-in-picture on Home.** The floating window opens only from its button in
+  the player bar.
+
 ## 0.46.1 — 4 November 2026
 
 - **The scan screen's left side, reordered.** On top the competition's logo with its name and

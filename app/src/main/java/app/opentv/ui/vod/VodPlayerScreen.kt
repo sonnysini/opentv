@@ -59,6 +59,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -264,6 +267,34 @@ fun VodPlayerScreen(
             controller.release()
             scope.cancel()
         }
+    }
+
+    // Out of sight (Home, standby, another app): save the place, pause and let go of the stream,
+    // so a box gone to standby doesn't keep the account's one connection. Back in front, the film
+    // is reloaded at the same point and waits, paused.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        var stopped = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> if (!stopped) {
+                    stopped = true
+                    // Undispatched: the place is read now, before the stop below.
+                    scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { savePosition() }
+                    paused = true
+                    controller.player.playWhenReady = false
+                    controller.player.stop()
+                }
+                Lifecycle.Event.ON_START -> if (stopped) {
+                    stopped = false
+                    controller.player.prepare()
+                    controlsVisible = true
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(mediaKey) {
