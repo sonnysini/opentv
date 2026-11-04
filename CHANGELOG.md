@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.46.0 — 4 November 2026
+
+- **One button on the football page: "▶ Watch".** OK finds the best feed and plays it, as before;
+  holding OK picks the source by hand. "Pick source" and ↻ are gone from the top of the page; left
+  and right on Watch turn the carousel.
+- **The source picker is a panel down the right.** The page darkens behind it; the match on top,
+  then "Check sources again" with the time of the last check and how many were checked, then the
+  feeds that play — best first, marked "recommended" — with the same badges as the player's bar
+  (1080p, 50fps, 8.4 Mb/s, AUDIO HD 5.1, ✓ right game), and the ones that don't under
+  "Unavailable", with why. Feeds not checked yet show just their name.
+
 ## 0.45.0 — 4 November 2026
 
 - **Today's games in a carousel.** The top of the football page now turns through all of today's
