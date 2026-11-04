@@ -80,21 +80,21 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     val opening: StateFlow<String?> = _opening.asStateFlow()
     private var openJob: Job? = null
 
-    /** One feed on the "Watch automatically" screen. */
-    data class ScanRow(
-        val id: Long,
-        val name: String,
-        /** "1080p · 50 fps · 5.1", once looked at. */
-        val detail: String? = null,
-        /** The team codes the scoreboard showed: "SCF BAY". */
-        val board: String? = null,
-        /** Null while still to be looked at. */
-        val verdict: AutoScan.Verdict? = null,
-        /** 1-based place once ranked. */
-        val place: Int? = null,
+    /**
+     * The scan screen: [match]'s feeds as [sources] ranks them (the ones that play best first, then
+     * the ones still to look at, then the dead), the one being looked at now, the last picture a
+     * look caught. [finished]: done, [best] opens in a moment.
+     */
+    data class Scan(
+        val match: Match,
+        val sources: List<Source>,
+        val checking: Long?,
+        val frame: java.io.File?,
+        val done: Int,
+        val total: Int,
+        val finished: Boolean = false,
+        val best: Source? = null,
     )
-
-    data class Scan(val title: String, val rows: List<ScanRow>, val done: Int, val finished: Boolean = false)
 
     private val _scan = MutableStateFlow<Scan?>(null)
     val scan: StateFlow<Scan?> = _scan.asStateFlow()
@@ -363,6 +363,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                             // The player is about to take the connection: no more looks until back.
                             return@launch
                         }
+                        if (focus === f) publishFocus(f, next.id)
                         look(f, next, prober, reader)
                         if (focus === f) publishFocus(f)
                         continue
@@ -427,41 +428,41 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         _looks.value++
     }
 
-    /** The scan screen for [item], from what's known of its feeds so far. */
-    private fun publishFocus(item: Item) {
+    /** The scan screen for [item], from what's known of its feeds so far; [checking] is being looked at. */
+    private fun publishFocus(item: Item, checking: Long? = null) {
         val m = item.match
-        val all = toLook(item)
-        val rows = all.map { f ->
-            val e = store.fresh(m.id, f.id)
-            val p = e?.probe
-            val verdict = when {
-                e == null -> null
-                p == null || AutoScan.still(p) -> AutoScan.Verdict.DEAD
-                p.board != null -> AutoScan.gameCheck(p.board, m.home.name, m.away.name) ?: AutoScan.Verdict.OK
-                else -> AutoScan.Verdict.OK
-            }
-            ScanRow(f.id, nameOf(f), p?.let(::detail), p?.board?.let(::boardText), verdict)
-        }
-        _scan.value = Scan(titleOf(m), rows, rows.count { it.verdict != null })
+        val src = sources(item)
+        val last = src.filter { it.looked }.maxByOrNull { it.at ?: 0L }
+        _scan.value = Scan(
+            match = m,
+            sources = src,
+            checking = checking,
+            frame = last?.let { store.frame(m.id, it.feed.id) } ?: _scan.value?.takeIf { it.match.id == m.id }?.frame,
+            done = src.count { it.looked },
+            total = src.size,
+        )
     }
 
-    /** The ranking shown a moment, then the best feed plays. */
+    /** The ranking shown a moment with the one that's about to open, then it plays. */
     private suspend fun finishFocus(item: Item) {
         val m = item.match
         val src = sources(item)
-        val rows = src.mapIndexed { i, s ->
-            ScanRow(
-                s.feed.id, s.name, s.probe?.let(::detail), s.probe?.board?.let(::boardText),
-                verdict = if (s.looked) s.verdict else null,
-                place = (i + 1).takeIf { s.looked && s.usable },
-            )
-        }
-        _scan.value = Scan(titleOf(m), rows, rows.size, finished = true)
+        val best = src.firstOrNull { it.usable }
         src.forEachIndexed { i, s -> android.util.Log.i(TAG, "#${i + 1} ${s.name}: ${s.verdict}") }
         if (focus !== item) return
+        // The best one's picture: the screen lights it up, then blows it up to the whole screen,
+        // and the player holds it there until the feed's first frame.
+        val shot = best?.let { store.frame(m.id, it.feed.id) }
+        _scan.value = _scan.value?.takeIf { it.match.id == m.id }?.copy(
+            sources = src, checking = null, done = src.count { it.looked }, total = src.size, finished = true, best = best,
+            frame = shot ?: _scan.value?.frame,
+        )
+        delay(FOUND_MILLIS)
+        if (focus !== item) return
         focus = null
-        _scan.value = null
-        val first = src.firstOrNull { it.usable }?.feed ?: feedsOf(item).first()
+        val first = best?.feed ?: feedsOf(item).first()
+        app.opentv.player.PlayerPoster.set(first.id, shot ?: _scan.value?.frame)
+        // The scan screen stays over the page until the player is up: it goes with the page.
         handOver(item, first)
     }
 
@@ -501,7 +502,6 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         String.format(java.util.Locale.ITALY, "%.1f s", p.millis / 1000.0),
     ).joinToString(" · ")
 
-    private fun boardText(b: AutoScan.Board) = b.codes.take(2).joinToString(" ")
 
     /**
      * Only while the page is up: read on opening (unless read moments ago), then again only when a
@@ -612,7 +612,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The page out of [page] and [round]: the carousel on top, a row per competition. */
     private fun publish() {
-        val all = page + round.filter { r -> page.none { it.match.id == r.match.id } }
+        val all = onePerShow(page + round.filter { r -> page.none { it.match.id == r.match.id } })
         _ui.value = UiState(loading = false, heroes = carousel(all), rows = leagueRows(all))
     }
 
@@ -657,6 +657,22 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             }.sortedWith(order)
             if (day.isNotEmpty()) return day
             return listOfNotNull(open.sortedWith(compareBy<Item> { !it.relevant }.then(order)).firstOrNull())
+        }
+
+        /**
+         * One goal show per competition on the page, not one per kick-off: the one on now (the
+         * latest started), else the next. The others stay out until their turn — each keeps its
+         * own id for its scans and the feed watched.
+         */
+        fun onePerShow(all: List<Item>): List<Item> {
+            val shows = all.filter { it.match.goals }
+            if (shows.size < 2) return all
+            val keep = shows.groupBy { if (it.match.league == FootballRepository.CONFERENCE) FootballRepository.EUROPA else it.match.league }
+                .values.mapNotNullTo(HashSet()) { same ->
+                    (same.filter { it.match.phase == Phase.LIVE }.maxByOrNull { it.match.kickoffUtcMillis }
+                        ?: same.filter { it.match.phase == Phase.SCHEDULED }.minByOrNull { it.match.kickoffUtcMillis })?.match?.id
+                }
+            return all.filter { !it.match.goals || it.match.id in keep }
         }
 
         /**
@@ -715,6 +731,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** About 1 s a feed: a minute of waiting at most. */
         private const val MAX_FEEDS = 30
         private const val SCAN_BUDGET_MILLIS = 60_000L
+        /** "Found": the best feed lit up, then its picture grown to the whole screen, before it opens. */
+        private const val FOUND_MILLIS = 2_100L
         /** Matches looked at by themselves from this long before kick-off, as the scan server does: earlier the feeds aren't up yet. */
         private const val AHEAD_MILLIS = 15 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */

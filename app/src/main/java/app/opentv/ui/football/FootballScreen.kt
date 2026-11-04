@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.filled.PlayArrow
 import android.widget.Toast
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -36,6 +37,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +63,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -101,6 +105,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -230,6 +237,18 @@ fun FootballScreen(
     var refocus by remember { mutableStateOf<Long?>(null) }
     var pickedOnTop by remember { mutableStateOf(false) }
     var refocusTop by remember { mutableStateOf(0) }
+    // The scan screen takes the focus: when it goes (cancelled, or the game opened), focus goes
+    // back to where it was started from — the carousel, or the game's card.
+    var scanOnTop by remember { mutableStateOf(true) }
+    var scanned by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(scan?.match?.id) {
+        val id = scan?.match?.id
+        val was = scanned
+        if (id == null && was != null) {
+            if (scanOnTop) refocusTop++ else refocus = was
+        }
+        scanned = id
+    }
     BackHandler(enabled = picking != null) {
         if (pickedOnTop) refocusTop++ else refocus = picking?.match?.id
         pickedOnTop = false
@@ -272,7 +291,10 @@ fun FootballScreen(
         val highlight = item.highlights
         when {
             item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
-            item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> viewModel.autoWatch(item)
+            item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> {
+                scanOnTop = false
+                viewModel.autoWatch(item)
+            }
             else -> noChannel(item)
         }
     }
@@ -445,7 +467,10 @@ fun FootballScreen(
                                 }
                             },
                             onKey = { turnKicked++ },
-                            onWatch = { if (viewModel.feedsOf(heroItem).isNotEmpty()) viewModel.autoWatch(heroItem) else noChannel(heroItem) },
+                            onWatch = {
+                                scanOnTop = true
+                                if (viewModel.feedsOf(heroItem).isNotEmpty()) viewModel.autoWatch(heroItem) else noChannel(heroItem)
+                            },
                             onPick = {
                                 if (viewModel.feedsOf(heroItem).isNotEmpty()) {
                                     pickedOnTop = true
@@ -466,9 +491,13 @@ fun FootballScreen(
                 }
             }
         }
-        scan?.let { ScanOverlay(it) }
+        scan?.let { ScanOverlay(it, onCancel = viewModel::cancelScan) }
         picking?.let { item ->
-            SourcePicker(item, viewModel, looks) { feed ->
+            SourcePicker(item, viewModel, looks, onRescan = {
+                scanOnTop = pickedOnTop
+                picking = null
+                viewModel.rescan(item)
+            }) { feed ->
                 picking = null
                 viewModel.play(item, feed)
             }
@@ -694,22 +723,19 @@ private fun Hero(
             }
         }
         Spacer(Modifier.height(20.dp))
-        // LEFT off the first button and RIGHT off the last turn the carousel by hand.
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            HeroButton(
-                "⚡ " + stringResource(R.string.football_watch),
-                Modifier.focusRequester(watch).onPreviewKeyEvent { e ->
-                    e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft && onStep(-1)
-                },
-                onClick = onWatch,
-            )
-            HeroButton(stringResource(R.string.football_choose_source), onClick = onPick)
-            HeroButton(
-                "↻",
-                Modifier.onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onStep(1) },
-                onClick = { if (feeds.isNotEmpty()) viewModel.rescan(item) },
-            )
-        }
+        // One button: OK finds the best feed, holding OK picks one by hand. LEFT and RIGHT on it
+        // turn the carousel.
+        WatchButton(
+            stringResource(R.string.football_watch),
+            Modifier.focusRequester(watch).onOkHeld(onPick).onPreviewKeyEvent { e ->
+                e.type == KeyEventType.KeyDown && when (e.key) {
+                    Key.DirectionLeft -> onStep(-1)
+                    Key.DirectionRight -> onStep(1)
+                    else -> false
+                }
+            },
+            onClick = onWatch,
+        )
         Dots(count, at, turned, Modifier.padding(top = 14.dp, start = 2.dp))
         // Looking at another game's feeds by itself: a thin line, out of the way.
         progress?.takeIf { it.matchId != m.id }?.let { p ->
@@ -727,24 +753,26 @@ private fun Hero(
     }
 }
 
-/** Streaming-app button: translucent grey, white with black text in focus. */
+/** "▶ Watch": a pill, translucent grey, white with black text and a faint ring in focus. */
 @Composable
-private fun HeroButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun WatchButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Text(
-        text,
-        fontSize = 17.sp,
-        fontWeight = FontWeight.Bold,
-        color = if (focused) Color.Black else Color.White,
-        maxLines = 1,
-        modifier = modifier
+    val fg = if (focused) Color.Black else Color.White
+    Row(
+        modifier
             .lift(focused, 1.06f)
-            .clip(RoundedCornerShape(8.dp))
+            .then(if (focused) Modifier.border(2.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(50)).padding(2.dp) else Modifier.padding(2.dp))
+            .clip(RoundedCornerShape(50))
             .background(if (focused) Color.White else Color(0x736E7672))
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 11.dp),
-    )
+            .padding(start = 18.dp, end = 24.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        androidx.compose.material3.Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+        Text(text, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1)
+    }
 }
 
 /** One dot per card; this one's is a pill filling up until the next turns over. */
@@ -785,60 +813,80 @@ private fun Dot() {
 }
 
 /**
- * One feed in the big card's list: place, short name, badges for what its look measured (✓ right
- * game, resolution, 50 fps, Audio HD, 5.1), the restream source small at the end. Not looked at
- * yet: the quality the name claims, dashed. Dead or another game: faded, at the bottom. OK plays it.
+ * One feed in the source list, on two lines: the channel and the quality it claims, big, with
+ * "recommended" on the best; under it the badges of what its look measured, as the player's bar
+ * shows them (✓ right game, 1080p, 50fps, 8.4 Mb/s, AUDIO HD 5.1). Not looked at yet: the name
+ * alone. Dead or another game: why, instead of the badges. The restream source small at the end.
  */
 @Composable
-private fun SourceRow(s: FootballViewModel.Source, place: Int, onFocus: () -> Unit = {}, onClick: () -> Unit) {
+private fun SourceLine(s: FootballViewModel.Source, recommended: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
     val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
-    val dim = if (s.usable || focused) 1f else 0.4f
+    val fg = if (focused) scheme.onPrimary else scheme.onSurface
+    val faint = if (focused) scheme.onPrimary.copy(alpha = 0.6f) else scheme.onSurfaceVariant
     Row(
         Modifier
             .fillMaxWidth()
-            .alpha(dim)
+            .alpha(if (s.usable || focused) 1f else 0.45f)
             .clip(RoundedCornerShape(7.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .onFocusChanged {
-                focused = it.isFocused
-                if (it.isFocused) onFocus()
-            }
+            .background(if (focused) scheme.primary else Color.Transparent)
+            .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 11.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        val faint = if (focused) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
-        Text("$place", Modifier.width(22.dp), color = faint, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-        Text(
-            parts.name,
-            Modifier.weight(1f),
-            color = fg,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val p = s.probe
-        when {
-            !s.looked -> Badge("${parts.claimed}?", focused, dashed = true)
-            s.verdict == AutoScan.Verdict.DEAD -> Badge(stringResource(R.string.football_auto_dead).uppercase(), focused)
-            s.verdict == AutoScan.Verdict.WRONG_GAME -> Badge(stringResource(R.string.football_auto_wrong_game).uppercase(), focused)
-            p != null -> {
-                if (s.verdict == AutoScan.Verdict.CONFIRMED) Badge("✓", focused, accent = true)
-                Badge(FeedLabel.resolution(p.height), focused)
-                FeedLabel.smooth(p.fps)?.let { Badge(it, focused) }
-                if (p.audioHd) Badge("AUDIO HD", focused)
-                if ((p.audioChannels ?: 0) >= 6) Badge("5.1", focused)
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(
+                    listOf(parts.name, parts.claimed).filter(String::isNotBlank).joinToString(" "),
+                    Modifier.weight(1f, fill = false),
+                    color = fg,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (recommended) Text(
+                    stringResource(R.string.football_recommended).uppercase(),
+                    color = if (focused) scheme.onPrimary else scheme.primary,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                )
+            }
+            val p = s.probe
+            val why = when (s.verdict) {
+                AutoScan.Verdict.DEAD -> stringResource(R.string.football_auto_dead)
+                AutoScan.Verdict.WRONG_GAME -> stringResource(R.string.football_auto_wrong_game)
+                else -> null
+            }
+            when {
+                !s.looked -> Unit
+                why != null -> Text(why, Modifier.padding(top = 3.dp), color = faint, fontSize = 10.sp, maxLines = 1)
+                p != null -> Row(
+                    Modifier.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (s.verdict == AutoScan.Verdict.CONFIRMED) Text(
+                        "✓",
+                        color = if (focused) scheme.onPrimary else scheme.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    badges(p).forEach { QualityBadge(it, focused) }
+                }
             }
         }
-        Text(
+        if (parts.source.isNotEmpty()) Text(
             parts.source,
-            Modifier.width(64.dp),
+            Modifier.widthIn(max = 64.dp),
             color = faint,
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 9.sp,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.sp,
             textAlign = TextAlign.End,
             maxLines = 1,
@@ -847,140 +895,545 @@ private fun SourceRow(s: FootballViewModel.Source, place: Int, onFocus: () -> Un
     }
 }
 
-/**
- * A thin-outlined tag ("1080p", "50 FPS"): neutral, in the theme's colours. [accent]: the one that
- * means something (✓ right game) takes the primary colour — off the focused row, where it would
- * vanish. [dashed]: a guess (the name's claim before any look).
- */
+/** What a look measured, as the player's bar says it: `1080p` `50fps` `8.4 Mb/s` `AUDIO HD 5.1`. */
+private fun badges(p: AutoScan.Probe): List<String> = listOfNotNull(
+    FeedLabel.resolution(p.height),
+    p.fps?.let { "${it}fps" },
+    p.kbps?.let { app.opentv.player.StreamInfo.bitrateLabel(it * 1000L) },
+    listOfNotNull("AUDIO HD".takeIf { p.audioHd }, "5.1".takeIf { (p.audioChannels ?: 0) >= 6 })
+        .joinToString(" ").ifEmpty { null },
+)
+
+/** A badge as the player's [StreamBadges]: thin white outline; on the focused row, the theme's dark green. */
 @Composable
-private fun Badge(text: String, focused: Boolean, accent: Boolean = false, dashed: Boolean = false) {
-    val scheme = MaterialTheme.colorScheme
-    val colour = when {
-        focused -> scheme.onPrimary
-        accent -> scheme.primary
-        dashed -> scheme.onSurfaceVariant.copy(alpha = 0.7f)
-        else -> scheme.onSurface.copy(alpha = 0.85f)
-    }
-    val line = when {
-        focused -> scheme.onPrimary.copy(alpha = 0.5f)
-        accent -> scheme.primary
-        else -> scheme.outlineVariant
-    }
+private fun QualityBadge(text: String, focused: Boolean) {
+    val colour = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White.copy(alpha = 0.9f)
     Text(
         text,
+        style = MaterialTheme.typography.labelMedium,
         color = colour,
-        fontSize = 9.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.8.sp,
         maxLines = 1,
+        softWrap = false,
         modifier = Modifier
-            .drawBehind {
-                val r = 3.dp.toPx()
-                val w = 1.dp.toPx()
-                drawRoundRect(
-                    color = line,
-                    topLeft = androidx.compose.ui.geometry.Offset(w / 2, w / 2),
-                    size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(r),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = w,
-                        pathEffect = if (dashed) androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx())) else null,
-                    ),
-                )
-            }
-            .padding(horizontal = 5.dp, vertical = 1.dp),
+            .border(1.dp, if (focused) colour.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.45f), RoundedCornerShape(5.dp))
+            .padding(horizontal = 7.dp, vertical = 1.dp),
     )
 }
 
-/** Hold OK on a card: the match's feeds, best first, to pick one by hand. */
+/** "FONTI", "NON DISPONIBILI": small spaced capitals over a part of the list. */
 @Composable
-private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewModel, looks: Int, onPick: (Channel) -> Unit) {
+private fun ListLabel(text: String) {
+    Text(
+        text.uppercase(),
+        Modifier.padding(start = 11.dp, top = 9.dp, bottom = 4.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        fontSize = 8.sp,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = 1.5.sp,
+    )
+}
+
+/** "↻ Check the sources again", with when they were last checked and how many of them. */
+@Composable
+private fun RescanLine(sub: String, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
+    val fg = if (focused) scheme.onPrimary else scheme.onSurface
+    val faint = if (focused) scheme.onPrimary.copy(alpha = 0.7f) else scheme.onSurfaceVariant
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (focused) scheme.primary else scheme.surfaceVariant)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Text("↻", color = faint, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.width(16.dp))
+        Column {
+            Text(stringResource(R.string.football_rescan), color = fg, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(sub, color = faint, fontSize = 9.sp, maxLines = 1)
+        }
+    }
+}
+
+private val PICKER_WIDTH = 440.dp
+
+/**
+ * Hold OK on "Watch" or a card: the match's feeds in a panel down the right, best first, to pick
+ * one by hand; the page darkens behind. On top "Check again" (the focus starts on the best feed,
+ * one down), then the feeds that play, then the ones that don't under "Unavailable".
+ */
+@Composable
+private fun SourcePicker(
+    item: FootballViewModel.Item,
+    viewModel: FootballViewModel,
+    looks: Int,
+    /** "Check again": the scan screen takes over, then the best feed plays. */
+    onRescan: () -> Unit,
+    onPick: (Channel) -> Unit,
+) {
     val sources = remember(item, looks) { viewModel.sources(item) }
+    val (playing, gone) = remember(sources) { sources.partition { it.usable } }
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     // Opened by holding OK, the same press keeps repeating into the picker and its release
     // would tap the first source. Ignore OK until a fresh press.
     var armed by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier
-                .onPreviewKeyEvent { e ->
-                    val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-                    when {
-                        armed || !ok -> false
-                        e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { armed = true; false }
-                        e.type == KeyEventType.KeyUp -> { armed = true; true }
-                        else -> true
-                    }
-                }
-                .width(460.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(18.dp),
-        ) {
-            Text(stringResource(R.string.football_pick_source), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("${item.match.home.name} - ${item.match.away.name}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(10.dp))
-            LazyColumn(Modifier.height(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(sources.size) { i ->
-                    val s = sources[i]
-                    Box(if (i == 0) Modifier.focusRequester(first) else Modifier) {
-                        SourceRow(s, place = i + 1) { onPick(s.feed) }
-                    }
-                }
-            }
+    val surface = MaterialTheme.colorScheme.surface
+    val shown = remember { androidx.compose.animation.core.MutableTransitionState(false) }.apply { targetState = true }
+    val sub = progress?.takeIf { it.matchId == item.match.id }
+        ?.let { stringResource(R.string.football_rescan_running, it.done, it.total) }
+        ?: run {
+            val checked = sources.count { it.looked }
+            val last = sources.mapNotNull { it.at }.maxOrNull()
+            if (last == null) stringResource(R.string.football_rescan_never)
+            else stringResource(
+                R.string.football_rescan_last,
+                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(last)),
+                checked,
+                sources.size,
+            )
         }
-    }
-}
-
-/** The feeds being looked at, then their ranking, before the best one opens. */
-@Composable
-private fun ScanOverlay(scan: FootballViewModel.Scan) {
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)).padding(horizontal = 80.dp, vertical = 40.dp),
+        Modifier.fillMaxSize().background(
+            Brush.horizontalGradient(0f to Color(0xFF08090A).copy(alpha = 0.55f), 0.6f to Color(0xFF08090A).copy(alpha = 0.8f)),
+        ),
     ) {
-        Column(Modifier.fillMaxSize()) {
-            Text(
-                stringResource(if (scan.finished) R.string.football_auto_ranked else R.string.football_auto_scanning),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-            )
-            Text(scan.title, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.7f))
-            Spacer(Modifier.height(14.dp))
-            LinearProgressIndicator(
-                progress = { if (scan.rows.isEmpty()) 1f else scan.done / scan.rows.size.toFloat() },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-            )
-            Spacer(Modifier.height(14.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(scan.rows, key = { it.id }) { row -> ScanLine(row) }
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = shown,
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            enter = androidx.compose.animation.slideInHorizontally(tween(220)) { it } + androidx.compose.animation.fadeIn(tween(220)),
+        ) {
+            Row(Modifier.fillMaxHeight()) {
+                // The panel's edge melts into the darkened page.
+                Box(Modifier.width(60.dp).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color.Transparent, surface))))
+                Column(
+                    Modifier
+                        .width(PICKER_WIDTH)
+                        .fillMaxHeight()
+                        .background(surface)
+                        .onPreviewKeyEvent { e ->
+                            val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                            when {
+                                armed || !ok -> false
+                                e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { armed = true; false }
+                                e.type == KeyEventType.KeyUp -> { armed = true; true }
+                                else -> true
+                            }
+                        }
+                        .padding(start = 28.dp, end = 36.dp, top = 32.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.football_pick_source).uppercase(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.5.sp,
+                    )
+                    Text(
+                        name(item.match).uppercase(),
+                        Modifier.padding(top = 4.dp, bottom = 16.dp),
+                        fontFamily = Oswald,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp,
+                        lineHeight = 28.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    LazyColumn(
+                        Modifier.weight(1f),
+                        contentPadding = PaddingValues(bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        item(key = "rescan") { RescanLine(sub, onRescan) }
+                        if (playing.isNotEmpty()) item(key = "label:on") { ListLabel(stringResource(R.string.football_sources)) }
+                        items(playing, key = { "on:" + it.feed.id }) { s ->
+                            Box(if (s === playing.first()) Modifier.focusRequester(first) else Modifier) {
+                                SourceLine(s, recommended = s === playing.first() && s.looked) { onPick(s.feed) }
+                            }
+                        }
+                        if (gone.isNotEmpty()) item(key = "label:off") { ListLabel(stringResource(R.string.football_sources_unavailable)) }
+                        items(gone, key = { "off:" + it.feed.id }) { s ->
+                            Box(if (playing.isEmpty() && s === gone.first()) Modifier.focusRequester(first) else Modifier) {
+                                SourceLine(s, recommended = false) { onPick(s.feed) }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+/** Where a feed is on the scan screen. */
+private enum class Look { WAITING, CHECKING, PLAYS, LEAVING }
+
+/**
+ * The feeds being looked at, before the best one opens. On the left the game and the last picture
+ * a look caught, with the feed being looked at, how many are done and a thin bar; on the right
+ * the feeds as the source picker lists them. As each look comes back, its badges come in one by
+ * one and the row slides to its place in the ranking — the best on top, "recommended"; a feed
+ * that won't play says so, then leaves to the right and the rows under it move up. At the end:
+ * "Found", and the one about to play. Back cancels.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ScanLine(row: FootballViewModel.ScanRow) {
-    val (mark, colour, note) = when (row.verdict) {
-        null -> Triple("…", Color.White.copy(alpha = 0.4f), null)
-        AutoScan.Verdict.CONFIRMED -> Triple("✓", Color(0xFF6BDB8A), stringResource(R.string.football_auto_confirmed))
-        AutoScan.Verdict.OK -> Triple("✓", Color(0xFF6BDB8A), null)
-        AutoScan.Verdict.WRONG_GAME -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_wrong_game))
-        AutoScan.Verdict.DEAD -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_dead))
+private fun ScanOverlay(scan: FootballViewModel.Scan, onCancel: () -> Unit) {
+    // A window of its own over the whole app, the side menu too; Back cancels.
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        LaunchedEffect(window) {
+            window?.setWindowAnimations(0)
+            window?.setDimAmount(0f)
+            window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        ScanScreen(scan)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(row.place?.let { "$it." } ?: "", Modifier.width(36.dp), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
-        Text(mark, Modifier.width(24.dp), color = colour, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-        Text(row.name, Modifier.weight(1f), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            listOfNotNull(row.detail, row.board, note).joinToString("   "),
-            color = Color.White.copy(alpha = 0.75f),
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ScanScreen(scan: FootballViewModel.Scan) {
+    val m = scan.match
+    val scheme = MaterialTheme.colorScheme
+    // Feeds seen playing (or still to look at) on this screen: the ones among them that die
+    // stay a moment, saying why, before they go. The ones dead from an earlier scan aren't shown.
+    val alive = remember(m.id) { HashSet<Long>() }
+    val left = remember(m.id) { androidx.compose.runtime.mutableStateMapOf<Long, Unit>() }
+    LaunchedEffect(scan) { scan.sources.forEach { if (it.usable) alive += it.feed.id } }
+    val plays = scan.sources.filter { it.looked && it.usable }
+    val dying = scan.sources.filter { !it.usable && it.feed.id in alive && it.feed.id !in left }
+    val waiting = scan.sources.filter { !it.looked }
+    val shown = plays + dying + waiting
+    val checking = scan.sources.firstOrNull { it.feed.id == scan.checking }
+    // The screen holds the focus while it's up: no key goes to the page or the menu under it
+    // (Back still reaches its handler).
+    val holder = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { holder.requestFocus() } }
+    // A long list: it follows the feed being looked at down, and goes back to the top at the end.
+    val list = rememberLazyListState()
+    LaunchedEffect(scan.checking, scan.finished) {
+        if (scan.finished) {
+            list.animateScrollToItem(0)
+            return@LaunchedEffect
+        }
+        val at = shown.indexOfFirst { it.feed.id == scan.checking }
+        if (at < 0) return@LaunchedEffect
+        val seen = list.layoutInfo.visibleItemsInfo
+        val last = seen.lastOrNull()?.index ?: return@LaunchedEffect
+        if (at >= last - 1) list.animateScrollToItem((at - (seen.size - 3)).coerceAtLeast(0))
+    }
+
+    // At the end: the best feed lit up on top of the list, then the rest fades and its picture
+    // grows from the box to the whole screen, where the player picks it up.
+    val lit = remember(m.id) { Animatable(0f) }
+    val gone = remember(m.id) { Animatable(0f) }
+    val grow = remember(m.id) { Animatable(0f) }
+    LaunchedEffect(scan.finished) {
+        if (!scan.finished) return@LaunchedEffect
+        lit.animateTo(1f, tween(LIGHT_MILLIS, delayMillis = LIGHT_DELAY_MILLIS))
+        kotlinx.coroutines.delay(HOLD_LIT_MILLIS)
+        launch { gone.animateTo(1f, tween(FADE_MILLIS)) }
+        kotlinx.coroutines.delay(FADE_MILLIS / 2L)
+        grow.animateTo(1f, tween(GROW_MILLIS, easing = androidx.compose.animation.core.CubicBezierEasing(0.65f, 0f, 0.2f, 1f)))
+    }
+    // Where the picture's box sits on screen, for it to grow from.
+    var boxAt by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
+    Box(
+        Modifier.fillMaxSize().background(Color.Black)
+            .focusRequester(holder)
+            .focusable()
+            .onPreviewKeyEvent { e -> e.key != Key.Back },
+    ) {
+      Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - gone.value }) {
+        Column(Modifier.padding(start = 64.dp, top = 55.dp).width(410.dp)) {
+            Text(
+                stringResource(if (scan.finished) R.string.football_scan_found else R.string.football_scan_searching).uppercase(),
+                color = if (scan.finished) scheme.primary else scheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp,
+            )
+            Row(Modifier.padding(top = 13.dp), horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                Crest(m.home, 36)
+                if (!m.goals) Crest(m.away, 36)
+            }
+            Text(
+                name(m).uppercase(),
+                Modifier.padding(top = 8.dp),
+                fontFamily = Oswald,
+                fontWeight = FontWeight.Bold,
+                fontSize = 38.sp,
+                lineHeight = 40.sp,
+                color = scheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // The last picture a look caught, with the feed being looked at (or about to play).
+            Box(
+                Modifier.padding(top = 22.dp).width(360.dp).aspectRatio(16f / 9f)
+                    .onGloballyPositioned { boxAt = it.boundsInRoot() }
+                    .clip(RoundedCornerShape(9.dp)).background(Color.Black),
+            ) {
+                scan.frame?.let { file ->
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
+                            .memoryCacheKey("${file.path}#${file.lastModified()}").build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                val on = if (scan.finished) scan.best else checking
+                if (on != null) Row(
+                    Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = 9.dp)
+                        .clip(RoundedCornerShape(5.dp)).background(Color.Black.copy(alpha = 0.65f))
+                        .padding(horizontal = 7.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (scan.finished) Text("▶", color = Color.White, fontSize = 10.sp)
+                    else Spinner()
+                    Text(feedTitle(on.feed), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
+            Row(Modifier.padding(top = 15.dp, bottom = 6.dp).width(360.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = scheme.onSurface, fontWeight = FontWeight.Bold)) { append("${scan.done}") }
+                        append(" " + stringResource(R.string.football_scan_count, scan.total))
+                    },
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+                Text(
+                    scan.best?.takeIf { scan.finished }?.let { stringResource(R.string.football_scan_starts, feedTitle(it.feed)) }
+                        ?: stringResource(R.string.football_scan_auto),
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+            val part by animateFloatAsState(if (scan.total == 0) 1f else scan.done / scan.total.toFloat(), tween(500), label = "scanned")
+            Box(Modifier.width(360.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(scheme.surfaceVariant)) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(part).clip(RoundedCornerShape(2.dp)).background(scheme.primary))
+            }
+        }
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(start = 64.dp, bottom = 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                stringResource(R.string.football_scan_back),
+                color = scheme.onSurface.copy(alpha = 0.8f),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.border(1.dp, scheme.outline, RoundedCornerShape(3.dp)).padding(horizontal = 4.dp),
+            )
+            Text(stringResource(R.string.football_scan_cancel), color = scheme.onSurfaceVariant, fontSize = 10.sp)
+        }
+
+        Column(Modifier.align(Alignment.TopEnd).width(470.dp).fillMaxHeight().padding(start = 20.dp, end = 36.dp, top = 55.dp)) {
+            ListLabel(stringResource(R.string.football_sources))
+            LazyColumn(
+                Modifier.weight(1f),
+                state = list,
+                userScrollEnabled = false,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(shown, key = { it.feed.id }) { s ->
+                    val id = s.feed.id
+                    val look = when {
+                        !s.usable -> Look.LEAVING
+                        s.looked -> Look.PLAYS
+                        id == scan.checking -> Look.CHECKING
+                        else -> Look.WAITING
+                    }
+                    Box(
+                        Modifier.animateItem(
+                            fadeInSpec = null,
+                            fadeOutSpec = null,
+                            placementSpec = tween(700, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        ),
+                    ) {
+                        val top = plays.firstOrNull() === s
+                        ScanLine(s, look, recommended = top, lit = if (top) lit.value else 0f) { left[id] = Unit }
+                    }
+                }
+            }
+        }
+      }
+        // The best feed's picture, from its box to the whole screen.
+        val from = boxAt
+        val shot = scan.frame
+        if (scan.finished && from != null && shot != null && grow.value > 0f) {
+            val t = grow.value
+            val d = LocalDensity.current
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                val w = constraints.maxWidth.toFloat()
+                val h = constraints.maxHeight.toFloat()
+                val left = from.left * (1 - t)
+                val top = from.top * (1 - t)
+                val width = from.width + (w - from.width) * t
+                val height = from.height + (h - from.height) * t
+                Box(
+                    Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt()) }
+                        .size(with(d) { width.toDp() }, with(d) { height.toDp() })
+                        .clip(RoundedCornerShape(9.dp * (1 - t)))
+                        .background(Color.Black),
+                ) {
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(LocalContext.current).data(shot)
+                            .memoryCacheKey("${shot.path}#${shot.lastModified()}").build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The scan's ending: the best feed lights up, the screen fades, its picture grows. */
+private const val LIGHT_DELAY_MILLIS = 250
+private const val LIGHT_MILLIS = 400
+private const val HOLD_LIT_MILLIS = 350L
+private const val FADE_MILLIS = 300
+private const val GROW_MILLIS = 700
+
+/** A small turning ring, in the theme's green. */
+@Composable
+private fun Spinner() {
+    CircularProgressIndicator(
+        modifier = Modifier.size(10.dp),
+        strokeWidth = 2.dp,
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+    )
+}
+
+/** "Sky Sport Uno FHD": the channel and the quality it claims. */
+private fun feedTitle(feed: Channel): String =
+    FeedLabel.split(feed.shownName, feed.qualityLabel).let { p -> listOf(p.name, p.claimed).filter(String::isNotBlank).joinToString(" ") }
+
+/**
+ * One feed on the scan screen, laid out as in the source picker. Still to look at: the name,
+ * faded. Being looked at: on grey, with a spinner. Plays: its badges come in one after another.
+ * Leaving: why it won't play, then it slides off to the right and [onGone].
+ */
+@Composable
+private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boolean, lit: Float = 0f, onGone: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    // [lit] 1: in focus, as the source picker's — the theme's green, dark text.
+    val fg = androidx.compose.ui.graphics.lerp(scheme.onSurface, scheme.onPrimary, lit)
+    val accent = androidx.compose.ui.graphics.lerp(scheme.primary, scheme.onPrimary, lit)
+    val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
+    val away = remember { Animatable(0f) }
+    val far = with(LocalDensity.current) { 450.dp.toPx() }
+    if (look == Look.LEAVING) LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(LEAVE_PAUSE_MILLIS)
+        away.animateTo(1f, tween(550, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+        onGone()
+    }
+    val tag by animateFloatAsState(if (recommended) 1f else 0f, tween(400, delayMillis = 500), label = "recommended")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                translationX = away.value * far
+                alpha = (if (look == Look.WAITING) 0.5f else 1f) * (1f - away.value)
+            }
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (look == Look.CHECKING) scheme.surfaceVariant else Color.Transparent)
+            .background(scheme.primary.copy(alpha = lit))
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(
+                    listOf(parts.name, parts.claimed).filter(String::isNotBlank).joinToString(" "),
+                    Modifier.weight(1f, fill = false),
+                    color = fg,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (tag > 0f) Text(
+                    stringResource(R.string.football_recommended).uppercase(),
+                    Modifier.alpha(tag),
+                    color = accent,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                )
+            }
+            when (look) {
+                Look.WAITING -> Unit
+                Look.CHECKING -> Row(
+                    Modifier.padding(top = 4.dp).height(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Spinner()
+                    Text(stringResource(R.string.football_scan_checking), color = scheme.primary, fontSize = 10.sp)
+                }
+                Look.LEAVING -> Text(
+                    stringResource(if (s.verdict == AutoScan.Verdict.WRONG_GAME) R.string.football_auto_wrong_game else R.string.football_auto_dead),
+                    Modifier.padding(top = 4.dp).height(16.dp),
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                )
+                Look.PLAYS -> Row(
+                    Modifier.padding(top = 4.dp).height(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (s.verdict == AutoScan.Verdict.CONFIRMED) Text("✓", color = accent, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    s.probe?.let(::badges)?.forEachIndexed { i, b ->
+                        val enter = remember { Animatable(0f) }
+                        LaunchedEffect(Unit) { enter.animateTo(1f, tween(350, delayMillis = i * 70)) }
+                        Box(Modifier.graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 6.dp.toPx() }) {
+                            QualityBadge(b, focused = lit > 0.5f)
+                        }
+                    }
+                }
+            }
+        }
+        if (parts.source.isNotEmpty()) Text(
+            parts.source,
+            Modifier.widthIn(max = 64.dp),
+            color = androidx.compose.ui.graphics.lerp(scheme.onSurfaceVariant, scheme.onPrimary.copy(alpha = 0.6f), lit),
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.End,
             maxLines = 1,
-            style = MaterialTheme.typography.bodyMedium,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
+
+/** A feed that won't play says so this long before it leaves. */
+private const val LEAVE_PAUSE_MILLIS = 500L
 
 // ---- Rows ---------------------------------------------------------------------------------------
 
@@ -998,13 +1451,8 @@ private fun MatchRow(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 48.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            // League logos are drawn for a light page: on a white chip they read on the dark one.
-            Box(
-                Modifier.size(22.dp).clip(RoundedCornerShape(5.dp)).background(Color.White).padding(2.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                AsyncImage(model = Team(-row.league.toLong(), "").crestUrl, contentDescription = null, modifier = Modifier.fillMaxSize())
-            }
+            // FotMob's logo drawn for a dark page.
+            AsyncImage(model = darkLogo(row.league), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(
                 leagueName(row.league),
@@ -1033,7 +1481,7 @@ private fun MatchRow(
                         onRefocused()
                     }
                 }
-                MatchTile(item, corner(item, viewModel, progress, looks), Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
+                MatchTile(item, corner(item, progress), Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
             }
         }
     }
@@ -1069,19 +1517,41 @@ private fun MatchTile(
                 .height(112.dp)
                 .lift(focused, 1.05f)
                 .clip(shape)
-                .split(TeamColors.of(m.home), TeamColors.of(m.away))
+                .then(if (m.goals) Modifier.background(goalShowBrush(m.league)) else Modifier.split(TeamColors.of(m.home), TeamColors.of(m.away)))
                 .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
         ) {
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
-            Row(
-                Modifier.fillMaxSize().padding(horizontal = 22.dp),
-                horizontalArrangement = if (m.goals) Arrangement.Center else Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Crest(m.home, 52)
-                if (!m.goals) Crest(m.away, 52)
+            if (m.goals) {
+                // The goal show: the competition's logo and "DIRETTA GOL" on its colour, no chip.
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    AsyncImage(model = darkLogo(m.league), contentDescription = null, modifier = Modifier.size(44.dp))
+                    Text(
+                        m.home.name.uppercase(),
+                        Modifier.padding(top = 6.dp),
+                        fontFamily = Oswald,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        letterSpacing = 1.sp,
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                }
+            } else {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 22.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Crest(m.home, 52)
+                    Crest(m.away, 52)
+                }
+                val highlight = m.phase == Phase.FINISHED && item.highlights != null
+                Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, light = highlight, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))
             }
-            Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))
             corner?.let {
                 Text(
                     it,
@@ -1097,44 +1567,57 @@ private fun MatchTile(
                 )
             }
         }
-        Text(
+        // The teams under the card, centred; the goal show says it inside.
+        if (!m.goals) Text(
             name(m),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 7.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
         )
-        tileStatus(m)?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
     }
 }
 
 @Composable
-private fun Chip(text: String, live: Boolean, modifier: Modifier = Modifier) {
+private fun Chip(text: String, live: Boolean, light: Boolean = false, modifier: Modifier = Modifier) {
     Text(
         text,
         fontSize = 11.sp,
         fontWeight = FontWeight.ExtraBold,
-        color = Color.White,
+        color = if (light) Color.Black else Color.White,
         maxLines = 1,
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(if (live) Color(0xFFE50914) else Color.Black.copy(alpha = 0.65f))
+            .background(
+                when {
+                    live -> Color(0xFFE50914)
+                    light -> Color.White.copy(alpha = 0.92f)
+                    else -> Color.Black.copy(alpha = 0.65f)
+                },
+            )
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
-/** Bottom right of a tile: the scan on it ("12/30"), else how many feeds are ready ("⚡ 17"). */
-@Composable
-private fun corner(item: FootballViewModel.Item, viewModel: FootballViewModel, progress: FootballViewModel.Progress?, looks: Int): String? {
-    if (item.match.phase == Phase.FINISHED || item.match.phase == Phase.OFF) return null
-    if (viewModel.feedsOf(item).isEmpty()) return null
-    if (progress?.matchId == item.match.id) return "${progress.done}/${progress.total}"
-    val usable = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
-    return if (usable > 0) "⚡ $usable" else null
+/** Bottom right of a tile, only while its feeds are being looked at by themselves: "12/30". */
+private fun corner(item: FootballViewModel.Item, progress: FootballViewModel.Progress?): String? =
+    progress?.takeIf { it.matchId == item.match.id && item.match.phase != Phase.FINISHED }?.let { "${it.done}/${it.total}" }
+
+/** FotMob's competition logo drawn for a dark page. */
+private fun darkLogo(league: Int) = "https://images.fotmob.com/image_resources/logo/leaguelogo/dark/$league.png"
+
+/** The goal show's card: the competition's colour, lit from the middle. */
+private fun goalShowBrush(league: Int): Brush {
+    val (from, to) = when (league) {
+        FootballRepository.CHAMPIONS -> 0xFF1C2A6B to 0xFF0A1238
+        FootballRepository.EUROPA -> 0xFF9A4200 to 0xFF3A1600
+        FootballRepository.CONFERENCE -> 0xFF0D7A34 to 0xFF04280F
+        else -> 0xFF0B5F8A to 0xFF03243A
+    }
+    return Brush.radialGradient(listOf(Color(from), Color(to)), radius = 260f)
 }
 
 /** Paints the box in two colours split on a slant: home left, away right. */
@@ -1266,17 +1749,8 @@ private fun chip(m: Match, highlights: String?): String = when (m.phase) {
         day.uppercase() + " " + TIME.format(at)
     }
     Phase.LIVE -> if (m.goals) stringResource(R.string.football_live) else m.minute ?: stringResource(R.string.football_live)
-    Phase.FINISHED -> if (highlights != null) "▶ " + stringResource(R.string.football_highlights) else stringResource(R.string.football_highlights_later)
+    Phase.FINISHED -> if (highlights != null) "▶ " + stringResource(R.string.football_highlights).uppercase() else stringResource(R.string.football_tile_finished).uppercase()
     Phase.OFF -> "—"
-}
-
-/** The line under a finished tile: "Finale", "Finale · Dom 25". */
-@Composable
-private fun tileStatus(m: Match): String? {
-    if (m.phase != Phase.FINISHED) return null
-    val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
-    val full = stringResource(R.string.football_full_time)
-    return if (at.toLocalDate() == LocalDate.now()) full else full + " · " + DAY.format(at).replaceFirstChar { it.uppercase() }
 }
 
 /** "1080p50", "720p" */

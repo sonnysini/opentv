@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.46.0 — 4 November 2026
+
+- **One button on the football page: "▶ Watch".** OK finds the best feed and plays it, as before;
+  holding OK picks the source by hand. "Pick source" and ↻ are gone from the top of the page; left
+  and right on Watch turn the carousel.
+- **The source picker is a panel down the right.** The page darkens behind it; the match on top,
+  then "Check sources again" with the time of the last check and how many were checked, then the
+  feeds that play — best first, marked "recommended" — with the same badges as the player's bar
+  (1080p, 50fps, 8.4 Mb/s, AUDIO HD 5.1, ✓ right game), and the ones that don't under
+  "Unavailable", with why. Feeds not checked yet show just their name.
+- **A new scan screen, animated.** While the best feed is looked for, the left shows the game,
+  the last picture a look caught with the feed being checked, how many are done and a thin bar;
+  the right lists the feeds as the picker does. Each one that plays gets its badges one after
+  another and slides to its place in the ranking, the best on top; one that won't play says so
+  and leaves to the right. At the end "Found": the best feed lights up on top, the rest fades and
+  its picture grows to the whole screen, where the player picks it up — the same picture held
+  until the game's first frame, so there's no jump. The screen is full screen on black, over the
+  side menu too. Back cancels, as before. Start-up times and scoreboard codes are no longer shown.
+- **New game cards.** Big crests and a chip top left: the time ("OGGI 21:00", "SAB 15:00"), the
+  minute in red while live, "FINITA" once over, a white "▶ HIGHLIGHTS" when they're ready. The
+  teams under the card, centred; the ready-feeds count and the line under finished games are gone.
+- **One Diretta Gol card per competition.** Instead of one per kick-off: the competition's logo
+  and "DIRETTA GOL" on its colour, no chip. Watch opens the slot on now, or the next one.
+- **Competition logos drawn for the dark page**, without the white box, over each row.
+- **A wider source picker**: long badges such as "AUDIO HD 5.1" fit whole.
+
 ## 0.45.0 — 4 November 2026
 
 - **Today's games in a carousel.** The top of the football page now turns through all of today's
