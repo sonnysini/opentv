@@ -37,6 +37,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
@@ -470,7 +471,10 @@ fun FootballScreen(
         }
         scan?.let { ScanOverlay(it) }
         picking?.let { item ->
-            SourcePicker(item, viewModel, looks) { feed ->
+            SourcePicker(item, viewModel, looks, onRescan = {
+                picking = null
+                viewModel.rescan(item)
+            }) { feed ->
                 picking = null
                 viewModel.play(item, feed)
             }
@@ -941,7 +945,14 @@ private val PICKER_WIDTH = 360.dp
  * one down), then the feeds that play, then the ones that don't under "Unavailable".
  */
 @Composable
-private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewModel, looks: Int, onPick: (Channel) -> Unit) {
+private fun SourcePicker(
+    item: FootballViewModel.Item,
+    viewModel: FootballViewModel,
+    looks: Int,
+    /** "Check again": the scan screen takes over, then the best feed plays. */
+    onRescan: () -> Unit,
+    onPick: (Channel) -> Unit,
+) {
     val sources = remember(item, looks) { viewModel.sources(item) }
     val (playing, gone) = remember(sources) { sources.partition { it.usable } }
     val progress by viewModel.progress.collectAsStateWithLifecycle()
@@ -1017,7 +1028,7 @@ private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewMo
                         contentPadding = PaddingValues(bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        item(key = "rescan") { RescanLine(sub) { viewModel.rescan(item) } }
+                        item(key = "rescan") { RescanLine(sub, onRescan) }
                         if (playing.isNotEmpty()) item(key = "label:on") { ListLabel(stringResource(R.string.football_sources)) }
                         items(playing, key = { "on:" + it.feed.id }) { s ->
                             Box(if (s === playing.first()) Modifier.focusRequester(first) else Modifier) {
@@ -1037,54 +1048,280 @@ private fun SourcePicker(item: FootballViewModel.Item, viewModel: FootballViewMo
     }
 }
 
-/** The feeds being looked at, then their ranking, before the best one opens. */
+/** Where a feed is on the scan screen. */
+private enum class Look { WAITING, CHECKING, PLAYS, LEAVING }
+
+/**
+ * The feeds being looked at, before the best one opens. On the left the game and the last picture
+ * a look caught, with the feed being looked at, how many are done and a thin bar; on the right
+ * the feeds as the source picker lists them. As each look comes back, its badges come in one by
+ * one and the row slides to its place in the ranking — the best on top, "recommended"; a feed
+ * that won't play says so, then leaves to the right and the rows under it move up. At the end:
+ * "Found", and the one about to play. Back cancels.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ScanOverlay(scan: FootballViewModel.Scan) {
-    Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)).padding(horizontal = 80.dp, vertical = 40.dp),
-    ) {
-        Column(Modifier.fillMaxSize()) {
+    val m = scan.match
+    val scheme = MaterialTheme.colorScheme
+    val surface = scheme.surface
+    // Feeds seen playing (or still to look at) on this screen: the ones among them that die
+    // stay a moment, saying why, before they go. The ones dead from an earlier scan aren't shown.
+    val alive = remember(m.id) { HashSet<Long>() }
+    val left = remember(m.id) { androidx.compose.runtime.mutableStateMapOf<Long, Unit>() }
+    LaunchedEffect(scan) { scan.sources.forEach { if (it.usable) alive += it.feed.id } }
+    val plays = scan.sources.filter { it.looked && it.usable }
+    val dying = scan.sources.filter { !it.usable && it.feed.id in alive && it.feed.id !in left }
+    val waiting = scan.sources.filter { !it.looked }
+    val shown = plays + dying + waiting
+    val checking = scan.sources.firstOrNull { it.feed.id == scan.checking }
+
+    Box(Modifier.fillMaxSize().background(surface)) {
+        // Behind it all: the last picture, blurred and dark.
+        scan.frame?.let { file ->
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
+                    .memoryCacheKey("${file.path}#${file.lastModified()}").build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = 0.35f }.blur(28.dp),
+            )
+        }
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to surface.copy(alpha = 0.2f), 0.5f to surface.copy(alpha = 0.6f), 0.62f to surface)))
+
+        Column(Modifier.padding(start = 100.dp, top = 55.dp).width(410.dp)) {
             Text(
-                stringResource(if (scan.finished) R.string.football_auto_ranked else R.string.football_auto_scanning),
-                style = MaterialTheme.typography.headlineSmall,
+                stringResource(if (scan.finished) R.string.football_scan_found else R.string.football_scan_searching).uppercase(),
+                color = if (scan.finished) scheme.primary else scheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp,
+            )
+            Row(Modifier.padding(top = 13.dp), horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                Crest(m.home, 36)
+                if (!m.goals) Crest(m.away, 36)
+            }
+            Text(
+                name(m).uppercase(),
+                Modifier.padding(top = 8.dp),
+                fontFamily = Oswald,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                fontSize = 38.sp,
+                lineHeight = 40.sp,
+                color = scheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(scan.title, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.7f))
-            Spacer(Modifier.height(14.dp))
-            LinearProgressIndicator(
-                progress = { if (scan.rows.isEmpty()) 1f else scan.done / scan.rows.size.toFloat() },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            // The last picture a look caught, with the feed being looked at (or about to play).
+            Box(
+                Modifier.padding(top = 22.dp).width(360.dp).aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(9.dp)).background(Color.Black),
+            ) {
+                scan.frame?.let { file ->
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
+                            .memoryCacheKey("${file.path}#${file.lastModified()}").build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                val on = if (scan.finished) scan.best else checking
+                if (on != null) Row(
+                    Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = 9.dp)
+                        .clip(RoundedCornerShape(5.dp)).background(Color.Black.copy(alpha = 0.65f))
+                        .padding(horizontal = 7.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (scan.finished) Text("▶", color = Color.White, fontSize = 10.sp)
+                    else Spinner()
+                    Text(feedTitle(on.feed), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
+            Row(Modifier.padding(top = 15.dp, bottom = 6.dp).width(360.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = scheme.onSurface, fontWeight = FontWeight.Bold)) { append("${scan.done}") }
+                        append(" " + stringResource(R.string.football_scan_count, scan.total))
+                    },
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+                Text(
+                    scan.best?.takeIf { scan.finished }?.let { stringResource(R.string.football_scan_starts, feedTitle(it.feed)) }
+                        ?: stringResource(R.string.football_scan_auto),
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+            val part by animateFloatAsState(if (scan.total == 0) 1f else scan.done / scan.total.toFloat(), tween(500), label = "scanned")
+            Box(Modifier.width(360.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(scheme.surfaceVariant)) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(part).clip(RoundedCornerShape(2.dp)).background(scheme.primary))
+            }
+        }
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(start = 100.dp, bottom = 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                stringResource(R.string.football_scan_back),
+                color = scheme.onSurface.copy(alpha = 0.8f),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.border(1.dp, scheme.outline, RoundedCornerShape(3.dp)).padding(horizontal = 4.dp),
             )
-            Spacer(Modifier.height(14.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(scan.rows, key = { it.id }) { row -> ScanLine(row) }
+            Text(stringResource(R.string.football_scan_cancel), color = scheme.onSurfaceVariant, fontSize = 10.sp)
+        }
+
+        Column(Modifier.align(Alignment.TopEnd).width(PICKER_WIDTH + 64.dp).fillMaxHeight().padding(start = 28.dp, end = 36.dp, top = 55.dp)) {
+            ListLabel(stringResource(R.string.football_sources))
+            LazyColumn(
+                Modifier.weight(1f),
+                userScrollEnabled = false,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(shown, key = { it.feed.id }) { s ->
+                    val id = s.feed.id
+                    val look = when {
+                        !s.usable -> Look.LEAVING
+                        s.looked -> Look.PLAYS
+                        id == scan.checking -> Look.CHECKING
+                        else -> Look.WAITING
+                    }
+                    Box(
+                        Modifier.animateItem(
+                            fadeInSpec = null,
+                            fadeOutSpec = null,
+                            placementSpec = tween(700, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        ),
+                    ) {
+                        ScanLine(s, look, recommended = plays.firstOrNull() === s) { left[id] = Unit }
+                    }
+                }
             }
         }
     }
 }
 
+/** A small turning ring, in the theme's green. */
 @Composable
-private fun ScanLine(row: FootballViewModel.ScanRow) {
-    val (mark, colour, note) = when (row.verdict) {
-        null -> Triple("…", Color.White.copy(alpha = 0.4f), null)
-        AutoScan.Verdict.CONFIRMED -> Triple("✓", Color(0xFF6BDB8A), stringResource(R.string.football_auto_confirmed))
-        AutoScan.Verdict.OK -> Triple("✓", Color(0xFF6BDB8A), null)
-        AutoScan.Verdict.WRONG_GAME -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_wrong_game))
-        AutoScan.Verdict.DEAD -> Triple("✗", LIVE_RED, stringResource(R.string.football_auto_dead))
+private fun Spinner() {
+    CircularProgressIndicator(
+        modifier = Modifier.size(10.dp),
+        strokeWidth = 2.dp,
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+    )
+}
+
+/** "Sky Sport Uno FHD": the channel and the quality it claims. */
+private fun feedTitle(feed: Channel): String =
+    FeedLabel.split(feed.shownName, feed.qualityLabel).let { p -> listOf(p.name, p.claimed).filter(String::isNotBlank).joinToString(" ") }
+
+/**
+ * One feed on the scan screen, laid out as in the source picker. Still to look at: the name,
+ * faded. Being looked at: on grey, with a spinner. Plays: its badges come in one after another.
+ * Leaving: why it won't play, then it slides off to the right and [onGone].
+ */
+@Composable
+private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boolean, onGone: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
+    val away = remember { Animatable(0f) }
+    val far = with(LocalDensity.current) { 450.dp.toPx() }
+    if (look == Look.LEAVING) LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(LEAVE_PAUSE_MILLIS)
+        away.animateTo(1f, tween(550, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+        onGone()
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(row.place?.let { "$it." } ?: "", Modifier.width(36.dp), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
-        Text(mark, Modifier.width(24.dp), color = colour, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-        Text(row.name, Modifier.weight(1f), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            listOfNotNull(row.detail, row.board, note).joinToString("   "),
-            color = Color.White.copy(alpha = 0.75f),
+    val tag by animateFloatAsState(if (recommended) 1f else 0f, tween(400, delayMillis = 500), label = "recommended")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                translationX = away.value * far
+                alpha = (if (look == Look.WAITING) 0.5f else 1f) * (1f - away.value)
+            }
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (look == Look.CHECKING) scheme.surfaceVariant else Color.Transparent)
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(
+                    listOf(parts.name, parts.claimed).filter(String::isNotBlank).joinToString(" "),
+                    Modifier.weight(1f, fill = false),
+                    color = scheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (tag > 0f) Text(
+                    stringResource(R.string.football_recommended).uppercase(),
+                    Modifier.alpha(tag),
+                    color = scheme.primary,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                )
+            }
+            when (look) {
+                Look.WAITING -> Unit
+                Look.CHECKING -> Row(
+                    Modifier.padding(top = 4.dp).height(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Spinner()
+                    Text(stringResource(R.string.football_scan_checking), color = scheme.primary, fontSize = 10.sp)
+                }
+                Look.LEAVING -> Text(
+                    stringResource(if (s.verdict == AutoScan.Verdict.WRONG_GAME) R.string.football_auto_wrong_game else R.string.football_auto_dead),
+                    Modifier.padding(top = 4.dp).height(16.dp),
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                )
+                Look.PLAYS -> Row(
+                    Modifier.padding(top = 4.dp).height(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (s.verdict == AutoScan.Verdict.CONFIRMED) Text("✓", color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    s.probe?.let(::badges)?.forEachIndexed { i, b ->
+                        val enter = remember { Animatable(0f) }
+                        LaunchedEffect(Unit) { enter.animateTo(1f, tween(350, delayMillis = i * 70)) }
+                        Box(Modifier.graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 6.dp.toPx() }) {
+                            QualityBadge(b, focused = false)
+                        }
+                    }
+                }
+            }
+        }
+        if (parts.source.isNotEmpty()) Text(
+            parts.source,
+            Modifier.widthIn(max = 64.dp),
+            color = scheme.onSurfaceVariant,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.End,
             maxLines = 1,
-            style = MaterialTheme.typography.bodyMedium,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
+
+/** A feed that won't play says so this long before it leaves. */
+private const val LEAVE_PAUSE_MILLIS = 500L
 
 // ---- Rows ---------------------------------------------------------------------------------------
 

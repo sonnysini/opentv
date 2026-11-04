@@ -10,6 +10,12 @@
   feeds that play — best first, marked "recommended" — with the same badges as the player's bar
   (1080p, 50fps, 8.4 Mb/s, AUDIO HD 5.1, ✓ right game), and the ones that don't under
   "Unavailable", with why. Feeds not checked yet show just their name.
+- **A new scan screen, animated.** While the best feed is looked for, the left shows the game,
+  the last picture a look caught with the feed being checked, how many are done and a thin bar;
+  the right lists the feeds as the picker does. Each one that plays gets its badges one after
+  another and slides to its place in the ranking, the best on top; one that won't play says so
+  and leaves to the right. At the end "Found" names the feed, which starts a moment later. Back
+  cancels, as before. Start-up times and scoreboard codes are no longer shown.
 
 ## 0.45.0 — 4 November 2026
 

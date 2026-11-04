@@ -20,8 +20,6 @@
     <string name="nav_football">Calcio</string>
     <string name="football_auto_hint">Sceglie da solo il flusso migliore</string>
     <string name="football_auto_scanning">Cerco il flusso migliore…</string>
-    <string name="football_auto_ranked">Flussi migliori</string>
-    <string name="football_auto_confirmed">partita giusta</string>
     <string name="football_auto_wrong_game">altra partita</string>
     <string name="football_auto_dead">non parte</string>
     <string name="football_scanning_bar">Scansiono %1$s · %2$d/%3$d</string>
@@ -33,6 +31,14 @@
     <string name="football_rescan_running">controllo in corso · %1$d su %2$d</string>
     <string name="football_sources">Fonti</string>
     <string name="football_sources_unavailable">Non disponibili</string>
+    <string name="football_scan_searching">Cerco la fonte migliore</string>
+    <string name="football_scan_found">Trovata</string>
+    <string name="football_scan_count">di %1$d controllate</string>
+    <string name="football_scan_auto">parte da sola appena finito</string>
+    <string name="football_scan_starts">parte %1$s</string>
+    <string name="football_scan_checking">controllo in corso</string>
+    <string name="football_scan_back">Indietro</string>
+    <string name="football_scan_cancel">per annullare</string>
     <string name="football_checked_count">%1$d fonti controllate</string>
     <string name="football_preview_muted">Anteprima senza audio</string>
     <string name="football_highlights_later">Highlights a breve</string>
