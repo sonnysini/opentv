@@ -12,6 +12,8 @@ import app.opentv.data.repo.FootballRepository.Team
 import app.opentv.ui.football.FootballViewModel.Item
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.Instant
+import java.time.ZoneId
 
 class LeagueRowsTest {
     private val tue2100 = 1_793_736_000_000L
@@ -29,8 +31,7 @@ class LeagueRowsTest {
                 game(2, FootballRepository.CONFERENCE, tue2100 + 46 * hour),
                 game(3, FootballRepository.CHAMPIONS, tue2100),
                 game(4, FootballRepository.EUROPA, tue2100 + 46 * hour),
-            ),
-            emptySet(),
+            )
         )
         // Thursday's two cups start together: Europa before Conference.
         assertEquals(
@@ -44,13 +45,12 @@ class LeagueRowsTest {
             listOf(
                 game(1, FootballRepository.SERIE_A, tue2100 - 48 * hour, Phase.FINISHED),
                 game(2, FootballRepository.EUROPA, tue2100 + 46 * hour),
-            ),
-            emptySet(),
+            )
         )
         assertEquals(listOf(FootballRepository.EUROPA, FootballRepository.SERIE_A), order(rows))
     }
 
-    @Test fun italianFirstAtTheSameTimeAndBigCardLeftOut() {
+    @Test fun italianFirstAtTheSameTimeAndCarouselGamesKept() {
         val rows = FootballViewModel.leagueRows(
             listOf(
                 game(1, FootballRepository.EUROPA, tue2100, relevant = false),
@@ -59,13 +59,37 @@ class LeagueRowsTest {
                 game(4, FootballRepository.EUROPA, tue2100 - 3 * hour, Phase.LIVE),
                 game(5, FootballRepository.EUROPA, tue2100 - 4 * hour),
             ),
-            setOf(5L),
         )
-        assertEquals(listOf(4L, 3L, 2L, 1L), rows.single().items.map { it.match.id })
+        assertEquals(listOf(4L, 5L, 3L, 2L, 1L), rows.single().items.map { it.match.id })
     }
 
     @Test fun postponedLeftOut() {
-        val rows = FootballViewModel.leagueRows(listOf(game(1, FootballRepository.SERIE_A, tue2100, Phase.OFF)), emptySet())
+        val rows = FootballViewModel.leagueRows(listOf(game(1, FootballRepository.SERIE_A, tue2100, Phase.OFF))))
         assertEquals(emptyList<Int>(), order(rows))
+    }
+
+    private val tuesday = Instant.ofEpochMilli(tue2100).atZone(ZoneId.systemDefault()).toLocalDate()
+
+    @Test fun carouselIsTodaysGamesThatMatterLiveFirst() {
+        val goals = Item(
+            Match(-9, tue2100, Team(-42, "Diretta Gol"), Team(-42, "Champions League"), null, null, Phase.SCHEDULED, null, null, goals = true, league = FootballRepository.CHAMPIONS),
+        )
+        val all = listOf(
+            game(1, FootballRepository.CHAMPIONS, tue2100),
+            game(2, FootballRepository.CHAMPIONS, tue2100, relevant = false),
+            goals,
+            game(3, FootballRepository.CHAMPIONS, tue2100 - 2 * hour, Phase.LIVE),
+            game(4, FootballRepository.CHAMPIONS, tue2100 - 3 * hour, Phase.FINISHED),
+            game(5, FootballRepository.SERIE_A, tue2100 + 24 * hour),
+        )
+        assertEquals(listOf(3L, 1L, -9L), FootballViewModel.carousel(all, tuesday).map { it.match.id })
+    }
+
+    @Test fun carouselWithNothingTodayIsTheNextGame() {
+        val all = listOf(
+            game(1, FootballRepository.EUROPA, tue2100 + 46 * hour, relevant = false),
+            game(2, FootballRepository.SERIE_A, tue2100 + 72 * hour),
+        )
+        assertEquals(listOf(2L), FootballViewModel.carousel(all, tuesday).map { it.match.id })
     }
 }

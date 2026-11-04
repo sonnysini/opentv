@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.45.0 — 4 November 2026
+
+- **Today's games in a carousel.** The top of the football page now turns through all of today's
+  games that matter — Serie A and the Italian teams in the cups, with their goal shows — every
+  8 seconds, live ones first, dots underneath. Left off "Watch now" and right off ↻ step through
+  them by hand; it holds still while a game plays muted behind it. The tabs are gone, and the
+  games on the carousel stay in their rows below too.
+- **Diretta Gol for the cups.** Champions League nights get their goal show as a card of its own,
+  and so do Europa and Conference League ones (Sky's "Diretta Gol Uel/Uecl" shows both): found
+  through the guide on whichever Sky Sport channel carries it.
+
 ## 0.44.1 — 4 November 2026
 
 - **Cup games found under their Italian names.** Guides write "Atletico M. - Bayern M." or

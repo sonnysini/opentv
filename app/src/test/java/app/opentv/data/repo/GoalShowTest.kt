@@ -48,4 +48,42 @@ class GoalShowTest {
     @Test fun postponedGamesDontCount() {
         assertNull(FootballRepository.goalShow(listOf(game(1, h2045, Phase.LIVE), game(2, h2045, Phase.OFF))))
     }
+
+    private fun cup(id: Long, league: Int, kickoff: Long, phase: Phase = Phase.SCHEDULED) =
+        game(id, kickoff, phase).copy(league = league)
+
+    @Test fun oneShowPerCupEuropaAndConferenceShared() {
+        val shows = FootballRepository.goalShows(
+            listOf(
+                cup(1, FootballRepository.CHAMPIONS, h2045), cup(2, FootballRepository.CHAMPIONS, h2045),
+                cup(3, FootballRepository.EUROPA, h2045), cup(4, FootballRepository.CONFERENCE, h2045),
+                game(5, h2045, Phase.SCHEDULED),
+            ),
+        )
+        assertEquals(listOf(FootballRepository.CHAMPIONS, FootballRepository.EUROPA), shows.map { it.league })
+        assertEquals(2, shows.map { it.id }.distinct().size)
+        assertTrue(shows.all { it.goals && it.home.id < 0 })
+    }
+
+    @Test fun conferenceAloneIsConferences() {
+        val show = FootballRepository.goalShows(
+            listOf(cup(1, FootballRepository.CONFERENCE, h1830), cup(2, FootballRepository.CONFERENCE, h1830)),
+        ).single()
+        assertEquals(FootballRepository.CONFERENCE, show.league)
+        assertEquals("Conference League", show.away.name)
+    }
+
+    @Test fun serieAShowKeepsItsId() {
+        val g = FootballRepository.goalShow(listOf(game(1, h2045, Phase.SCHEDULED), game(2, h2045, Phase.SCHEDULED)))!!
+        assertEquals(-(h2045 / 60_000L), g.id)
+    }
+
+    @Test fun cupShowTitlesFromTheGuide() {
+        assertTrue(FootballRepository.isCupGoalShow("Diretta Gol Ucl 04/11/2026 (Diretta)", FootballRepository.CHAMPIONS))
+        assertTrue(FootballRepository.isCupGoalShow("Diretta Gol Uel/ Uecl... (Diretta)", FootballRepository.EUROPA))
+        assertTrue(FootballRepository.isCupGoalShow("Diretta Gol Uel/ Uecl... (Diretta)", FootballRepository.CONFERENCE))
+        assertTrue(!FootballRepository.isCupGoalShow("Diretta Gol Uel/ Uecl... (Diretta)", FootballRepository.CHAMPIONS))
+        assertTrue(!FootballRepository.isCupGoalShow("Diretta Gol Serie A", FootballRepository.CHAMPIONS))
+        assertTrue(!FootballRepository.isCupGoalShow("Next Game: Champions League Magazine", FootballRepository.CHAMPIONS))
+    }
 }
