@@ -419,7 +419,13 @@ fun FootballScreen(
                                 heroFocused = it.hasFocus
                                 if (it.hasFocus) {
                                     heroTouched++
-                                    scope.launch { listState.animateScrollToItem(0) }
+                                    // After the scroll that brings the focused button into view:
+                                    // started together, that one cancels this and the top of the
+                                    // card stays off screen.
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(HERO_SCROLL_DELAY_MILLIS)
+                                        listState.animateScrollToItem(0)
+                                    }
                                 }
                             },
                             count = ui.heroes.size,
@@ -508,6 +514,9 @@ private fun Message(text: String) {
 // ---- Top of the page ----------------------------------------------------------------------------
 
 private val HERO_HEIGHT = 318.dp
+
+/** Coming back up to the carousel: the page scrolls to its top after the focus has settled. */
+private const val HERO_SCROLL_DELAY_MILLIS = 120L
 
 /** The carousel's turn, as the live TV page's. */
 private const val TURN_MILLIS = 8_000

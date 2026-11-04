@@ -9,7 +9,13 @@
   games on the carousel stay in their rows below too.
 - **Diretta Gol for the cups.** Champions League nights get their goal show as a card of its own,
   and so do Europa and Conference League ones (Sky's "Diretta Gol Uel/Uecl" shows both): found
-  through the guide on whichever Sky Sport channel carries it.
+  through the guide on whichever Sky Sport channel carries it — one for each kick-off (18:45 and
+  21:00).
+- **Champions League first on Champions nights.** The rows go by the day a competition plays next,
+  then Champions, Europa, Conference, Serie A: an odd Europa game kicking off earlier on a
+  Wednesday no longer puts its row on top.
+- **Back up to the top shows the whole card again.** Coming back up from the rows, the page
+  scrolled only as far as the buttons and left the top of the game's card off screen.
 
 ## 0.44.1 — 4 November 2026
 

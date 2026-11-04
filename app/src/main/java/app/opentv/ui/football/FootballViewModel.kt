@@ -661,8 +661,9 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /**
          * A row per competition out of [all], the carousel's games too: live, then to come by
          * kick-off (Italian games first at the same time, the goal show last), then finished,
-         * latest first. The competition playing next goes first ([leagueRank] when two start
-         * together); a matchday over goes to the bottom.
+         * latest first. The competition playing next goes first — by day: on a Wednesday the
+         * Champions League before an odd Europa League game kicking off earlier ([leagueRank]
+         * among the day's) — and a matchday over goes to the bottom.
          */
         fun leagueRows(all: List<Item>): List<LeagueRow> =
             all.filter { it.match.phase != Phase.OFF }.groupBy { it.match.league }.mapNotNull { (league, games) ->
@@ -673,7 +674,9 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
                     games.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis }
                 if (items.isEmpty()) return@mapNotNull null
                 val round = (open.firstOrNull { !it.match.goals } ?: games.firstOrNull { !it.match.goals })?.match?.round
-                Triple(open.minOfOrNull { it.match.kickoffUtcMillis }, league, LeagueRow(league, round, items))
+                val next = open.minOfOrNull { it.match.kickoffUtcMillis }
+                    ?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+                Triple(next, league, LeagueRow(league, round, items))
             }
                 .sortedWith(compareBy({ it.first == null }, { it.first }, { leagueRank(it.second) }))
                 .map { it.third }

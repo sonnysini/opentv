@@ -86,4 +86,15 @@ class GoalShowTest {
         assertTrue(!FootballRepository.isCupGoalShow("Diretta Gol Serie A", FootballRepository.CHAMPIONS))
         assertTrue(!FootballRepository.isCupGoalShow("Next Game: Champions League Magazine", FootballRepository.CHAMPIONS))
     }
+
+    @Test fun aShowPerKickoff() {
+        val shows = FootballRepository.goalShows(
+            listOf(
+                cup(1, FootballRepository.CHAMPIONS, h1830), cup(2, FootballRepository.CHAMPIONS, h1830),
+                cup(3, FootballRepository.CHAMPIONS, h2045), cup(4, FootballRepository.CHAMPIONS, h2045),
+            ),
+        )
+        assertEquals(listOf(h1830, h2045), shows.map { it.kickoffUtcMillis })
+        assertEquals(2, shows.map { it.id }.distinct().size)
+    }
 }

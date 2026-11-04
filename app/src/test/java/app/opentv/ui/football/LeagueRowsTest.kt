@@ -92,4 +92,14 @@ class LeagueRowsTest {
         )
         assertEquals(listOf(2L), FootballViewModel.carousel(all, tuesday).map { it.match.id })
     }
+
+    @Test fun sameDayGoesByCompetitionNotKickoff() {
+        val rows = FootballViewModel.leagueRows(
+            listOf(
+                game(1, FootballRepository.CHAMPIONS, tue2100),
+                game(2, FootballRepository.EUROPA, tue2100 - 3 * hour),
+            ),
+        )
+        assertEquals(listOf(FootballRepository.CHAMPIONS, FootballRepository.EUROPA), order(rows))
+    }
 }

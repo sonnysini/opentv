@@ -643,27 +643,27 @@ class FootballRepository(
 
         /**
          * The goal shows as games of their own: per competition (Europa and Conference share
-         * Sky's), for the first kick-off today that two or more of its games share and that isn't
-         * over, from that kick-off, live while any of them is. None on days with no games played
+         * Sky's) and per kick-off today that two or more of its games share and that isn't over,
+         * from that kick-off, live while any of them is. None on days with no games played
          * together.
          */
         fun goalShows(today: List<Match>): List<Match> =
             today.filter { it.phase != Phase.OFF && !it.goals }
                 .groupBy { if (it.league == CONFERENCE) EUROPA else it.league }
                 .filterKeys { it in LEAGUES }
-                .mapNotNull { (show, games) -> goalShow(games, show) }
+                .flatMap { (show, games) -> goalShows(games, show) }
                 .sortedWith(compareBy({ it.kickoffUtcMillis }, { LEAGUES.indexOf(it.league) }))
 
-        /** The Serie A goal show; see [goalShows]. */
+        /** The first Serie A goal show; see [goalShows]. */
         fun goalShow(today: List<Match>): Match? =
             goalShows(today).firstOrNull { it.league == SERIE_A }
 
-        private fun goalShow(games: List<Match>, show: Int): Match? {
-            val slot = games
-                .groupBy { it.kickoffUtcMillis }
-                .filterValues { it.size >= 2 && it.any { m -> m.phase == Phase.SCHEDULED || m.phase == Phase.LIVE } }
-                .minByOrNull { it.key } ?: return null
-            val (kickoff, together) = slot
+        private fun goalShows(games: List<Match>, show: Int): List<Match> = games
+            .groupBy { it.kickoffUtcMillis }
+            .filterValues { it.size >= 2 && it.any { m -> m.phase == Phase.SCHEDULED || m.phase == Phase.LIVE } }
+            .map { (kickoff, together) -> goalShow(kickoff, together, show) }
+
+        private fun goalShow(kickoff: Long, together: List<Match>, show: Int): Match {
             val live = together.count { it.phase == Phase.LIVE }
             // Europa's show with only Conference games on: Conference's logo and row.
             val league = if (show == EUROPA && together.none { it.league == EUROPA }) CONFERENCE else show
