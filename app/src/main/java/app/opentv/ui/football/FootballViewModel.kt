@@ -450,14 +450,20 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val best = src.firstOrNull { it.usable }
         src.forEachIndexed { i, s -> android.util.Log.i(TAG, "#${i + 1} ${s.name}: ${s.verdict}") }
         if (focus !== item) return
+        // The best one's picture: the screen lights it up, then blows it up to the whole screen,
+        // and the player holds it there until the feed's first frame.
+        val shot = best?.let { store.frame(m.id, it.feed.id) }
         _scan.value = _scan.value?.takeIf { it.match.id == m.id }?.copy(
             sources = src, checking = null, done = src.count { it.looked }, total = src.size, finished = true, best = best,
+            frame = shot ?: _scan.value?.frame,
         )
         delay(FOUND_MILLIS)
         if (focus !== item) return
         focus = null
-        _scan.value = null
-        handOver(item, best?.feed ?: feedsOf(item).first())
+        val first = best?.feed ?: feedsOf(item).first()
+        app.opentv.player.PlayerPoster.set(first.id, shot ?: _scan.value?.frame)
+        // The scan screen stays over the page until the player is up: it goes with the page.
+        handOver(item, first)
     }
 
     private fun titleOf(m: Match) = if (m.goals) m.home.name else "${m.home.name} - ${m.away.name}"
@@ -606,7 +612,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The page out of [page] and [round]: the carousel on top, a row per competition. */
     private fun publish() {
-        val all = page + round.filter { r -> page.none { it.match.id == r.match.id } }
+        val all = onePerShow(page + round.filter { r -> page.none { it.match.id == r.match.id } })
         _ui.value = UiState(loading = false, heroes = carousel(all), rows = leagueRows(all))
     }
 
@@ -651,6 +657,22 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             }.sortedWith(order)
             if (day.isNotEmpty()) return day
             return listOfNotNull(open.sortedWith(compareBy<Item> { !it.relevant }.then(order)).firstOrNull())
+        }
+
+        /**
+         * One goal show per competition on the page, not one per kick-off: the one on now (the
+         * latest started), else the next. The others stay out until their turn — each keeps its
+         * own id for its scans and the feed watched.
+         */
+        fun onePerShow(all: List<Item>): List<Item> {
+            val shows = all.filter { it.match.goals }
+            if (shows.size < 2) return all
+            val keep = shows.groupBy { if (it.match.league == FootballRepository.CONFERENCE) FootballRepository.EUROPA else it.match.league }
+                .values.mapNotNullTo(HashSet()) { same ->
+                    (same.filter { it.match.phase == Phase.LIVE }.maxByOrNull { it.match.kickoffUtcMillis }
+                        ?: same.filter { it.match.phase == Phase.SCHEDULED }.minByOrNull { it.match.kickoffUtcMillis })?.match?.id
+                }
+            return all.filter { !it.match.goals || it.match.id in keep }
         }
 
         /**
@@ -709,8 +731,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** About 1 s a feed: a minute of waiting at most. */
         private const val MAX_FEEDS = 30
         private const val SCAN_BUDGET_MILLIS = 60_000L
-        /** "Found": the scan screen names the feed about to open this long before it does. */
-        private const val FOUND_MILLIS = 1_500L
+        /** "Found": the best feed lit up, then its picture grown to the whole screen, before it opens. */
+        private const val FOUND_MILLIS = 2_100L
         /** Matches looked at by themselves from this long before kick-off, as the scan server does: earlier the feeds aren't up yet. */
         private const val AHEAD_MILLIS = 15 * 60_000L
         /** Test builds look at the whole day, so there's something to try between games. */

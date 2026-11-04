@@ -61,6 +61,7 @@
     <string name="football_no_channel">Not found in your guide</string>
     <string name="football_channels_soon">Channels once the guide lists it</string>
     <string name="football_full_time">Full time</string>
+    <string name="football_tile_finished">Finished</string>
     <string name="football_round">%1$s · MATCHDAY %2$s</string>
     <string name="football_matchday">matchday %1$s</string>
     <string name="player_match_about">%1$s, %3$s matchday %2$s.</string>

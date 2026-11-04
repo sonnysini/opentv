@@ -53,6 +53,7 @@
     <string name="football_no_channel">Non trovata in guida</string>
     <string name="football_channels_soon">Canali in guida a breve</string>
     <string name="football_full_time">Finale</string>
+    <string name="football_tile_finished">Finita</string>
     <string name="football_round">%1$s · %2$sª GIORNATA</string>
     <string name="football_matchday">%1$sª giornata</string>
     <string name="player_match_about">%1$s, %2$sª giornata di %3$s.</string>

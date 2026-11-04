@@ -105,6 +105,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -488,7 +491,7 @@ fun FootballScreen(
                 }
             }
         }
-        scan?.let { ScanOverlay(it) }
+        scan?.let { ScanOverlay(it, onCancel = viewModel::cancelScan) }
         picking?.let { item ->
             SourcePicker(item, viewModel, looks, onRescan = {
                 scanOnTop = pickedOnTop
@@ -957,7 +960,7 @@ private fun RescanLine(sub: String, onClick: () -> Unit) {
     }
 }
 
-private val PICKER_WIDTH = 360.dp
+private val PICKER_WIDTH = 440.dp
 
 /**
  * Hold OK on "Watch" or a card: the match's feeds in a panel down the right, best first, to pick
@@ -1081,10 +1084,27 @@ private enum class Look { WAITING, CHECKING, PLAYS, LEAVING }
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ScanOverlay(scan: FootballViewModel.Scan) {
+private fun ScanOverlay(scan: FootballViewModel.Scan, onCancel: () -> Unit) {
+    // A window of its own over the whole app, the side menu too; Back cancels.
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        LaunchedEffect(window) {
+            window?.setWindowAnimations(0)
+            window?.setDimAmount(0f)
+            window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        ScanScreen(scan)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ScanScreen(scan: FootballViewModel.Scan) {
     val m = scan.match
     val scheme = MaterialTheme.colorScheme
-    val surface = scheme.surface
     // Feeds seen playing (or still to look at) on this screen: the ones among them that die
     // stay a moment, saying why, before they go. The ones dead from an earlier scan aren't shown.
     val alive = remember(m.id) { HashSet<Long>() }
@@ -1113,29 +1133,30 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
         if (at >= last - 1) list.animateScrollToItem((at - (seen.size - 3)).coerceAtLeast(0))
     }
 
+    // At the end: the best feed lit up on top of the list, then the rest fades and its picture
+    // grows from the box to the whole screen, where the player picks it up.
+    val lit = remember(m.id) { Animatable(0f) }
+    val gone = remember(m.id) { Animatable(0f) }
+    val grow = remember(m.id) { Animatable(0f) }
+    LaunchedEffect(scan.finished) {
+        if (!scan.finished) return@LaunchedEffect
+        lit.animateTo(1f, tween(LIGHT_MILLIS, delayMillis = LIGHT_DELAY_MILLIS))
+        kotlinx.coroutines.delay(HOLD_LIT_MILLIS)
+        launch { gone.animateTo(1f, tween(FADE_MILLIS)) }
+        kotlinx.coroutines.delay(FADE_MILLIS / 2L)
+        grow.animateTo(1f, tween(GROW_MILLIS, easing = androidx.compose.animation.core.CubicBezierEasing(0.65f, 0f, 0.2f, 1f)))
+    }
+    // Where the picture's box sits on screen, for it to grow from.
+    var boxAt by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
     Box(
-        Modifier.fillMaxSize().background(surface)
+        Modifier.fillMaxSize().background(Color.Black)
             .focusRequester(holder)
             .focusable()
             .onPreviewKeyEvent { e -> e.key != Key.Back },
     ) {
-        // Behind it all: the last picture, blurred and dark. Modifier.blur needs Android 12 (the
-        // Fire Sticks are 7–9): the picture is read a few pixels wide and stretched, which blurs
-        // it on any box.
-        scan.frame?.let { file ->
-            AsyncImage(
-                model = coil.request.ImageRequest.Builder(LocalContext.current).data(file)
-                    .size(BLURRED_WIDTH, BLURRED_WIDTH * 9 / 16)
-                    .memoryCacheKey("${file.path}#${file.lastModified()}#blurred").build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
-                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = 0.3f }.blur(28.dp),
-            )
-        }
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to surface.copy(alpha = 0.2f), 0.5f to surface.copy(alpha = 0.6f), 0.62f to surface)))
-
-        Column(Modifier.padding(start = 48.dp, top = 55.dp).width(410.dp)) {
+      Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - gone.value }) {
+        Column(Modifier.padding(start = 64.dp, top = 55.dp).width(410.dp)) {
             Text(
                 stringResource(if (scan.finished) R.string.football_scan_found else R.string.football_scan_searching).uppercase(),
                 color = if (scan.finished) scheme.primary else scheme.onSurfaceVariant,
@@ -1161,6 +1182,7 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
             // The last picture a look caught, with the feed being looked at (or about to play).
             Box(
                 Modifier.padding(top = 22.dp).width(360.dp).aspectRatio(16f / 9f)
+                    .onGloballyPositioned { boxAt = it.boundsInRoot() }
                     .clip(RoundedCornerShape(9.dp)).background(Color.Black),
             ) {
                 scan.frame?.let { file ->
@@ -1210,7 +1232,7 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
             }
         }
         Row(
-            Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 28.dp),
+            Modifier.align(Alignment.BottomStart).padding(start = 64.dp, bottom = 28.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
@@ -1224,7 +1246,7 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
             Text(stringResource(R.string.football_scan_cancel), color = scheme.onSurfaceVariant, fontSize = 10.sp)
         }
 
-        Column(Modifier.align(Alignment.TopEnd).width(PICKER_WIDTH + 64.dp).fillMaxHeight().padding(start = 28.dp, end = 36.dp, top = 55.dp)) {
+        Column(Modifier.align(Alignment.TopEnd).width(470.dp).fillMaxHeight().padding(start = 20.dp, end = 36.dp, top = 55.dp)) {
             ListLabel(stringResource(R.string.football_sources))
             LazyColumn(
                 Modifier.weight(1f),
@@ -1247,13 +1269,52 @@ private fun ScanOverlay(scan: FootballViewModel.Scan) {
                             placementSpec = tween(700, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                         ),
                     ) {
-                        ScanLine(s, look, recommended = plays.firstOrNull() === s) { left[id] = Unit }
+                        val top = plays.firstOrNull() === s
+                        ScanLine(s, look, recommended = top, lit = if (top) lit.value else 0f) { left[id] = Unit }
                     }
+                }
+            }
+        }
+      }
+        // The best feed's picture, from its box to the whole screen.
+        val from = boxAt
+        val shot = scan.frame
+        if (scan.finished && from != null && shot != null && grow.value > 0f) {
+            val t = grow.value
+            val d = LocalDensity.current
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                val w = constraints.maxWidth.toFloat()
+                val h = constraints.maxHeight.toFloat()
+                val left = from.left * (1 - t)
+                val top = from.top * (1 - t)
+                val width = from.width + (w - from.width) * t
+                val height = from.height + (h - from.height) * t
+                Box(
+                    Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt()) }
+                        .size(with(d) { width.toDp() }, with(d) { height.toDp() })
+                        .clip(RoundedCornerShape(9.dp * (1 - t)))
+                        .background(Color.Black),
+                ) {
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(LocalContext.current).data(shot)
+                            .memoryCacheKey("${shot.path}#${shot.lastModified()}").build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
     }
 }
+
+/** The scan's ending: the best feed lights up, the screen fades, its picture grows. */
+private const val LIGHT_DELAY_MILLIS = 250
+private const val LIGHT_MILLIS = 400
+private const val HOLD_LIT_MILLIS = 350L
+private const val FADE_MILLIS = 300
+private const val GROW_MILLIS = 700
 
 /** A small turning ring, in the theme's green. */
 @Composable
@@ -1276,8 +1337,11 @@ private fun feedTitle(feed: Channel): String =
  * Leaving: why it won't play, then it slides off to the right and [onGone].
  */
 @Composable
-private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boolean, onGone: () -> Unit) {
+private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boolean, lit: Float = 0f, onGone: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    // [lit] 1: in focus, as the source picker's — the theme's green, dark text.
+    val fg = androidx.compose.ui.graphics.lerp(scheme.onSurface, scheme.onPrimary, lit)
+    val accent = androidx.compose.ui.graphics.lerp(scheme.primary, scheme.onPrimary, lit)
     val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
     val away = remember { Animatable(0f) }
     val far = with(LocalDensity.current) { 450.dp.toPx() }
@@ -1296,6 +1360,7 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
             }
             .clip(RoundedCornerShape(7.dp))
             .background(if (look == Look.CHECKING) scheme.surfaceVariant else Color.Transparent)
+            .background(scheme.primary.copy(alpha = lit))
             .padding(horizontal = 11.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -1305,7 +1370,7 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
                 Text(
                     listOf(parts.name, parts.claimed).filter(String::isNotBlank).joinToString(" "),
                     Modifier.weight(1f, fill = false),
-                    color = scheme.onSurface,
+                    color = fg,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -1314,7 +1379,7 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
                 if (tag > 0f) Text(
                     stringResource(R.string.football_recommended).uppercase(),
                     Modifier.alpha(tag),
-                    color = scheme.primary,
+                    color = accent,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
@@ -1342,12 +1407,12 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    if (s.verdict == AutoScan.Verdict.CONFIRMED) Text("✓", color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    if (s.verdict == AutoScan.Verdict.CONFIRMED) Text("✓", color = accent, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                     s.probe?.let(::badges)?.forEachIndexed { i, b ->
                         val enter = remember { Animatable(0f) }
                         LaunchedEffect(Unit) { enter.animateTo(1f, tween(350, delayMillis = i * 70)) }
                         Box(Modifier.graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 6.dp.toPx() }) {
-                            QualityBadge(b, focused = false)
+                            QualityBadge(b, focused = lit > 0.5f)
                         }
                     }
                 }
@@ -1356,7 +1421,7 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
         if (parts.source.isNotEmpty()) Text(
             parts.source,
             Modifier.widthIn(max = 64.dp),
-            color = scheme.onSurfaceVariant,
+            color = androidx.compose.ui.graphics.lerp(scheme.onSurfaceVariant, scheme.onPrimary.copy(alpha = 0.6f), lit),
             fontSize = 8.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.sp,
@@ -1366,9 +1431,6 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
         )
     }
 }
-
-/** The scan screen's background picture is read this many pixels wide, to come out blurred. */
-private const val BLURRED_WIDTH = 24
 
 /** A feed that won't play says so this long before it leaves. */
 private const val LEAVE_PAUSE_MILLIS = 500L
@@ -1389,13 +1451,8 @@ private fun MatchRow(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 48.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            // League logos are drawn for a light page: on a white chip they read on the dark one.
-            Box(
-                Modifier.size(22.dp).clip(RoundedCornerShape(5.dp)).background(Color.White).padding(2.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                AsyncImage(model = Team(-row.league.toLong(), "").crestUrl, contentDescription = null, modifier = Modifier.fillMaxSize())
-            }
+            // FotMob's logo drawn for a dark page.
+            AsyncImage(model = darkLogo(row.league), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(
                 leagueName(row.league),
@@ -1424,7 +1481,7 @@ private fun MatchRow(
                         onRefocused()
                     }
                 }
-                MatchTile(item, corner(item, viewModel, progress, looks), Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
+                MatchTile(item, corner(item, progress), Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
             }
         }
     }
@@ -1460,19 +1517,41 @@ private fun MatchTile(
                 .height(112.dp)
                 .lift(focused, 1.05f)
                 .clip(shape)
-                .split(TeamColors.of(m.home), TeamColors.of(m.away))
+                .then(if (m.goals) Modifier.background(goalShowBrush(m.league)) else Modifier.split(TeamColors.of(m.home), TeamColors.of(m.away)))
                 .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
         ) {
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
-            Row(
-                Modifier.fillMaxSize().padding(horizontal = 22.dp),
-                horizontalArrangement = if (m.goals) Arrangement.Center else Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Crest(m.home, 52)
-                if (!m.goals) Crest(m.away, 52)
+            if (m.goals) {
+                // The goal show: the competition's logo and "DIRETTA GOL" on its colour, no chip.
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    AsyncImage(model = darkLogo(m.league), contentDescription = null, modifier = Modifier.size(44.dp))
+                    Text(
+                        m.home.name.uppercase(),
+                        Modifier.padding(top = 6.dp),
+                        fontFamily = Oswald,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        letterSpacing = 1.sp,
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                }
+            } else {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 22.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Crest(m.home, 52)
+                    Crest(m.away, 52)
+                }
+                val highlight = m.phase == Phase.FINISHED && item.highlights != null
+                Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, light = highlight, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))
             }
-            Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))
             corner?.let {
                 Text(
                     it,
@@ -1488,44 +1567,57 @@ private fun MatchTile(
                 )
             }
         }
-        Text(
+        // The teams under the card, centred; the goal show says it inside.
+        if (!m.goals) Text(
             name(m),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 7.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
         )
-        tileStatus(m)?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
     }
 }
 
 @Composable
-private fun Chip(text: String, live: Boolean, modifier: Modifier = Modifier) {
+private fun Chip(text: String, live: Boolean, light: Boolean = false, modifier: Modifier = Modifier) {
     Text(
         text,
         fontSize = 11.sp,
         fontWeight = FontWeight.ExtraBold,
-        color = Color.White,
+        color = if (light) Color.Black else Color.White,
         maxLines = 1,
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(if (live) Color(0xFFE50914) else Color.Black.copy(alpha = 0.65f))
+            .background(
+                when {
+                    live -> Color(0xFFE50914)
+                    light -> Color.White.copy(alpha = 0.92f)
+                    else -> Color.Black.copy(alpha = 0.65f)
+                },
+            )
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
-/** Bottom right of a tile: the scan on it ("12/30"), else how many feeds are ready ("⚡ 17"). */
-@Composable
-private fun corner(item: FootballViewModel.Item, viewModel: FootballViewModel, progress: FootballViewModel.Progress?, looks: Int): String? {
-    if (item.match.phase == Phase.FINISHED || item.match.phase == Phase.OFF) return null
-    if (viewModel.feedsOf(item).isEmpty()) return null
-    if (progress?.matchId == item.match.id) return "${progress.done}/${progress.total}"
-    val usable = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
-    return if (usable > 0) "⚡ $usable" else null
+/** Bottom right of a tile, only while its feeds are being looked at by themselves: "12/30". */
+private fun corner(item: FootballViewModel.Item, progress: FootballViewModel.Progress?): String? =
+    progress?.takeIf { it.matchId == item.match.id && item.match.phase != Phase.FINISHED }?.let { "${it.done}/${it.total}" }
+
+/** FotMob's competition logo drawn for a dark page. */
+private fun darkLogo(league: Int) = "https://images.fotmob.com/image_resources/logo/leaguelogo/dark/$league.png"
+
+/** The goal show's card: the competition's colour, lit from the middle. */
+private fun goalShowBrush(league: Int): Brush {
+    val (from, to) = when (league) {
+        FootballRepository.CHAMPIONS -> 0xFF1C2A6B to 0xFF0A1238
+        FootballRepository.EUROPA -> 0xFF9A4200 to 0xFF3A1600
+        FootballRepository.CONFERENCE -> 0xFF0D7A34 to 0xFF04280F
+        else -> 0xFF0B5F8A to 0xFF03243A
+    }
+    return Brush.radialGradient(listOf(Color(from), Color(to)), radius = 260f)
 }
 
 /** Paints the box in two colours split on a slant: home left, away right. */
@@ -1657,17 +1749,8 @@ private fun chip(m: Match, highlights: String?): String = when (m.phase) {
         day.uppercase() + " " + TIME.format(at)
     }
     Phase.LIVE -> if (m.goals) stringResource(R.string.football_live) else m.minute ?: stringResource(R.string.football_live)
-    Phase.FINISHED -> if (highlights != null) "▶ " + stringResource(R.string.football_highlights) else stringResource(R.string.football_highlights_later)
+    Phase.FINISHED -> if (highlights != null) "▶ " + stringResource(R.string.football_highlights).uppercase() else stringResource(R.string.football_tile_finished).uppercase()
     Phase.OFF -> "—"
-}
-
-/** The line under a finished tile: "Finale", "Finale · Dom 25". */
-@Composable
-private fun tileStatus(m: Match): String? {
-    if (m.phase != Phase.FINISHED) return null
-    val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
-    val full = stringResource(R.string.football_full_time)
-    return if (at.toLocalDate() == LocalDate.now()) full else full + " · " + DAY.format(at).replaceFirstChar { it.uppercase() }
 }
 
 /** "1080p50", "720p" */

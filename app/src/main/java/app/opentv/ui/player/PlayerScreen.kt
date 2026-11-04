@@ -208,12 +208,29 @@ fun PlayerScreen(
         }
     }
 
+    // Opened from the football scan: its last picture of this feed, full screen, until the first
+    // frame (or a few seconds, or a channel change).
+    var poster by remember { mutableStateOf(app.opentv.player.PlayerPoster.take(channelId)) }
+    if (poster != null) {
+        DisposableEffect(controller) {
+            val listener = object : androidx.media3.common.Player.Listener {
+                override fun onRenderedFirstFrame() { poster = null }
+            }
+            controller.player.addListener(listener)
+            onDispose { controller.player.removeListener(listener) }
+        }
+        LaunchedEffect(Unit) {
+            delay(POSTER_MAX_MILLIS)
+            poster = null
+        }
+    }
     var variants by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var currentId by remember { mutableStateOf<Long?>(null) }
     // The channel as listed in [queue]; [currentId] is whichever quality variant of it is playing,
     // which a fallback or a manual quality pick can change. Zapping and the list follow this one.
     var listedId by remember { mutableStateOf<Long?>(null) }
     var listedChannel by remember { mutableStateOf<Channel?>(null) }
+    LaunchedEffect(listedId) { if (listedId != null && listedId != channelId) poster = null }
     // Quality fallback: the variants in try order (preferred first), the ones already tried for this
     // channel, and whether the current attempt has shown a picture yet. [attempt] restarts the timer.
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
@@ -906,6 +923,14 @@ fun PlayerScreen(
             },
             update = { it.resizeMode = resizeMode },
         )
+        poster?.let { file ->
+            AsyncImage(
+                model = file,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().background(Color.Black),
+            )
+        }
 
         fallbackNotice?.let { notice ->
             if (!inPip) {
@@ -2120,3 +2145,6 @@ private fun keyToDigit(key: Key): Char? = when (key) {
     Key.Nine, Key.NumPad9 -> '9'
     else -> null
 }
+
+/** The football scan's picture stays at most this long when the feed is slow to show one. */
+private const val POSTER_MAX_MILLIS = 12_000L
