@@ -1157,27 +1157,44 @@ private fun ScanScreen(scan: FootballViewModel.Scan) {
     ) {
       Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - gone.value }) {
         Column(Modifier.padding(start = 64.dp, top = 55.dp).width(410.dp)) {
+            // The competition and its matchday, then the teams one under the other, then what's going on.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(model = darkLogo(m.league), contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    competition(m),
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.5.sp,
+                    maxLines = 1,
+                )
+            }
+            Column(Modifier.padding(top = 8.dp)) {
+                (if (m.goals) listOf(m.home) else listOf(m.home, m.away)).forEach { team ->
+                    Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(38.dp), contentAlignment = Alignment.Center) { Crest(team, 38) }
+                        Spacer(Modifier.width(13.dp))
+                        Text(
+                            team.name.uppercase(),
+                            fontFamily = Oswald,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 36.sp,
+                            lineHeight = 38.sp,
+                            color = scheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
             Text(
                 stringResource(if (scan.finished) R.string.football_scan_found else R.string.football_scan_searching).uppercase(),
-                color = if (scan.finished) scheme.primary else scheme.onSurfaceVariant,
+                Modifier.padding(top = 11.dp),
+                color = scheme.primary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 1.5.sp,
-            )
-            Row(Modifier.padding(top = 13.dp), horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                Crest(m.home, 36)
-                if (!m.goals) Crest(m.away, 36)
-            }
-            Text(
-                name(m).uppercase(),
-                Modifier.padding(top = 8.dp),
-                fontFamily = Oswald,
-                fontWeight = FontWeight.Bold,
-                fontSize = 38.sp,
-                lineHeight = 40.sp,
-                color = scheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
             // The last picture a look caught, with the feed being looked at (or about to play).
             Box(
@@ -1727,6 +1744,13 @@ private fun kicker(m: Match): String {
         else -> null
     }
     return listOfNotNull(round, when_?.uppercase()).joinToString(" · ")
+}
+
+/** Over the scan's teams: "CHAMPIONS LEAGUE · 4ª GIORNATA". */
+@Composable
+private fun competition(m: Match): String {
+    val league = leagueName(m.league).uppercase()
+    return m.round?.takeIf { r -> r.all(Char::isDigit) }?.let { stringResource(R.string.football_round, league, it) } ?: league
 }
 
 /** The big title: "SASSUOLO vs LAZIO" — the score stays off even once it's on. */
