@@ -44,8 +44,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** YouTube id of the highlights, for a finished match. */
         val highlights: String? = null,
         /**
-         * Serie A, or a cup game with an Italian team: what the big card, its tabs and the scans
-         * done by themselves are about. The other cup games are in their rows, scanned when picked.
+         * Serie A, or a cup game with an Italian team (or its goal show): what the carousel and the
+         * scans done by themselves are about. The other cup games are in their rows, scanned when picked.
          */
         val relevant: Boolean = true,
     )
@@ -55,9 +55,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
 
     data class UiState(
         val loading: Boolean = true,
-        /** The big card: the live match, else the next one to start. */
-        val hero: Item? = null,
-        /** Games on at the same time, as tabs on the big card: two or more, else empty. */
+        /**
+         * The carousel on top: today's games that matter (Serie A, Italian teams in the cups, their
+         * goal shows) still to come or on, live ones first; else the next one to start.
+         */
         val heroes: List<Item> = emptyList(),
         /** A row per competition, the one playing next first. */
         val rows: List<LeagueRow> = emptyList(),
@@ -65,7 +66,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         val failed: Boolean = false,
     ) {
         /** Every game on the page, once. */
-        val all: List<Item> get() = (listOfNotNull(hero) + heroes + rows.flatMap { it.items }).distinctBy { it.match.id }
+        val all: List<Item> get() = (heroes + rows.flatMap { it.items }).distinctBy { it.match.id }
+
+        /** The carousel's first card. */
+        val hero: Item? get() = heroes.firstOrNull()
     }
 
     private val _ui = MutableStateFlow(UiState())
@@ -394,7 +398,6 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // With a scan server, games not started yet are its to look at: it scans just before kick-off.
         val server = graph.settings.scanServerUrl.value.isNotBlank()
         val ui = _ui.value
-        // ui.heroes: games on together are tabs of the big card, in none of the rows.
         val candidates = ui.all
             .filter { it.relevant }
             .filter { it.match.phase == Phase.LIVE || (!server && it.match.phase == Phase.SCHEDULED && it.match.kickoffUtcMillis - now <= window) }
@@ -546,15 +549,19 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val italian = repo.italianTeams()
-        fun relevant(m: Match) = m.league == FootballRepository.SERIE_A || m.home.id in italian || m.away.id in italian
-        val goals = FootballRepository.goalShow(today)
+        graph.settings.setCrests(repo.crests())
+        fun italianIn(m: Match) = m.home.id in italian || m.away.id in italian
+        // A cup's goal show matters when an Italian team is among its games.
+        fun relevant(m: Match) = m.league == FootballRepository.SERIE_A || italianIn(m) ||
+            m.goals && today.any { g -> !g.goals && g.kickoffUtcMillis == m.kickoffUtcMillis && sameShow(g.league, m.league) && italianIn(g) }
+        val goals = FootballRepository.goalShows(today)
         val channels = repo.channelsFor(
-            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming + listOfNotNull(goals),
+            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming + goals,
         )
         // Highlights already found only: looking up new ones waits until the page is up.
         // The goal show last, like a game kicking off after the others; only with a channel.
         // A cup game over has nothing left to offer: no score shown, no highlights.
-        val items = (today + listOfNotNull(goals?.takeIf { channels[it.id].orEmpty().isNotEmpty() }))
+        val items = (today + goals.filter { channels[it.id].orEmpty().isNotEmpty() })
             .filter { it.phase != Phase.FINISHED || it.league == FootballRepository.SERIE_A }
             .map { m ->
                 when (m.phase) {
@@ -569,7 +576,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // The big card's feeds before first paint (its source list); the rest's right after:
         // looking them up is a query per channel, a second or so for a whole matchday.
         val ui = _ui.value
-        val first = (listOfNotNull(ui.hero) + ui.heroes).distinctBy { it.match.id }
+        val first = ui.heroes
         val known = feeds
         feeds = known + first.filter { it.channels.isNotEmpty() }.associate { it.match.id to feedsOf(it, known) }
         // Before the worker wakes: what the scan server ranked needs no look here.
@@ -603,22 +610,10 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun feedsOf(item: Item, known: Map<Long, List<Channel>>): List<Channel> =
         known[item.match.id]?.takeIf { feedsFrom[item.match.id] == item.channels } ?: feedsFor(item)
 
-    /** The page out of [page] and [round]: the big card, its tabs, a row per competition. */
+    /** The page out of [page] and [round]: the carousel on top, a row per competition. */
     private fun publish() {
         val all = page + round.filter { r -> page.none { it.match.id == r.match.id } }
-        val open = all.filter { it.match.phase == Phase.LIVE || it.match.phase == Phase.SCHEDULED }
-        // Italian games first, a game before the goal show; then the soonest, then by competition.
-        val order = compareBy<Item>({ !it.relevant }, { it.match.goals }, { it.match.kickoffUtcMillis }, { leagueRank(it.match.league) })
-        val hero = open.filter { it.match.phase == Phase.LIVE }.sortedWith(order).firstOrNull()
-            ?: open.sortedWith(order).firstOrNull()
-        // Games on together (or about to be) share the big card as tabs.
-        val now = System.currentTimeMillis()
-        val together = open.filter {
-            it.relevant && (it.match.phase == Phase.LIVE || it.match.kickoffUtcMillis - now <= TABS_AHEAD_MILLIS)
-        }.sortedWith(compareBy({ it.match.goals }, { it.match.kickoffUtcMillis }, { leagueRank(it.match.league) }))
-        val heroes = if (together.size >= 2) together else emptyList()
-        val onTop = (listOfNotNull(hero) + heroes).mapTo(HashSet()) { it.match.id }
-        _ui.value = UiState(loading = false, hero = hero, heroes = heroes, rows = leagueRows(all, onTop))
+        _ui.value = UiState(loading = false, heroes = carousel(all), rows = leagueRows(all))
     }
 
     private suspend fun feedsFor(item: Item): List<Channel> {
@@ -642,23 +637,47 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         /** Where [league] goes among games starting together: Champions, Europa, Conference, Serie A. */
         fun leagueRank(league: Int): Int = FootballRepository.LEAGUES.indexOf(league).let { if (it < 0) Int.MAX_VALUE else it }
 
+        /** Europa's and Conference's games share Sky's goal show. */
+        fun sameShow(a: Int, b: Int): Boolean =
+            a == b || setOf(a, b) == setOf(FootballRepository.EUROPA, FootballRepository.CONFERENCE)
+
         /**
-         * A row per competition out of [all], leaving out the games on the big card ([onTop]): live,
-         * then to come by kick-off (Italian games first at the same time, the goal show last), then
-         * finished, latest first. The competition playing next goes first ([leagueRank] when two
-         * start together); a matchday over goes to the bottom.
+         * The carousel out of [all]: today's games that matter, on or to come — live first, then by
+         * kick-off, a game before its goal show. With none today, the next game that matters (or
+         * any) on its own.
          */
-        fun leagueRows(all: List<Item>, onTop: Set<Long>): List<LeagueRow> =
+        fun carousel(all: List<Item>, today: java.time.LocalDate = java.time.LocalDate.now()): List<Item> {
+            val open = all.filter { it.match.phase == Phase.LIVE || it.match.phase == Phase.SCHEDULED }
+            val order = compareBy<Item>(
+                { it.match.phase != Phase.LIVE }, { it.match.kickoffUtcMillis }, { it.match.goals }, { leagueRank(it.match.league) },
+            )
+            val zone = java.time.ZoneId.systemDefault()
+            val day = open.filter {
+                it.relevant && java.time.Instant.ofEpochMilli(it.match.kickoffUtcMillis).atZone(zone).toLocalDate() == today
+            }.sortedWith(order)
+            if (day.isNotEmpty()) return day
+            return listOfNotNull(open.sortedWith(compareBy<Item> { !it.relevant }.then(order)).firstOrNull())
+        }
+
+        /**
+         * A row per competition out of [all], the carousel's games too: live, then to come by
+         * kick-off (Italian games first at the same time, the goal show last), then finished,
+         * latest first. The competition playing next goes first — by day: on a Wednesday the
+         * Champions League before an odd Europa League game kicking off earlier ([leagueRank]
+         * among the day's) — and a matchday over goes to the bottom.
+         */
+        fun leagueRows(all: List<Item>): List<LeagueRow> =
             all.filter { it.match.phase != Phase.OFF }.groupBy { it.match.league }.mapNotNull { (league, games) ->
                 val open = games.filter { it.match.phase == Phase.LIVE || it.match.phase == Phase.SCHEDULED }
-                val shown = games.filter { it.match.id !in onTop }
-                val items = shown.filter { it.match.phase == Phase.LIVE }.sortedBy { it.match.kickoffUtcMillis } +
-                    shown.filter { it.match.phase == Phase.SCHEDULED }
+                val items = games.filter { it.match.phase == Phase.LIVE }.sortedBy { it.match.kickoffUtcMillis } +
+                    games.filter { it.match.phase == Phase.SCHEDULED }
                         .sortedWith(compareBy({ it.match.kickoffUtcMillis }, { it.match.goals }, { !it.relevant })) +
-                    shown.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis }
+                    games.filter { it.match.phase == Phase.FINISHED }.sortedByDescending { it.match.kickoffUtcMillis }
                 if (items.isEmpty()) return@mapNotNull null
                 val round = (open.firstOrNull { !it.match.goals } ?: games.firstOrNull { !it.match.goals })?.match?.round
-                Triple(open.minOfOrNull { it.match.kickoffUtcMillis }, league, LeagueRow(league, round, items))
+                val next = open.minOfOrNull { it.match.kickoffUtcMillis }
+                    ?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+                Triple(next, league, LeagueRow(league, round, items))
             }
                 .sortedWith(compareBy({ it.first == null }, { it.first }, { leagueRank(it.second) }))
                 .map { it.third }

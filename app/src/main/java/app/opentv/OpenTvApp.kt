@@ -108,6 +108,9 @@ class OpenTvApp : Application(), ImageLoaderFactory {
             appScope.launch { runCatching { LogoPack.refresh(graph.settings, graph.httpClient) } }
         }
 
+        // Team channels wear their crests: the teams of the Serie A calendar last read.
+        appScope.launch { runCatching { graph.settings.setCrests(graph.footballRepository.crests()) } }
+
         // Free, server-less "cloud" sync through the user's own NAS, if they've opted in. Writes
         // this device's bundle to the shared folder and merges in every other device's — favourites,
         // watch history and NAS recordings. Fire-and-forget and fully guarded: a blank or unreachable

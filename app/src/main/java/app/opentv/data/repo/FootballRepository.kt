@@ -163,6 +163,20 @@ class FootballRepository(
     suspend fun italianTeams(): Set<Long> = lock.withLock { disk().italian }
 
     /**
+     * The crests of the teams in the Serie A games on disk, by the channel keys a team channel
+     * goes by: the whole name's ("hellasverona") and each word that tells it apart ("verona").
+     */
+    suspend fun crests(): Map<String, String> = withContext(Dispatchers.IO) { lock.withLock {
+        disk().days.values.flatMap { it.matches }.filter { it.league == SERIE_A && !it.goals }
+            .flatMap { listOf(it.home, it.away) }.distinctBy { it.id }
+            .flatMap { t ->
+                (listOf(ChannelNameNormalizer.groupKeyOf(t.name)) + teamKeys(t.name).filter { it.length >= 3 })
+                    .filter { it.isNotEmpty() }.map { it to t.crestUrl }
+            }
+            .toMap()
+    } }
+
+    /**
      * The finished Serie A matches of the latest matchday played before today, latest first: a row
      * to watch highlights from on days without games.
      */
@@ -237,8 +251,10 @@ class FootballRepository(
      * - then the channels whose guide names both teams through the game (Zona DAZN, DAZN 1,
      *   Sky Sport…). Club channels ("Inter TV": a radio commentary in the guide), boxing feeds
      *   matched to a DAZN guide by name, replays and timeshift copies are left out;
-     * - for [Match.goals], only the Serie A goal channels ("DAZN Diretta Gol Serie A", "Diretta
-     *   Goal"): every game at once, and no guide names them.
+     * - for [Match.goals] in Serie A, only the Serie A goal channels ("DAZN Diretta Gol Serie A",
+     *   "Diretta Goal"): every game at once, and no guide names them;
+     * - for a cup's [Match.goals], the channels whose guide has its goal show through the games
+     *   ("Diretta Gol Ucl", "Diretta Gol Uel/ Uecl" on Sky Sport): Sky's, not a channel of its own.
      * Kept on disk until the channel list or the guide changes; the guide is searched once for
      * all the matches not known yet.
      */
@@ -247,14 +263,15 @@ class FootballRepository(
         // "#6": entries from before teams went by their Italian names are looked up again.
         fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#6"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
-        val missing = matches.filter { key(it) !in kept && !it.goals }
-        val goalShows = matches.filter { key(it) !in kept && it.goals }
+        // A cup's goal show is on the guide like a game, under its own title.
+        val missing = matches.filter { key(it) !in kept && (!it.goals || it.league != SERIE_A) }
+        val goalShows = matches.filter { key(it) !in kept && it.goals && it.league == SERIE_A }
         val found = if (missing.isEmpty() && goalShows.isEmpty()) emptyMap() else {
             val started = System.currentTimeMillis()
             val goalChannels = if (goalShows.isEmpty()) emptyList() else goalChannels()
             val guide = guideIdsFor(missing)
             // Two passes over the channels for all the matches, not two per match.
-            val named = namedAny(missing.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) })
+            val named = namedAny(missing.filter { !it.goals }.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) })
             val allIds = guide.values.flatten().distinct()
             val guided = if (allIds.isEmpty()) emptyList()
             else runCatching { channelDao.withGuideIds(allIds) }.getOrElse { emptyList() }
@@ -303,7 +320,8 @@ class FootballRepository(
                     "title LIKE ?"
                 }
                 "SELECT * FROM programmes WHERE endUtcMillis > ? AND endUtcMillis < ? AND startUtcMillis < ?" +
-                    " AND ${likeAny(teamKeys(m.home.name))} AND ${likeAny(teamKeys(m.away.name))}"
+                    if (m.goals) " AND ${likeAny(GOAL_WORDS)}"
+                    else " AND ${likeAny(teamKeys(m.home.name))} AND ${likeAny(teamKeys(m.away.name))}"
             }
             runCatching { programmeDao.query(SimpleSQLiteQuery(sql, args.toTypedArray())) }
                 .getOrElse { Log.w(TAG, "guide", it); emptyList() }
@@ -313,7 +331,10 @@ class FootballRepository(
             val b = teamKeys(m.away.name)
             m.id to programmes
                 .filter { it.endUtcMillis > from && it.startUtcMillis < to }
-                .filter { namesBoth(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase()) }
+                .filter {
+                    if (m.goals) isCupGoalShow(it.title, m.league)
+                    else namesBoth(it.title, a, b) && !RADIO.containsMatchIn(fold(it.title).lowercase())
+                }
                 .mapTo(LinkedHashSet()) { it.epgChannelId }
         }
     }
@@ -356,7 +377,7 @@ class FootballRepository(
                 val n = fold(c.displayName).lowercase()
                 c.isLive() && !NOT_THE_GAME.containsMatchIn(n) &&
                     // A team's name in a guide-matched channel: its club channel, not the game.
-                    !namesAny(n, teamKeys(match.home.name)) && !namesAny(n, teamKeys(match.away.name))
+                    (match.goals || !namesAny(n, teamKeys(match.home.name)) && !namesAny(n, teamKeys(match.away.name)))
             }
             .groupBy { it.groupKey.ifEmpty { "#${it.id}" } }
             .mapNotNull { (_, variants) -> logical(variants) }
@@ -635,32 +656,62 @@ class FootballRepository(
         }
 
         /**
-         * The goal channel as a game of its own: for the first kick-off today that two or more
-         * games share and that isn't over, from that kick-off, live while any of them is.
-         * Null on days with no games played together.
+         * The goal shows as games of their own: per competition (Europa and Conference share
+         * Sky's) and per kick-off today that two or more of its games share and that isn't over,
+         * from that kick-off, live while any of them is. None on days with no games played
+         * together.
          */
-        fun goalShow(today: List<Match>): Match? {
-            // "Diretta Gol Serie A": the cups' games aren't on it.
-            val slot = today.filter { it.phase != Phase.OFF && !it.goals && it.league == SERIE_A }
-                .groupBy { it.kickoffUtcMillis }
-                .filterValues { it.size >= 2 && it.any { m -> m.phase == Phase.SCHEDULED || m.phase == Phase.LIVE } }
-                .minByOrNull { it.key } ?: return null
-            val (kickoff, games) = slot
-            val live = games.count { it.phase == Phase.LIVE }
-            val league = Team(-SERIE_A.toLong(), "Serie A")
+        fun goalShows(today: List<Match>): List<Match> =
+            today.filter { it.phase != Phase.OFF && !it.goals }
+                .groupBy { if (it.league == CONFERENCE) EUROPA else it.league }
+                .filterKeys { it in LEAGUES }
+                .flatMap { (show, games) -> goalShows(games, show) }
+                .sortedWith(compareBy({ it.kickoffUtcMillis }, { LEAGUES.indexOf(it.league) }))
+
+        /** The first Serie A goal show; see [goalShows]. */
+        fun goalShow(today: List<Match>): Match? =
+            goalShows(today).firstOrNull { it.league == SERIE_A }
+
+        private fun goalShows(games: List<Match>, show: Int): List<Match> = games
+            .groupBy { it.kickoffUtcMillis }
+            .filterValues { it.size >= 2 && it.any { m -> m.phase == Phase.SCHEDULED || m.phase == Phase.LIVE } }
+            .map { (kickoff, together) -> goalShow(kickoff, together, show) }
+
+        private fun goalShow(kickoff: Long, together: List<Match>, show: Int): Match {
+            val live = together.count { it.phase == Phase.LIVE }
+            // Europa's show with only Conference games on: Conference's logo and row.
+            val league = if (show == EUROPA && together.none { it.league == EUROPA }) CONFERENCE else show
+            val name = when (show) {
+                CHAMPIONS -> "Champions League"
+                EUROPA -> if (league == CONFERENCE) "Conference League" else "Europa League"
+                else -> "Serie A"
+            }
             return Match(
-                // One per kick-off: its scans and the feed watched stay apart from another day's.
-                id = -(kickoff / MINUTE),
+                // One per kick-off and competition: its scans and the feed watched stay apart from
+                // another day's. Serie A's as before.
+                id = if (show == SERIE_A) -(kickoff / MINUTE) else -(kickoff / MINUTE * 10 + LEAGUES.indexOf(show) + 1),
                 kickoffUtcMillis = kickoff,
-                home = Team(-SERIE_A.toLong(), "Diretta Gol"),
-                away = league,
+                home = Team(-league.toLong(), "Diretta Gol"),
+                away = Team(-league.toLong(), name),
                 homeScore = null,
                 awayScore = null,
                 phase = if (live > 0) Phase.LIVE else Phase.SCHEDULED,
                 minute = null,
-                round = games.firstNotNullOfOrNull { it.round },
+                round = together.firstNotNullOfOrNull { it.round },
                 goals = true,
+                league = league,
             )
+        }
+
+        /** [title] is the guide's goal show of [league]'s games: "Diretta Gol Ucl 04/11/2026", "Diretta Gol Uel/ Uecl...". */
+        fun isCupGoalShow(title: String, league: Int): Boolean {
+            val t = fold(title).lowercase()
+            if (!GOAL_CHANNEL.containsMatchIn(t)) return false
+            return when (league) {
+                CHAMPIONS -> UCL.containsMatchIn(t)
+                EUROPA, CONFERENCE -> UEL.containsMatchIn(t)
+                else -> false
+            }
         }
 
         const val SERIE_A = 55
@@ -698,6 +749,8 @@ class FootballRepository(
         /** "DAZN DIRETTA GOL SERIE A", "DIRETTA GOAL": all the round's games, with no guide. */
         private val GOAL_WORDS = listOf("diretta gol", "diretta goal")
         private val GOAL_CHANNEL = Regex("\\bdiretta go(a)?l\\b")
+        private val UCL = Regex("\\b(ucl|champions)\\b")
+        private val UEL = Regex("\\b(uel|uecl|europa|conference)\\b")
         /** A goal channel of another competition: "DAZN DIRETTA GOL SERIE B / EUROPA LEAGUE". */
         private val OTHER_COMPETITION =
             Regex("\\b(serie b|serie c|europa|champions|conference|league|coppa|cup|liga|bundesliga|ligue|premier)\\b")

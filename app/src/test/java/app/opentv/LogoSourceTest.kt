@@ -44,4 +44,15 @@ class LogoSourceTest {
             assertEquals("picked/rai1.png", ch("rai1", "p.png", "g.png").logo(source, pack))
         }
     }
+
+    private val crest = "https://images.fotmob.com/image_resources/logo/teamlogo/8564.png"
+    private val withCrests = LogoPack(mapOf("milan" to "pack/milan.svg"), mapOf("rai1" to "picked/rai1.png"), mapOf("milan" to crest))
+
+    @Test fun `team channels wear their crest whenever outside logos are on`() {
+        assertEquals(crest, ch("milan", "p.png", null).logo(LogoSource.PROVIDER_THEN_EXTERNAL, withCrests))
+        assertEquals(crest, ch("daznseriea3milan", "p.png", null).logo(LogoSource.EXTERNAL_THEN_PROVIDER, withCrests))
+        assertEquals(crest, ch("milan+1", null, null).logo(LogoSource.EXTERNAL_THEN_PROVIDER, withCrests))
+        assertEquals("p.png", ch("milan", "p.png", null).logo(LogoSource.PROVIDER, withCrests))
+        assertEquals("p.png", ch("milantv", "p.png", null).logo(LogoSource.PROVIDER_THEN_EXTERNAL, withCrests))
+    }
 }

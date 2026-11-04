@@ -30,6 +30,8 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.background
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -223,10 +225,14 @@ fun FootballScreen(
     BackHandler(enabled = scan != null) { viewModel.cancelScan() }
     // Hold OK on a card: its feeds to pick from by hand.
     var picking by remember { mutableStateOf<FootballViewModel.Item?>(null) }
-    // The game whose picker was closed: focus goes back to it, not to the menu on the left.
+    // The game whose picker was closed: focus goes back to it, not to the menu on the left. A game
+    // is on the carousel and in its row too: the picker opened from the carousel goes back there.
     var refocus by remember { mutableStateOf<Long?>(null) }
+    var pickedOnTop by remember { mutableStateOf(false) }
+    var refocusTop by remember { mutableStateOf(0) }
     BackHandler(enabled = picking != null) {
-        refocus = picking?.match?.id
+        if (pickedOnTop) refocusTop++ else refocus = picking?.match?.id
+        pickedOnTop = false
         picking = null
     }
     val noYoutube = stringResource(R.string.football_no_youtube)
@@ -305,11 +311,13 @@ fun FootballScreen(
         }
     }
     val hold: (FootballViewModel.Item) -> Unit = { item ->
+        pickedOnTop = false
         if (item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty()) picking = item else noChannel(item)
     }
-    // The game the top of the page is about: the first live (or next) one, or the tab picked.
+    // The carousel's card on screen: the first (live, else next) one, then wherever it turned to.
     var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val heroItem = ui.hero?.let { first -> ui.heroes.firstOrNull { it.match.id == selectedId } ?: ui.heroes.firstOrNull() ?: first }
+    val heroItem = ui.heroes.firstOrNull { it.match.id == selectedId } ?: ui.heroes.firstOrNull()
+    val heroAt = heroItem?.let { h -> ui.heroes.indexOfFirst { it.match.id == h.match.id } } ?: 0
     val heroBest = remember(heroItem, looks) { heroItem?.let { h -> viewModel.sources(h).firstOrNull { it.looked && it.usable } } }
     val backdrop = heroItem?.let { h -> heroBest?.feed?.id?.let { viewModel.frame(h, it) } }
     // The game itself instead of its still, muted: once it's on (or about to be), its best feed
@@ -351,6 +359,22 @@ fun FootballScreen(
         }
         kotlinx.coroutines.delay(PREVIEW_MAX_MILLIS)
         stopPreview()
+    }
+    // The carousel turns over every few seconds; any key on it starts the count again. Held while
+    // its game plays muted or a picker, scan or player is up.
+    val turn = remember { Animatable(0f) }
+    var turnKicked by remember { mutableStateOf(0) }
+    val turnHeld = previewOn || picking != null || scan != null || opening != null || !resumed
+    fun step(by: Int) {
+        val size = ui.heroes.size
+        if (size < 2) return
+        selectedId = ui.heroes[((heroAt + by) % size + size) % size].match.id
+    }
+    LaunchedEffect(heroItem?.match?.id, ui.heroes.size, turnHeld, turnKicked) {
+        turn.snapTo(0f)
+        if (turnHeld || ui.heroes.size < 2) return@LaunchedEffect
+        turn.animateTo(1f, tween(TURN_MILLIS, easing = LinearEasing))
+        step(1)
     }
     // The box's screensaver would fire over a game playing at the top of the page.
     DisposableEffect(previewOn) {
@@ -395,20 +419,40 @@ fun FootballScreen(
                                 heroFocused = it.hasFocus
                                 if (it.hasFocus) {
                                     heroTouched++
-                                    scope.launch { listState.animateScrollToItem(0) }
+                                    // After the scroll that brings the focused button into view:
+                                    // started together, that one cancels this and the top of the
+                                    // card stays off screen.
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(HERO_SCROLL_DELAY_MILLIS)
+                                        listState.animateScrollToItem(0)
+                                    }
                                 }
                             },
-                            tabs = ui.heroes,
+                            count = ui.heroes.size,
+                            at = heroAt,
+                            turned = turn.value,
                             item = heroItem,
                             firstId = ui.hero!!.match.id,
                             best = heroBest,
                             viewModel = viewModel,
                             looks = looks,
                             progress = progress,
-                            onSelect = { selectedId = it },
-                            onPick = { picking = heroItem },
-                            refocus = refocus,
-                            onRefocused = { refocus = null },
+                            onStep = { by ->
+                                if (by < 0 && heroAt == 0) false
+                                else {
+                                    step(by)
+                                    true
+                                }
+                            },
+                            onKey = { turnKicked++ },
+                            onWatch = { if (viewModel.feedsOf(heroItem).isNotEmpty()) viewModel.autoWatch(heroItem) else noChannel(heroItem) },
+                            onPick = {
+                                if (viewModel.feedsOf(heroItem).isNotEmpty()) {
+                                    pickedOnTop = true
+                                    picking = heroItem
+                                } else noChannel(heroItem)
+                            },
+                            refocus = refocusTop,
                         )
                     }
                     rowList.forEach { row ->
@@ -470,6 +514,12 @@ private fun Message(text: String) {
 // ---- Top of the page ----------------------------------------------------------------------------
 
 private val HERO_HEIGHT = 318.dp
+
+/** Coming back up to the carousel: the page scrolls to its top after the focus has settled. */
+private const val HERO_SCROLL_DELAY_MILLIS = 120L
+
+/** The carousel's turn, as the live TV page's. */
+private const val TURN_MILLIS = 8_000
 
 private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 
@@ -557,38 +607,38 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
 @Composable
 private fun Hero(
     modifier: Modifier = Modifier,
-    tabs: List<FootballViewModel.Item>,
+    /** The carousel's cards, which one this is, how far it's turned to the next. */
+    count: Int,
+    at: Int,
+    turned: Float,
     item: FootballViewModel.Item,
     firstId: Long,
     best: FootballViewModel.Source?,
     viewModel: FootballViewModel,
     looks: Int,
     progress: FootballViewModel.Progress?,
-    onSelect: (Long) -> Unit,
+    /** -1 / +1 a card; false when there's none that way and the key goes on (to the menu). */
+    onStep: (Int) -> Boolean,
+    onKey: () -> Unit,
+    onWatch: () -> Unit,
     onPick: () -> Unit,
-    refocus: Long? = null,
-    onRefocused: () -> Unit = {},
+    refocus: Int = 0,
 ) {
     val m = item.match
     val watch = remember { FocusRequester() }
     val feeds = viewModel.feedsOf(item)
     val checked = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
-    LaunchedEffect(firstId, feeds.isNotEmpty()) { if (feeds.isNotEmpty()) runCatching { watch.requestFocus() } }
-    LaunchedEffect(refocus) {
-        if (refocus == m.id && feeds.isNotEmpty()) {
-            runCatching { watch.requestFocus() }
-            onRefocused()
-        }
-    }
+    // The buttons stay whatever card is on: focus doesn't drop off the carousel as it turns.
+    LaunchedEffect(firstId) { runCatching { watch.requestFocus() } }
+    LaunchedEffect(refocus) { if (refocus > 0) runCatching { watch.requestFocus() } }
 
-    Column(modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)) {
-        if (tabs.size >= 2) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
-                items(tabs, key = { it.match.id }) { t ->
-                    MatchTab(t, selected = t.match.id == m.id) { onSelect(t.match.id) }
-                }
-            }
-        }
+    Column(
+        modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)
+            .onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown) onKey()
+                false
+            },
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (m.phase == Phase.LIVE) {
                 LiveBadge(m.minute)
@@ -644,13 +694,23 @@ private fun Hero(
             }
         }
         Spacer(Modifier.height(20.dp))
-        if (feeds.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                HeroButton("⚡ " + stringResource(R.string.football_watch), Modifier.focusRequester(watch)) { viewModel.autoWatch(item) }
-                HeroButton(stringResource(R.string.football_choose_source), onClick = onPick)
-                HeroButton("↻", onClick = { viewModel.rescan(item) })
-            }
+        // LEFT off the first button and RIGHT off the last turn the carousel by hand.
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            HeroButton(
+                "⚡ " + stringResource(R.string.football_watch),
+                Modifier.focusRequester(watch).onPreviewKeyEvent { e ->
+                    e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft && onStep(-1)
+                },
+                onClick = onWatch,
+            )
+            HeroButton(stringResource(R.string.football_choose_source), onClick = onPick)
+            HeroButton(
+                "↻",
+                Modifier.onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onStep(1) },
+                onClick = { if (feeds.isNotEmpty()) viewModel.rescan(item) },
+            )
         }
+        Dots(count, at, turned, Modifier.padding(top = 14.dp, start = 2.dp))
         // Looking at another game's feeds by itself: a thin line, out of the way.
         progress?.takeIf { it.matchId != m.id }?.let { p ->
             Spacer(Modifier.height(14.dp))
@@ -687,29 +747,21 @@ private fun HeroButton(text: String, modifier: Modifier = Modifier, onClick: () 
     )
 }
 
-/** A game on the top of the page's tabs: crests, score, minute. Focus selects it. */
+/** One dot per card; this one's is a pill filling up until the next turns over. */
 @Composable
-private fun MatchTab(item: FootballViewModel.Item, selected: Boolean, onSelect: () -> Unit) {
-    val m = item.match
-    var focused by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (focused) Color.White else if (selected) Color(0x996E7672) else Color(0x4D6E7672))
-            .onFocusChanged {
-                focused = it.isFocused
-                if (it.isFocused) onSelect()
+private fun Dots(count: Int, current: Int, turned: Float, modifier: Modifier = Modifier) {
+    if (count < 2) return
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(count) { i ->
+            val dim = Color.White.copy(alpha = 0.28f)
+            if (i == current) {
+                Box(Modifier.width(28.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(dim)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(turned.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(3.dp)).background(Color.White))
+                }
+            } else {
+                Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(dim))
             }
-            .clickable(interactionSource = null, indication = null, onClick = onSelect)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val fg = if (focused) Color.Black else Color.White
-        if (m.phase == Phase.LIVE) Text("● ", color = LIVE_RED, fontSize = 10.sp)
-        Crest(m.home, 18)
-        Text(" ${centre(m)} ", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = fg)
-        if (!m.goals) Crest(m.away, 18)
-        if (m.phase == Phase.LIVE) m.minute?.let { Text(" $it", fontSize = 12.sp, color = fg) }
+        }
     }
 }
 
@@ -1177,12 +1229,6 @@ internal fun leagueName(league: Int): String = when (league) {
     FootballRepository.CONFERENCE -> "Conference League"
     else -> "Serie A"
 }
-
-/** Between the crests on a tab: the kick-off time before, "vs" once on (no score); GOL on the goal show. */
-private fun centre(m: Match): String =
-    if (m.goals && m.phase == Phase.LIVE) "GOL"
-    else if (m.phase == Phase.SCHEDULED) TIME.format(Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault()))
-    else "vs"
 
 /** Over the big title: "CHAMPIONS LEAGUE · 4ª GIORNATA · OGGI 21:00". */
 @Composable

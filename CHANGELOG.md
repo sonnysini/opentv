@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.45.0 — 4 November 2026
+
+- **Today's games in a carousel.** The top of the football page now turns through all of today's
+  games that matter — Serie A and the Italian teams in the cups, with their goal shows — every
+  8 seconds, live ones first, dots underneath. Left off "Watch now" and right off ↻ step through
+  them by hand; it holds still while a game plays muted behind it. The tabs are gone, and the
+  games on the carousel stay in their rows below too.
+- **Diretta Gol for the cups.** Champions League nights get their goal show as a card of its own,
+  and so do Europa and Conference League ones (Sky's "Diretta Gol Uel/Uecl" shows both): found
+  through the guide on whichever Sky Sport channel carries it — one for each kick-off (18:45 and
+  21:00).
+- **Champions League first on Champions nights.** The rows go by the day a competition plays next,
+  then Champions, Europa, Conference, Serie A: an odd Europa game kicking off earlier on a
+  Wednesday no longer puts its row on top.
+- **Team channels wear their club's crest.** "Milan", "DAZN Serie A 3 Milan" and the like now
+  show the Serie A team's crest from FotMob — the same ones as on the football page, on a clear
+  background — ahead of
+  the provider's logo and of a logo pack, whenever outside logos are on (Settings › Logos).
+- **Back up to the top shows the whole card again.** Coming back up from the rows, the page
+  scrolled only as far as the buttons and left the top of the game's card off screen.
+
 ## 0.44.1 — 4 November 2026
 
 - **Cup games found under their Italian names.** Guides write "Atletico M. - Bayern M." or
