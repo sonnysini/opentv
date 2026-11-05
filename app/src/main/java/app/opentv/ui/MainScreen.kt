@@ -10,7 +10,6 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -46,7 +45,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -390,7 +388,7 @@ private fun NavRail(
 
 /**
  * One rail entry. Phosphor line icons; the open page shows its icon filled, in the accent colour,
- * on a faint accent wash. Focus is a white ring on a dark fill, so it never reads as "open".
+ * on a faint accent wash. Focus is the solid accent pill used across the app.
  */
 @Composable
 private fun RailItem(
@@ -405,12 +403,12 @@ private fun RailItem(
     val primary = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(10.dp)
     val bg = when {
-        focused -> MaterialTheme.colorScheme.surfaceVariant
+        focused -> primary
         selected -> primary.copy(alpha = 0.16f)
         else -> MaterialTheme.colorScheme.surface
     }
     val tint = when {
-        focused -> Color.White
+        focused -> MaterialTheme.colorScheme.onPrimary
         selected -> primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -422,7 +420,6 @@ private fun RailItem(
             .focusLift(focused)
             .clip(shape)
             .background(bg)
-            .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),

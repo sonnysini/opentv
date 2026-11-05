@@ -1,10 +1,14 @@
 # Changelog
 
+## 0.47.1 — 5 November 2026
+
+- **The side menu's focus matches the rest of the app again:** the solid green pill, as in the
+  guide, Film and settings, instead of a white ring. The open page keeps its faint green wash.
+
 ## 0.47.0 — 5 November 2026
 
 - **New side-menu icons.** The rail uses Phosphor's thin-line icons instead of Material's solid
-  ones. The open page shows its icon filled, in green, on a faint green wash; the focused entry is
-  a white ring on a dark fill, so focus and "open" never look alike.
+  ones. The open page shows its icon filled, in green, on a faint green wash.
 
 ## 0.46.3 — 5 November 2026
 
