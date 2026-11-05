@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -95,6 +96,7 @@ fun ProvidersScreen(
                         pendingRemove = null
                     },
                     onSetLiveFormat = { viewModel.setLiveFormat(source, it) },
+                    onToggleEnabled = { viewModel.setEnabled(source, !source.enabled) },
                 )
             }
             item(key = "content") {
@@ -114,8 +116,9 @@ private fun ProviderRow(
     onCancelRemove: () -> Unit,
     onConfirmRemove: () -> Unit,
     onSetLiveFormat: (LiveStreamFormat) -> Unit,
+    onToggleEnabled: () -> Unit,
 ) {
-    Card {
+    Card(Modifier.alpha(if (source.enabled) 1f else 0.6f)) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -125,7 +128,8 @@ private fun ProviderRow(
                 Column(Modifier.weight(1f)) {
                     Text(source.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "${source.kind.name} · ${hostOf(source.url)}",
+                        if (source.enabled) "${source.kind.name} · ${hostOf(source.url)}"
+                        else "${stringResource(R.string.providers_disabled)} · ${hostOf(source.url)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -141,6 +145,9 @@ private fun ProviderRow(
                     TextButton(onClick = onConfirmRemove) { Text(stringResource(R.string.providers_yes_remove)) }
                     TextButton(onClick = onCancelRemove) { Text(stringResource(R.string.common_cancel)) }
                 } else {
+                    TextButton(onClick = onToggleEnabled) {
+                        Text(stringResource(if (source.enabled) R.string.providers_disable else R.string.providers_enable))
+                    }
                     TextButton(onClick = onEdit) { Text(stringResource(R.string.common_edit)) }
                     TextButton(onClick = onAskRemove) { Text(stringResource(R.string.common_remove)) }
                 }
@@ -148,7 +155,7 @@ private fun ProviderRow(
 
             // Stream format is an Xtream-panel concept — M3U sources carry their own URLs, so the
             // choice is meaningless there and hidden.
-            if (source.kind == SourceKind.XTREAM) {
+            if (source.kind == SourceKind.XTREAM && source.enabled) {
                 Spacer(Modifier.height(14.dp))
                 StreamFormatSelector(selected = source.liveFormat, onSelect = onSetLiveFormat)
             }

@@ -1262,12 +1262,31 @@ class CatalogRepository(
     }
 
     suspend fun deleteSource(sourceId: Long) = withContext(Dispatchers.IO) {
+        purgeSourceContent(sourceId)
+        sourceDao.delete(sourceId)
+    }
+
+    /**
+     * Switches a provider on or off without forgetting its login. Off = its channels, films and
+     * series leave the database (so nothing of it shows anywhere and nothing is synced); on = the
+     * caller kicks a refresh, and the VOD TTL is reset so films/series come back too.
+     */
+    suspend fun setSourceEnabled(sourceId: Long, enabled: Boolean) = withContext(Dispatchers.IO) {
+        sourceDao.setEnabled(sourceId, enabled)
+        if (enabled) settings.vodSyncedAtMillis = 0L else purgeSourceContent(sourceId)
+    }
+
+    /** Safety net: a sync already running when a source was switched off may have re-inserted rows. */
+    suspend fun purgeDisabledSources() = withContext(Dispatchers.IO) {
+        sourceDao.disabled().forEach { purgeSourceContent(it.id) }
+    }
+
+    private suspend fun purgeSourceContent(sourceId: Long) {
         channelDao.deleteForSource(sourceId)
         categoryDao.deleteForSource(sourceId)
         movieDao.deleteForSource(sourceId)
         seriesDao.deleteForSource(sourceId)
         episodeDao.deleteForSource(sourceId)
-        sourceDao.delete(sourceId)
     }
 
     companion object {

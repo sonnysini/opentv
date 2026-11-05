@@ -44,6 +44,12 @@ interface SourceDao {
     @Query("SELECT * FROM sources WHERE enabled = 1 ORDER BY id")
     suspend fun enabled(): List<Source>
 
+    @Query("SELECT * FROM sources WHERE enabled = 0 ORDER BY id")
+    suspend fun disabled(): List<Source>
+
+    @Query("UPDATE sources SET enabled = :enabled, lastCatalogSyncMillis = 0 WHERE id = :id")
+    suspend fun setEnabled(id: Long, enabled: Boolean)
+
     @Query("SELECT * FROM sources WHERE id = :id")
     suspend fun byId(id: Long): Source?
 

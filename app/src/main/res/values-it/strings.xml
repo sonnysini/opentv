@@ -316,6 +316,9 @@
     <string name="providers_empty">Ancora nessun fornitore. Aggiungi il servizio IPTV che già paghi per iniziare.</string>
     <string name="providers_remove_confirm">Rimuovere?</string>
     <string name="providers_yes_remove">Sì, rimuovi</string>
+    <string name="providers_disable">Disattiva</string>
+    <string name="providers_enable">Attiva</string>
+    <string name="providers_disabled">Disattivata</string>
     <string name="provider_stream_format">Formato dello stream</string>
     <string name="provider_stream_format_hls">HLS (.m3u8)</string>
     <string name="provider_stream_format_ts">MPEG-TS (.ts)</string>
