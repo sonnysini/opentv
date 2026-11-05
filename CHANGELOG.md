@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.48.1 — 6 November 2026
+
+- **"Watch on …" in tonight's highlights works again after a list is synced or a provider is
+  turned back on.** The highlight remembers the channel by name, not by its id, and OK now does
+  exactly what pressing that channel in the list does (your preferred quality, then the fallback).
+
 ## 0.48.0 — 5 November 2026
 
 - **Turn a provider off without removing it.** Settings › Providers has a Turn off / Turn on

@@ -351,7 +351,16 @@ fun HomeScreen(
         FullscreenLive(
             registerNavExit = registerNavExit,
             highlights = highlights,
-            onWatchHighlight = { h -> recordScope.launch { requestLive(graph.tvHighlightsRepository.channelFor(h)) } },
+            onWatchHighlight = { h ->
+                recordScope.launch {
+                    // As pressing that channel in the list: its row's pick, then the player's own choice.
+                    val variants = app.opentv.data.repo.distinctByQuality(
+                        graph.tvHighlightsRepository.channelsFor(h).sortedByDescending { it.qualityRank },
+                    )
+                    app.opentv.core.QualityPreference.order(variants, settings.preferredQuality.value)
+                        .firstOrNull()?.let { requestLive(it) }
+                }
+            },
             rows = rows,
             categories = fullscreenCategories,
             selectedCategory = selectedCategory,
