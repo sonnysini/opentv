@@ -88,7 +88,7 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         appScope.launch {
             val tonight = runCatching { graph.tvHighlightsRepository.tonight() }.getOrNull().orEmpty()
             val loader = coil.Coil.imageLoader(this@OpenTvApp)
-            tonight.mapNotNull { it.imageUrl }.forEach { url ->
+            tonight.flatMap { listOfNotNull(it.imageUrl, it.logoUrl) }.distinct().forEach { url ->
                 loader.enqueue(
                     coil.request.ImageRequest.Builder(this@OpenTvApp).data(url).apply {
                         app.opentv.data.repo.TvHighlightsRepository.IMAGE_HEADERS.forEach { (k, v) -> addHeader(k, v) }
