@@ -73,6 +73,19 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         val graph = ServiceLocator.get(this)
         // First thing: the live list opens on the copy saved last time while the real one builds.
         app.opentv.ui.channels.LiveSnapshotStore.preload(this)
+        // Tonight's programmes for the top of the live page: the disk copy at once, the guide only
+        // on the day's first launch, and their stills fetched now so they don't pop in later.
+        appScope.launch {
+            val tonight = runCatching { graph.tvHighlightsRepository.tonight() }.getOrNull().orEmpty()
+            val loader = coil.Coil.imageLoader(this@OpenTvApp)
+            tonight.mapNotNull { it.imageUrl }.forEach { url ->
+                loader.enqueue(
+                    coil.request.ImageRequest.Builder(this@OpenTvApp).data(url).apply {
+                        app.opentv.data.repo.TvHighlightsRepository.IMAGE_HEADERS.forEach { (k, v) -> addHeader(k, v) }
+                    }.build(),
+                )
+            }
+        }
         SyncWorker.schedule(this)
 
         // When the normaliser has moved on since the catalogue was last processed, re-clean

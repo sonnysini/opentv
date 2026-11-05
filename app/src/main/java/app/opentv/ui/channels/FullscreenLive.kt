@@ -243,6 +243,8 @@ fun FullscreenLive(
     // The top shows at start; the channels fold it away, and only going up to the tabs brings it back.
     var heroFocused by remember { mutableStateOf(false) }
     var heroShown by rememberSaveable { mutableStateOf(true) }
+    // On hand at the first frame (the disk copy) or only later (the guide read just now).
+    val heroAtStart = remember { highlights.isNotEmpty() }
     LaunchedEffect(tabsFocused, heroFocused) { if (tabsFocused || heroFocused) heroShown = true }
     // The top's button is the first thing on screen that can take focus, so at start it may get it
     // before the groups do: until the first key press, hand it to the groups.
@@ -279,6 +281,7 @@ fun FullscreenLive(
             onExitLeft = onExitLeft,
             buttonFocus = heroFocus,
             below = tabsFocus,
+            animateIn = !heroAtStart,
             modifier = Modifier.onFocusChanged { heroFocused = it.hasFocus },
         )
         Column(Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, top = if (highlights.isEmpty() || !(heroShown || heroFocused || tabsFocused)) 20.dp else 4.dp, bottom = 20.dp)) {

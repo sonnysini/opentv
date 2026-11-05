@@ -8,7 +8,6 @@ package app.opentv.ui.channels
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -91,6 +90,9 @@ fun TvHero(
     // The button's handle, and where DOWN from it goes (the tabs).
     buttonFocus: FocusRequester? = null,
     below: FocusRequester? = null,
+    // Arriving after the page is already up (the day's first read of the guide): open smoothly
+    // rather than pushing the channels down in one frame.
+    animateIn: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) return
@@ -98,7 +100,9 @@ fun TvHero(
     if (index >= items.size) index = 0
     val item = items[index]
     // Folds away to nothing while the channels have focus; the button can't take focus meanwhile.
-    val height by animateDpAsState(if (expanded) EXPANDED_HEIGHT else 0.dp, label = "heroHeight")
+    val open = remember { Animatable(if (expanded && !animateIn) 1f else 0f) }
+    LaunchedEffect(expanded) { open.animateTo(if (expanded) 1f else 0f) }
+    val height = EXPANDED_HEIGHT * open.value
 
     // Turns over every few seconds; any step by hand starts the count again. Held while the button
     // has focus, so OK plays the programme on screen, not the one that slid in meanwhile.
