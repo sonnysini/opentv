@@ -538,10 +538,23 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         }
         ?.rowsAt(System.currentTimeMillis())
 
+    /** The list last saved, to save again when the tabs come in after it. */
+    @Volatile
+    private var lastSaved: Pair<RowsKey, List<Row>>? = null
+
+    init {
+        // The tabs are built after the rows: without this the snapshot would keep the ones from
+        // before (none on the first run) and the next start would wait for them again.
+        viewModelScope.launch {
+            liveTabs.collect { tabs -> if (tabs.isNotEmpty()) lastSaved?.let { (k, r) -> saveSnapshot(k, r) } }
+        }
+    }
+
     /** Remember what the list shows now, for the next return to it (see [LiveSnapshot]). */
     private fun saveSnapshot(key: RowsKey, rows: List<Row>) {
         // Never with adult groups unlocked: the next launch would open with them on show.
         if (key.query.isNotBlank() || settings.hiddenUnlocked.value) return
+        lastSaved = key to rows
         val groups = categoryGroups.value
         if (groups.isEmpty()) return
         LiveSnapshotStore.save(
