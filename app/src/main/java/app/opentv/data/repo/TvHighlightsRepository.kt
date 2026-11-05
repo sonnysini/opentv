@@ -162,7 +162,7 @@ class TvHighlightsRepository(
         }.take(MAX)
             // Live ones first; otherwise the score's order (the sort is stable).
             .sortedBy { it.badge != Badge.LIVE }
-            .also { Log.i(TAG, "${it.size} highlights from ${candidates.size} candidates, ${byKey.size} networks matched") }
+            .also { Log.i(TAG, "${it.size} highlights from ${candidates.size} candidates, ${carried.size} networks matched") }
     }
 
     /** Sky's guide ids of the networks in [WEIGHTS], read once a day. */
