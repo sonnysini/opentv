@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.47.0 — 5 November 2026
+
+- **New side-menu icons.** The rail uses Phosphor's thin-line icons instead of Material's solid
+  ones. The open page shows its icon filled, in green, on a faint green wash; the focused entry is
+  a white ring on a dark fill, so focus and "open" never look alike.
+
 ## 0.46.3 — 5 November 2026
 
 - **Tonight's programmes are there with the channels.** The top of the live page is kept on disk
