@@ -35,6 +35,7 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         val graph = ServiceLocator.get(applicationContext)
         val now = System.currentTimeMillis()
+        runCatching { graph.catalogRepository.purgeDisabledSources() }
         val sources = graph.sourceRepository.enabled()
         if (sources.isEmpty()) return Result.success()
 

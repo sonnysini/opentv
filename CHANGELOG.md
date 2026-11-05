@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.48.0 — 5 November 2026
+
+- **Turn a provider off without removing it.** Settings › Providers has a Turn off / Turn on
+  button on each list. Off: its channels, films and series disappear and it is no longer synced,
+  but the login stays saved. On: it syncs again (films and series included).
+
 ## 0.47.1 — 5 November 2026
 
 - **The side menu's focus matches the rest of the app again:** the solid green pill, as in the

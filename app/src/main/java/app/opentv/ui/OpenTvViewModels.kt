@@ -181,6 +181,14 @@ class SourcesViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { graph.catalogRepository.deleteSource(source.id) }
     }
 
+    fun setEnabled(source: Source, enabled: Boolean) {
+        if (source.enabled == enabled) return
+        viewModelScope.launch {
+            graph.catalogRepository.setSourceEnabled(source.id, enabled)
+            if (enabled) app.opentv.data.work.SyncWorker.refreshNow(getApplication())
+        }
+    }
+
     /**
      * Change an Xtream source's live-stream container. The repository rewrites the source's live
      * channel URLs in place, so the switch takes effect without a re-sync; the observed source list
