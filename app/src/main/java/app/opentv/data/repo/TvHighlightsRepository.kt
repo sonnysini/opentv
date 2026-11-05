@@ -62,7 +62,8 @@ class TvHighlightsRepository(
     @Serializable
     data class Highlight(
         val eventId: String,
-        val channel: Channel,
+        /** The channel's group key ("rai1"): ids change when a list is imported again, names don't. */
+        val channelKey: String,
         /** The network's own name, as the guide writes it without the "HD": "Rai 1". */
         val network: String,
         val title: String,
@@ -106,9 +107,9 @@ class TvHighlightsRepository(
         (fresh ?: stored?.items.orEmpty()).filter { it.endUtcMillis > now }
     }
 
-    /** The channel to tune for [h] as the lists have it now: a sync since may have moved its stream. */
-    suspend fun channelFor(h: Highlight): Channel =
-        runCatching { channelDao.byId(h.channel.id) }.getOrNull() ?: h.channel
+    /** [h]'s channel as the lists have it now, every quality: what its row in the channel list holds. */
+    suspend fun channelsFor(h: Highlight): List<Channel> =
+        runCatching { channelDao.withGroupKeys(listOf(h.channelKey)) }.getOrElse { emptyList() }
 
     private suspend fun readDisk() {
         if (diskRead) return
@@ -146,23 +147,22 @@ class TvHighlightsRepository(
         val candidates = events.flatMap { (name, list) -> list.orEmpty().mapNotNull { candidate(name, it, today) } }
             .filter { it.end > now }
             .sortedByDescending { it.score }
-        // The user's channels for all the networks in one query; the best quality of each.
+        // Which of the networks the user's lists carry, in one query.
         val keys = candidates.map { it.key }.distinct()
-        val byKey = if (keys.isEmpty()) emptyMap() else runCatching { channelDao.withGroupKeys(keys) }
+        val carried = if (keys.isEmpty()) emptySet() else runCatching { channelDao.withGroupKeys(keys) }
             .getOrElse { emptyList() }
             .filter { TIMESHIFT !in it.displayName }
-            .groupBy { it.groupKey }
-            .mapValues { (_, v) -> v.maxBy { it.qualityRank } }
+            .mapTo(HashSet()) { it.groupKey }
         val seenNetworks = HashSet<String>()
         val seenTitles = HashSet<String>()
         candidates.mapNotNull { c ->
-            val channel = byKey[c.key] ?: return@mapNotNull null
+            if (c.key !in carried) return@mapNotNull null
             if (!seenNetworks.add(c.key) || !seenTitles.add(c.title.lowercase())) return@mapNotNull null
-            c.toHighlight(channel)
+            c.toHighlight()
         }.take(MAX)
             // Live ones first; otherwise the score's order (the sort is stable).
             .sortedBy { it.badge != Badge.LIVE }
-            .also { Log.i(TAG, "${it.size} highlights from ${candidates.size} candidates, ${byKey.size} networks matched") }
+            .also { Log.i(TAG, "${it.size} highlights from ${candidates.size} candidates, ${carried.size} networks matched") }
     }
 
     /** Sky's guide ids of the networks in [WEIGHTS], read once a day. */
@@ -230,7 +230,7 @@ class TvHighlightsRepository(
         return Candidate(e, shown, ChannelNameNormalizer.normalize(network).groupKey, title, start.toEpochMilli(), end.toEpochMilli(), score)
     }
 
-    private fun Candidate.toHighlight(channel: Channel): Highlight {
+    private fun Candidate.toHighlight(): Highlight {
         val content = e["content"]!!.jsonObject
         val images = content["imagesMap"]?.jsonArray.orEmpty().associate { i ->
             val o = i.jsonObject
@@ -242,7 +242,7 @@ class TvHighlightsRepository(
         }
         return Highlight(
             eventId = e["eventId"]?.jsonPrimitive?.contentOrNull ?: "$key@$start",
-            channel = channel,
+            channelKey = key,
             network = network,
             title = title,
             synopsis = (e["eventSynopsis"]?.jsonPrimitive?.contentOrNull ?: "").replace(EPISODE_PREFIX, "").trim(),
@@ -276,7 +276,7 @@ class TvHighlightsRepository(
         val IMAGE_HEADERS = mapOf("User-Agent" to BROWSER)
         const val MAX = 8
         /** Bump when [Highlight] changes shape: an old file is then ignored rather than misread. */
-        private const val VERSION = 1
+        private const val VERSION = 2
         private const val MIN_MINUTES = 40
         // Prime time starts between nine and ten; what starts at half eight is the warm-up.
         private const val PRIME_FROM = 21 * 60
