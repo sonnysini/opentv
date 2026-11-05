@@ -73,6 +73,16 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         val graph = ServiceLocator.get(this)
         // First thing: the live list opens on the copy saved last time while the real one builds.
         app.opentv.ui.channels.LiveSnapshotStore.preload(this)
+        // Film and Shows homes built while the live page is up, so opening them later is instant
+        // (the rows are matched against the whole library: seconds on a big provider). Late and
+        // one after the other, not to slow the start.
+        appScope.launch {
+            kotlinx.coroutines.delay(VOD_WARM_UP_DELAY_MILLIS)
+            runCatching {
+                graph.catalogRepository.movieCount().takeIf { it > 0 }?.let { graph.vodHomeRepository.moviesHome(it) }
+                graph.catalogRepository.seriesCount().takeIf { it > 0 }?.let { graph.vodHomeRepository.seriesHome(it) }
+            }.onFailure { android.util.Log.w("OpenTvApp", "VOD warm-up", it) }
+        }
         // Tonight's programmes for the top of the live page: the disk copy at once, the guide only
         // on the day's first launch, and their stills fetched now so they don't pop in later.
         appScope.launch {
@@ -162,3 +172,6 @@ class OpenTvApp : Application(), ImageLoaderFactory {
 
 /** How long after launch the background VOD sync waits before starting. */
 private const val VOD_AUTOSTART_DELAY_MILLIS = 30_000L
+
+/** How long after launch the Film and Shows homes are built in the background. */
+private const val VOD_WARM_UP_DELAY_MILLIS = 8_000L

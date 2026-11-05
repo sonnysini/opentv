@@ -29,6 +29,7 @@ object LiveMacros {
         Macro.KIDS, Macro.MUSIC, Macro.ABROAD,
     )
 
+    @kotlinx.serialization.Serializable // also kept by LiveSnapshot
     data class Entry(
         val key: String,
         /** The broadcaster or country code above the name, small; null for none. */
