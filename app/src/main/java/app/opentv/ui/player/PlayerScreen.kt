@@ -243,6 +243,9 @@ fun PlayerScreen(
     var playingUa by remember { mutableStateOf<String?>(null) }
     // Set while another player app has the stream; ours stays stopped until we're back in front.
     var handedOff by remember { mutableStateOf(false) }
+    // Set while the app is out of sight (Home, standby, another app): the stream is let go so the
+    // account's one connection is free, and the channel comes back on when we're in front again.
+    var backgrounded by remember { mutableStateOf(false) }
     var attempt by remember { mutableIntStateOf(0) }
     var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // Every variant of the channel failed or timed out: say so instead of spinning forever.
@@ -378,9 +381,28 @@ fun PlayerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && handedOff) {
-                handedOff = false
-                backFromExternal = true
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> if (handedOff) {
+                    handedOff = false
+                    backFromExternal = true
+                }
+                // Out of sight, picture-in-picture closed included: stop streaming. Left playing,
+                // a box gone to standby keeps the line taken and another TV's stream gets cut.
+                Lifecycle.Event.ON_STOP -> if (!handedOff && !backgrounded && currentId != null) {
+                    backgrounded = true
+                    controller.stop()
+                }
+                Lifecycle.Event.ON_START -> if (backgrounded) {
+                    backgrounded = false
+                    val id = currentId
+                    scope.launch {
+                        val channel = id?.let { cid ->
+                            variants.firstOrNull { it.id == cid } ?: graph.catalogRepository.channel(cid)
+                        }
+                        if (channel != null && currentId == id && !backgrounded) tuneTo(channel)
+                    }
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -464,7 +486,7 @@ fun PlayerScreen(
 
     /** The current variant didn't start: move on to the next untried quality, if there is one. */
     fun fallBack() {
-        if (started || unavailable || handedOff || holdingPick()) return
+        if (started || unavailable || handedOff || backgrounded || holdingPick()) return
         val next = if (settings.qualityFallback.value) tryOrder.firstOrNull { it.id !in tried } else null
         val back = stallReturnId?.let { id -> variants.firstOrNull { it.id == id } }
         if (next == null && back != null) {
@@ -609,8 +631,8 @@ fun PlayerScreen(
     // ...and one that keeps stuttering, too briefly each time for the freeze wait, does the same.
     val hiccupLimit by settings.hiccupLimit.collectAsStateWithLifecycle()
     val manualSourceMode by settings.manualSourceMode.collectAsStateWithLifecycle()
-    LaunchedEffect(started, paused, stallFallback, stallMillis, hiccupLimit, manualPick, manualSourceMode, currentId, watchEpoch) {
-        if (!started || paused) return@LaunchedEffect
+    LaunchedEffect(started, paused, backgrounded, stallFallback, stallMillis, hiccupLimit, manualPick, manualSourceMode, currentId, watchEpoch) {
+        if (!started || paused || backgrounded) return@LaunchedEffect
         val held = manualPick && manualSourceMode != ManualSourceMode.AUTO
         val watch = if (stallFallback && !held) StallWatch(stallMillis.toLong()) else null
         val hiccups = if (hiccupLimit > 0 && !(manualPick && manualSourceMode == ManualSourceMode.STAY)) {
