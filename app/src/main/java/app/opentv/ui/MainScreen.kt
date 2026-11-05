@@ -6,13 +6,13 @@
 package app.opentv.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
-import app.opentv.R
-import app.opentv.core.findActivity
-import app.opentv.core.StatusBus
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,25 +26,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SportsSoccer
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,36 +43,41 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import app.opentv.core.AppSettings
-import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import kotlinx.coroutines.delay
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.opentv.R
+import app.opentv.core.AppSettings
+import app.opentv.core.StatusBus
+import app.opentv.core.findActivity
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Movie
 import app.opentv.data.model.Recording
 import app.opentv.data.model.Series
 import app.opentv.ui.channels.HomeScreen
 import app.opentv.ui.recordings.RecordingsScreen
+import app.opentv.ui.theme.focusLift
 import app.opentv.ui.vod.MoviesScreen
 import app.opentv.ui.vod.SeriesScreen
-import app.opentv.ui.theme.focusLift
+import kotlinx.coroutines.delay
 
 /**
  * The shell: a slim navigation rail down the left over a content area. The rail sits collapsed as
@@ -90,12 +85,12 @@ import app.opentv.ui.theme.focusLift
  * menu people asked for, instead of a top bar that ate a row of the guide. It overlays the content
  * rather than pushing it, so expanding the menu never reflows the guide underneath.
  */
-enum class Tab(val labelRes: Int, val icon: ImageVector) {
-    LIVE(R.string.nav_live_tv, Icons.Filled.LiveTv),
-    FOOTBALL(R.string.nav_football, Icons.Filled.SportsSoccer),
-    MOVIES(R.string.nav_movies, Icons.Filled.Movie),
-    SHOWS(R.string.nav_shows, Icons.Filled.Tv),
-    RECORDINGS(R.string.nav_recordings, Icons.Filled.FiberManualRecord),
+enum class Tab(val labelRes: Int, val icon: Int, val iconSelected: Int) {
+    LIVE(R.string.nav_live_tv, R.drawable.ic_nav_live, R.drawable.ic_nav_live_fill),
+    FOOTBALL(R.string.nav_football, R.drawable.ic_nav_football, R.drawable.ic_nav_football_fill),
+    MOVIES(R.string.nav_movies, R.drawable.ic_nav_movies, R.drawable.ic_nav_movies_fill),
+    SHOWS(R.string.nav_shows, R.drawable.ic_nav_shows, R.drawable.ic_nav_shows_fill),
+    RECORDINGS(R.string.nav_recordings, R.drawable.ic_nav_recordings, R.drawable.ic_nav_recordings_fill),
 }
 
 private val RAIL_COLLAPSED = 76.dp
@@ -379,7 +374,7 @@ private fun NavRail(
 
         tabs.forEach { t ->
             RailItem(
-                t.icon, stringResource(t.labelRes), expanded, current == t,
+                if (current == t) t.iconSelected else t.icon, stringResource(t.labelRes), expanded, current == t,
                 modifier = if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier,
             ) { onSelect(t) }
         }
@@ -387,15 +382,19 @@ private fun NavRail(
         Spacer(Modifier.height(1.dp).fillMaxWidth())
         Spacer(Modifier.weight(1f))
 
-        RailItem(Icons.Filled.Search, stringResource(R.string.nav_search), expanded, false, onClick = onOpenSearch)
-        RailItem(Icons.Filled.Person, activeProfileName, expanded, false, onClick = onOpenProfiles)
-        RailItem(Icons.Filled.Settings, stringResource(R.string.nav_settings), expanded, false, onClick = onOpenSettings)
+        RailItem(R.drawable.ic_nav_search, stringResource(R.string.nav_search), expanded, false, onClick = onOpenSearch)
+        RailItem(R.drawable.ic_nav_profile, activeProfileName, expanded, false, onClick = onOpenProfiles)
+        RailItem(R.drawable.ic_nav_settings, stringResource(R.string.nav_settings), expanded, false, onClick = onOpenSettings)
     }
 }
 
+/**
+ * One rail entry. Phosphor line icons; the open page shows its icon filled, in the accent colour,
+ * on a faint accent wash. Focus is a white ring on a dark fill, so it never reads as "open".
+ */
 @Composable
 private fun RailItem(
-    icon: ImageVector,
+    @DrawableRes icon: Int,
     label: String,
     expanded: Boolean,
     selected: Boolean,
@@ -403,28 +402,33 @@ private fun RailItem(
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val primary = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(10.dp)
     val bg = when {
-        focused -> MaterialTheme.colorScheme.primary
-        selected -> MaterialTheme.colorScheme.surfaceVariant
+        focused -> MaterialTheme.colorScheme.surfaceVariant
+        selected -> primary.copy(alpha = 0.16f)
         else -> MaterialTheme.colorScheme.surface
     }
-    val tint = if (focused) MaterialTheme.colorScheme.onPrimary
-    else if (selected) MaterialTheme.colorScheme.onSurface
-    else MaterialTheme.colorScheme.onSurfaceVariant
+    val tint = when {
+        focused -> Color.White
+        selected -> primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Row(
         modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .focusLift(focused)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(shape)
             .background(bg)
+            .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = label, tint = tint)
+        Icon(ImageVector.vectorResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(26.dp))
         if (expanded) {
             Spacer(Modifier.width(14.dp))
             Text(
