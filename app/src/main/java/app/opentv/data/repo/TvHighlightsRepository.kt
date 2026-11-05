@@ -16,6 +16,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -26,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -43,15 +45,21 @@ import java.time.format.DateTimeFormatter
  * have isn't offered, since OK on it would have nothing to play.
  *
  * The guide is asked one channel at a time (several at once come back with gaps) and only for the
- * couple of dozen channels worth a place; the result is kept for half an hour.
+ * couple of dozen channels worth a place. The evening is known by the morning, so the guide is read
+ * once a day: the first time the app asks that day. The result is kept on disk too ([file]), so a
+ * cold start shows tonight's programmes straight away instead of after the downloads. What has
+ * ended drops off by the clock; a failed read is tried again on the next ask.
  */
 class TvHighlightsRepository(
     private val http: OkHttpClient,
     private val channelDao: ChannelDao,
+    /** Where tonight's list is kept between launches; null, memory only. */
+    private val file: File? = null,
     private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true },
 ) {
     enum class Badge { NONE, PREMIERE, LIVE, FINALE }
 
+    @Serializable
     data class Highlight(
         val eventId: String,
         val channel: Channel,
@@ -71,18 +79,59 @@ class TvHighlightsRepository(
         val logoUrl: String?,
     )
 
+    /** What is kept: the day the guide was read for, and what it gave. */
+    @Serializable
+    private data class Stored(val version: Int, val day: String, val items: List<Highlight>)
+
     private val lock = Mutex()
-    private var cache: Pair<Long, List<Highlight>>? = null
+    @Volatile private var stored: Stored? = null
+    @Volatile private var diskRead = false
     private var guideChannels: Pair<LocalDate, Map<String, Int>>? = null
+
+    /**
+     * What is on hand right now, without waiting: for a screen's first frame, so the top is there
+     * together with the channels. Null until the disk copy has been read.
+     */
+    fun cached(now: Long = System.currentTimeMillis()): List<Highlight>? =
+        stored?.items?.filter { it.endUtcMillis > now } ?: if (diskRead) emptyList() else null
 
     /** Up to [MAX] programmes, live ones first; empty when the guide can't be read. */
     suspend fun tonight(now: Long = System.currentTimeMillis()): List<Highlight> = lock.withLock {
-        cache?.takeIf { now - it.first < TTL_MILLIS }?.let { (_, list) ->
-            return@withLock list.filter { it.endUtcMillis > now }
-        }
+        readDisk()
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
+        stored?.takeIf { it.day == today }?.let { s -> return@withLock s.items.filter { it.endUtcMillis > now } }
         val fresh = runCatching { load(now) }.getOrElse { Log.w(TAG, "highlights", it); null }
-        if (fresh != null) cache = now to fresh
-        (fresh ?: cache?.second.orEmpty()).filter { it.endUtcMillis > now }
+        // None found (the lists still syncing, the guide half down) is asked again next time.
+        if (!fresh.isNullOrEmpty()) save(Stored(VERSION, today, fresh))
+        (fresh ?: stored?.items.orEmpty()).filter { it.endUtcMillis > now }
+    }
+
+    /** The channel to tune for [h] as the lists have it now: a sync since may have moved its stream. */
+    suspend fun channelFor(h: Highlight): Channel =
+        runCatching { channelDao.byId(h.channel.id) }.getOrNull() ?: h.channel
+
+    private suspend fun readDisk() {
+        if (diskRead) return
+        val f = file
+        if (f != null) withContext(Dispatchers.IO) {
+            runCatching {
+                if (f.exists()) json.decodeFromString(Stored.serializer(), f.readText()).takeIf { it.version == VERSION }
+                else null
+            }.onFailure { Log.w(TAG, "Unreadable highlights, ignoring", it) }.getOrNull()
+        }?.let { if (stored == null) stored = it }
+        diskRead = true
+    }
+
+    private suspend fun save(s: Stored) {
+        stored = s
+        val f = file ?: return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val tmp = File(f.path + ".tmp")
+                tmp.writeText(json.encodeToString(Stored.serializer(), s))
+                tmp.renameTo(f)
+            }.onFailure { Log.w(TAG, "Could not save highlights", it) }
+        }
     }
 
     private suspend fun load(now: Long): List<Highlight>? = withContext(Dispatchers.IO) {
@@ -226,7 +275,8 @@ class TvHighlightsRepository(
         /** The images are refused without a browser's user agent. */
         val IMAGE_HEADERS = mapOf("User-Agent" to BROWSER)
         const val MAX = 8
-        private const val TTL_MILLIS = 30 * 60_000L
+        /** Bump when [Highlight] changes shape: an old file is then ignored rather than misread. */
+        private const val VERSION = 1
         private const val MIN_MINUTES = 40
         // Prime time starts between nine and ten; what starts at half eight is the warm-up.
         private const val PRIME_FROM = 21 * 60

@@ -336,9 +336,10 @@ fun HomeScreen(
         if (gone) viewModel.selectCategory(null)
     }
 
-    // Tonight's big programmes for the top of the full-screen list, read again every few minutes
-    // (the repository keeps them half an hour; the ones over drop off).
-    val highlights by androidx.compose.runtime.produceState(emptyList<app.opentv.data.repo.TvHighlightsRepository.Highlight>(), fullscreen) {
+    // Tonight's big programmes for the top of the full-screen list: what is on hand at once (the
+    // disk copy), then asked again every few minutes — the guide is only read once a day, so this
+    // just drops the ones over and retries a read that failed.
+    val highlights by androidx.compose.runtime.produceState(graph.tvHighlightsRepository.cached().orEmpty(), fullscreen) {
         if (!fullscreen) return@produceState
         while (true) {
             value = graph.tvHighlightsRepository.tonight()
@@ -350,7 +351,7 @@ fun HomeScreen(
         FullscreenLive(
             registerNavExit = registerNavExit,
             highlights = highlights,
-            onWatchHighlight = { requestLive(it.channel) },
+            onWatchHighlight = { h -> recordScope.launch { requestLive(graph.tvHighlightsRepository.channelFor(h)) } },
             rows = rows,
             categories = fullscreenCategories,
             selectedCategory = selectedCategory,

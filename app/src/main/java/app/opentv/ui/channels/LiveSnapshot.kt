@@ -35,6 +35,8 @@ data class LiveSnapshot(
     val nonEmptyGroups: List<ChannelsViewModel.CategoryGroup>,
     val groupCounts: Map<String, Int>,
     val rows: List<SnapshotRow>,
+    /** The tabs above the groups (Italy, Football…) with their entries; none in older files. */
+    val tabs: Map<app.opentv.data.parser.CategoryMacro.Macro, List<app.opentv.ui.LiveMacros.Entry>> = emptyMap(),
 ) {
     @Serializable
     data class SnapshotRow(

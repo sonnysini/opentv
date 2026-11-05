@@ -387,14 +387,17 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Each tab's entries (see [LiveMacros]) with their channel counts; tabs with none are left out. */
+    // Led by the snapshot's tabs like the groups: building them reads every channel's key, a second
+    // or so at start, and the open tab's groups can't show until they are in.
     val liveTabs: StateFlow<Map<Macro, List<LiveMacros.Entry>>> =
-        combine(visibleCategoryGroups, graph.catalogRepository.observeCategoryChannelKeys()) { groups, keys ->
-            val byCategory = HashMap<String, MutableSet<String>>()
-            for (k in keys) byCategory.getOrPut(k.categoryId) { HashSet() } += k.groupKey.ifEmpty { "#" + k.categoryId }
-            LiveMacros.build(groups, byCategory)
-        }
-            .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+        withSnapshot(
+            combine(visibleCategoryGroups, graph.catalogRepository.observeCategoryChannelKeys()) { groups, keys ->
+                val byCategory = HashMap<String, MutableSet<String>>()
+                for (k in keys) byCategory.getOrPut(k.categoryId) { HashSet() } += k.groupKey.ifEmpty { "#" + k.categoryId }
+                LiveMacros.build(groups, byCategory)
+            }.flowOn(Dispatchers.Default),
+        ) { it.tabs.takeIf { t -> t.isNotEmpty() } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), startSnapshot?.tabs.orEmpty())
 
     /**
      * One row on screen = one *logical* channel.
@@ -535,10 +538,23 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         }
         ?.rowsAt(System.currentTimeMillis())
 
+    /** The list last saved, to save again when the tabs come in after it. */
+    @Volatile
+    private var lastSaved: Pair<RowsKey, List<Row>>? = null
+
+    init {
+        // The tabs are built after the rows: without this the snapshot would keep the ones from
+        // before (none on the first run) and the next start would wait for them again.
+        viewModelScope.launch {
+            liveTabs.collect { tabs -> if (tabs.isNotEmpty()) lastSaved?.let { (k, r) -> saveSnapshot(k, r) } }
+        }
+    }
+
     /** Remember what the list shows now, for the next return to it (see [LiveSnapshot]). */
     private fun saveSnapshot(key: RowsKey, rows: List<Row>) {
         // Never with adult groups unlocked: the next launch would open with them on show.
         if (key.query.isNotBlank() || settings.hiddenUnlocked.value) return
+        lastSaved = key to rows
         val groups = categoryGroups.value
         if (groups.isEmpty()) return
         LiveSnapshotStore.save(
@@ -550,6 +566,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                 categoryGroups = groups,
                 nonEmptyGroups = nonEmptyCategoryGroups.value,
                 groupCounts = groupCounts.value,
+                tabs = liveTabs.value,
                 // "All" on a big provider is tens of thousands of rows: keep the groups, skip those.
                 rows = if (rows.size > SNAPSHOT_MAX_ROWS) emptyList()
                 else rows.map { LiveSnapshot.SnapshotRow.of(it, System.currentTimeMillis()) },

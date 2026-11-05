@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.46.3 — 5 November 2026
+
+- **Tonight's programmes are there with the channels.** The top of the live page is kept on disk
+  and the TV guide is read once a day, the first time the app opens: from then on a cold start
+  shows it at once, together with the groups and the list, instead of a few seconds later with
+  the list jumping down. What has ended drops off by the clock; a failed read is tried again a
+  few minutes later. Its pictures are fetched at start too.
+- **On the day's first opening the top slides in** instead of pushing the channels down in one go.
+- **The tabs and their groups are there at start too.** Italy, Football… were worked out from every
+  channel on each launch, and the open tab showed no groups until then; now they come from the
+  saved copy with the rest of the list.
+- **Film and Shows open straight away.** Their homes are built in the background a few seconds
+  after launch, while the live page is up, instead of when the page is first opened.
+
 ## 0.46.2 — 4 November 2026
 
 - **Leaving the app lets go of the stream.** Home, the box going to standby or another app now stop

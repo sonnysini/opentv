@@ -131,7 +131,11 @@ object ServiceLocator {
         }
 
         val tvHighlightsRepository: app.opentv.data.repo.TvHighlightsRepository by lazy {
-            app.opentv.data.repo.TvHighlightsRepository(httpClient, database.channels())
+            app.opentv.data.repo.TvHighlightsRepository(
+                httpClient,
+                database.channels(),
+                java.io.File(appContext.filesDir, "tv_highlights.json"),
+            )
         }
 
         val youTubeStreams: app.opentv.data.remote.YouTubeStreams by lazy {
