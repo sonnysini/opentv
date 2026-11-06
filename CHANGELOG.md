@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.52.0 — 6 November 2026
+
+- **No more zoom on the selected card.** Posters, Continue Watching, episodes and football games
+  no longer grow when the cursor lands on them, so rows don't bounce as you move: the selection
+  is the ring alone (white on Football, teal on Films and Shows).
+- **Opening the menu slides the page instead of squeezing it.** On Football, Films and Shows the
+  cards kept resizing as the side menu opened and closed; now the page keeps its size and moves
+  right, as on Live TV.
+- **Football: five games to a row** instead of six, a little bigger.
+
 ## 0.51.0 — 6 November 2026
 
 - **Hold OK: one panel down the right, everywhere.** The menus for a channel and for a programme

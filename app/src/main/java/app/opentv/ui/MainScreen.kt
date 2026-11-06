@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,8 +23,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -189,6 +193,8 @@ fun MainScreen(
     // The rail sits beside the content and pushes it, rather than floating over it. The Live TV
     // screen has its own category rail down its left edge, and an overlaying menu would land on top
     // of it and leave a sliver poking out — so they live side by side and never collide.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val screenWidth = maxWidth
     Column(Modifier.fillMaxSize()) {
       Row(Modifier.weight(1f).fillMaxWidth()) {
         NavRail(
@@ -206,7 +212,16 @@ fun MainScreen(
             activeProfileName = activeProfileName,
         )
 
-        Box(Modifier.weight(1f).fillMaxHeight()) {
+        // The pages of cards keep the width they have with the rail closed: opening it slides
+        // them right, partly off screen, instead of squeezing them (their cards are sized from the
+        // page's width, so they shrank and grew back with every open and close). Live TV's lists
+        // reflow, so it still takes the space that's left.
+        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+            val page = if (tab == Tab.LIVE) Modifier.fillMaxSize() else Modifier
+                .wrapContentWidth(Alignment.Start, unbounded = true)
+                .requiredWidth(screenWidth - RAIL_COLLAPSED)
+                .fillMaxHeight()
+          Box(page) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,
@@ -241,9 +256,11 @@ fun MainScreen(
                 )
                 Tab.RECORDINGS -> RecordingsScreen(onPlay = onPlayRecording)
             }
+          }
         }
       }
       StatusBar()
+    }
     }
 }
 

@@ -551,11 +551,9 @@ internal fun PosterCard(
     progress: Float? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "posterScale")
     Column(
         modifier
             .width(POSTER_WIDTH)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(10.dp))
             .clickable(interactionSource = null, indication = null, onClick = onClick)
@@ -697,11 +695,9 @@ internal fun ContinueWatchingRow(
 @Composable
 private fun ResumeCard(item: VodViewModel.ResumeItem, onHold: () -> Unit, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "resumeScale")
     Column(
         Modifier
             .width(LocalVodRowSizes.current.resume)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
             .holdOk({ focused }, onHold)
             .clip(RoundedCornerShape(8.dp))
@@ -890,7 +886,6 @@ internal fun VodSyncStrip(progress: app.opentv.data.repo.CatalogRepository.VodPr
 private val POSTER_WIDTH = 140.dp
 
 /** The focused card grows this much, on top of its teal ring. */
-private const val FOCUS_SCALE = 1.08f
 
 /** Rating to one decimal place, locale-independent (the "★" is drawn beside it). */
 internal fun formatRating(rating: Double): String = String.format(java.util.Locale.US, "%.1f", rating)
