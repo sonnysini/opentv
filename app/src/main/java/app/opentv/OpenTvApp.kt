@@ -69,6 +69,8 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         super.onCreate()
         // The OCR process (OcrService, ":ocr") only runs Tesseract: none of the app's start-up.
         if (processName().endsWith(":ocr")) return
+        app.opentv.core.EventLog.init(this)
+        app.opentv.core.EventLog.log("app", "start ${BuildConfig.VERSION_NAME}")
         AppText.init(this)
         val graph = ServiceLocator.get(this)
         // First thing: the live list opens on the copy saved last time while the real one builds.

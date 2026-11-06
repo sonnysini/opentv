@@ -260,9 +260,11 @@ fun VodPlayerScreen(
         val window = context.findActivity()?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         view.keepScreenOn = true
+        app.opentv.core.EventLog.keepAwake("VodPlayer", "on", context.findActivity())
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             view.keepScreenOn = false
+            app.opentv.core.EventLog.keepAwake("VodPlayer", "off (closed)", context.findActivity())
             scope.launch { savePosition() }
             controller.release()
             scope.cancel()

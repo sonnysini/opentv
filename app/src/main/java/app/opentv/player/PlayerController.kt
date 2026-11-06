@@ -306,6 +306,7 @@ class PlayerController(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    app.opentv.core.EventLog.log("player", "error ${error.errorCodeName} (failure ${consecutiveFailures + 1})")
                     consecutiveFailures++
                     val request = current?.let { resumable(it) }
                     current = request

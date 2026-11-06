@@ -290,10 +290,15 @@ fun HomeScreen(
         val window = context.findActivity()?.window
         if (previewEnabled && screenResumed) {
             window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            app.opentv.core.EventLog.keepAwake("Home", "on (preview)", context.findActivity())
         } else {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            app.opentv.core.EventLog.keepAwake("Home", "off (preview=$previewEnabled resumed=$screenResumed)", context.findActivity())
         }
-        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            app.opentv.core.EventLog.keepAwake("Home", "off (closed)", context.findActivity())
+        }
     }
 
     // Preview audio follows the setting; muted by default so browsing stays quiet.
