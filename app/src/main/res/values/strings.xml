@@ -881,4 +881,34 @@
     <string name="logos_groups_title">Group logos</string>
     <string name="logos_groups_external">Group logos from outside</string>
     <string name="logos_groups_external_desc">Broadcaster logos and flags beside the groups (☰). Off, or when none is found, the provider\'s emoji shows instead.</string>
+    <!-- Hold-OK action panels -->
+    <string name="panel_watch">Watch</string>
+    <string name="panel_record_now">Record what\'s on now</string>
+    <string name="panel_record_series_named">Record the series · %1$s</string>
+    <string name="panel_stop_recording">Stop recording</string>
+    <string name="panel_record_live">Record now</string>
+    <string name="panel_schedule">Schedule recording</string>
+    <string name="panel_watch_from_start">Watch from the start</string>
+    <string name="panel_remind_me">Remind me</string>
+    <string name="panel_cancel_reminder">Cancel reminder</string>
+    <string name="panel_auto_switch">Switch to it when it starts</string>
+    <string name="panel_later">Later</string>
+    <string name="panel_channel">Channel</string>
+    <string name="panel_more">More</string>
+    <string name="panel_reminder">Reminder</string>
+    <string name="panel_left">%1$s left</string>
+    <string name="panel_hours_minutes">%1$d h %2$d min</string>
+    <string name="panel_minutes">%1$d min</string>
+    <string name="panel_live_watch">Watch live and stop the recording</string>
+    <string name="panel_live_warn_body">You\'re on a single connection: watching live now stops the recording.</string>
+    <string name="panel_resume_from">Resume from %1$s</string>
+    <string name="panel_restart">Start again</string>
+    <string name="panel_next_episode">Next episode · S%1$d E%2$d</string>
+    <string name="panel_pick_source">Choose the source</string>
+    <string name="panel_series">Show</string>
+    <string name="panel_go_episodes">Go to the episodes</string>
+    <string name="panel_mark_watched">Mark as watched</string>
+    <string name="panel_remove">Remove from the list</string>
+    <string name="panel_remaining">%1$s to go</string>
+    <string name="panel_film">Film</string>
 </resources>

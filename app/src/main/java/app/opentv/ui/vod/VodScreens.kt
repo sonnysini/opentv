@@ -29,6 +29,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import app.opentv.ui.CARD_GAP
+import app.opentv.ui.holdOk
 import app.opentv.ui.bottomFade
 import app.opentv.data.remote.TmdbLists
 import androidx.compose.runtime.remember
@@ -77,6 +80,7 @@ import app.opentv.ui.theme.focusLift
 @Composable
 fun MoviesScreen(
     onOpenMovie: (Movie) -> Unit,
+    onOpenSeries: (Series) -> Unit,
     onResume: (mediaKey: String, url: String, title: String) -> Unit,
     onOpenSearch: () -> Unit,
     hasSources: Boolean,
@@ -194,7 +198,7 @@ fun MoviesScreen(
         item(key = "tabs") { VodTabs(tabLabels, tab, selectTab, Modifier.padding(top = if (slides.isEmpty()) 12.dp else 0.dp)) }
         vodProgress?.let { p -> item(key = "sync") { VodSyncStrip(p) } }
         if (tab == 0) {
-            if (resume.isNotEmpty()) item(key = "cw") { ContinueWatchingRow(resume, onResume) }
+            if (resume.isNotEmpty()) item(key = "cw") { ContinueWatchingRow(resume, onResume, onOpenSeries, viewModel) }
             home?.let { h ->
                 item(key = "top10") { TopTenRow(stringResource(R.string.vod_top10_movies), h.top10) { onOpenMovie(it.movie) } }
             }
@@ -362,7 +366,7 @@ fun SeriesScreen(
         item(key = "tabs") { VodTabs(tabLabels, tab, selectTab, Modifier.padding(top = if (slides.isEmpty()) 12.dp else 0.dp)) }
         vodProgress?.let { p -> item(key = "sync") { VodSyncStrip(p) } }
         if (tab == 0) {
-            if (resume.isNotEmpty()) item(key = "cw") { ContinueWatchingRow(resume, onResume) }
+            if (resume.isNotEmpty()) item(key = "cw") { ContinueWatchingRow(resume, onResume, onOpenSeries, viewModel) }
             if (newEpisodes.isNotEmpty()) item(key = "new") { NewEpisodesRow(newEpisodes, onOpenSeries) }
             home?.let { h ->
                 item(key = "top10") { TopTenRow(stringResource(R.string.vod_top10_shows), h.top10) { onOpenSeries(it.series) } }
@@ -639,20 +643,59 @@ private fun Badge(text: String, modifier: Modifier = Modifier, highlight: Boolea
 internal fun ContinueWatchingRow(
     items: List<VodViewModel.ResumeItem>,
     onResume: (mediaKey: String, url: String, title: String) -> Unit,
+    onOpenSeries: (Series) -> Unit,
+    viewModel: VodViewModel,
 ) {
+    // Hold OK on a card: its panel; "Choose the source" swaps it for the list of copies.
+    var held by remember { mutableStateOf<VodViewModel.ResumeItem?>(null) }
+    var picking by remember { mutableStateOf<Pair<VodViewModel.ResumeItem, List<VodViewModel.ResumeSource>>?>(null) }
+    // A card taken off the shelf (removed, or watched): the focus stays in the row, on the card
+    // that takes its place, instead of jumping to the top of the page.
+    var focusedAt by remember { mutableIntStateOf(0) }
+    var refocusPending by remember { mutableStateOf(false) }
+    val refocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(items) {
+        if (!refocusPending) return@LaunchedEffect
+        refocusPending = false
+        kotlinx.coroutines.delay(50)
+        runCatching { refocus.requestFocus() }
+    }
+    val target = focusedAt.coerceAtMost(items.lastIndex)
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.vod_continue_watching))
         VodRow(LocalVodRowSizes.current.resume) {
-            items(items, key = { it.mediaKey }) { item ->
-                ResumeCard(item) { onResume(item.mediaKey, item.streamUrl, item.title) }
+            itemsIndexed(items, key = { _, it -> it.mediaKey }) { i, item ->
+                Box(
+                    (if (i == target) Modifier.focusRequester(refocus) else Modifier)
+                        .onFocusChanged { if (it.hasFocus) focusedAt = i },
+                ) {
+                    ResumeCard(item, onHold = { held = item }) { onResume(item.mediaKey, item.streamUrl, item.title) }
+                }
             }
         }
+    }
+    held?.let { item ->
+        ResumePanel(
+            item = item,
+            viewModel = viewModel,
+            onResume = onResume,
+            onOpenSeries = onOpenSeries,
+            onPickSource = { sources ->
+                held = null
+                picking = item to sources
+            },
+            onLeaveShelf = { refocusPending = true },
+            onClose = { held = null },
+        )
+    }
+    picking?.let { (item, sources) ->
+        ResumeSourcePanel(item, sources, onResume) { picking = null }
     }
 }
 
 /** A landscape resume thumbnail with a progress fill — a movie or an episode part-way through. */
 @Composable
-private fun ResumeCard(item: VodViewModel.ResumeItem, onClick: () -> Unit) {
+private fun ResumeCard(item: VodViewModel.ResumeItem, onHold: () -> Unit, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "resumeScale")
     Column(
@@ -660,6 +703,7 @@ private fun ResumeCard(item: VodViewModel.ResumeItem, onClick: () -> Unit) {
             .width(LocalVodRowSizes.current.resume)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
+            .holdOk({ focused }, onHold)
             .clip(RoundedCornerShape(8.dp))
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(4.dp),

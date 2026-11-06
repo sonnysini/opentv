@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.51.0 — 6 November 2026
+
+- **Hold OK: one panel down the right, everywhere.** The menus for a channel and for a programme
+  in the guide now slide in from the right, like the Football feed picker: a small line on top
+  (what's on and until when, or the day and time of the programme), the name in big letters, a
+  thin bar with the time left for what's on, then the choices with an icon each, in groups —
+  *Later* (the next programmes, by time), *Channel* (favourites, merge, logo, guide), *Reminder*,
+  *More* (external player). The qualities to record in are small chips in a row. Back closes the
+  panel, so there's no "Cancel" any more. The warning before watching live during a recording
+  stays in the middle of the screen, restyled, with the focus on "Keep recording".
+- **Continue Watching: hold OK on a card.** The same panel: the episode and the show (or the
+  film), a bar with the time to go, then *Resume from 6:40*, *Start again*, *Next episode*,
+  *Choose the source* (another provider or quality, from the same point); for a show *Go to the
+  episodes* and *Mark as watched* (the next episode takes its place on the shelf); *Remove from
+  the list*; *Open in an external player*.
+- **Films and episodes remember where you stopped, to the second.** Leaving the player used to
+  lose the last point (only the saves every 15 seconds stuck), so an episode watched for a few
+  seconds didn't reach Continue Watching and resume could start up to 15 seconds back.
+
 ## 0.50.0 — 6 November 2026
 
 - **Cleaner pages: the same top everywhere, whole cards, bigger posters.**

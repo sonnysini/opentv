@@ -226,6 +226,7 @@ fun MainScreen(
                 )
                 Tab.MOVIES -> MoviesScreen(
                     onOpenMovie = onOpenMovie,
+                    onOpenSeries = onOpenSeries,
                     onResume = onResume,
                     onOpenSearch = onOpenSearch,
                     hasSources = hasSources,

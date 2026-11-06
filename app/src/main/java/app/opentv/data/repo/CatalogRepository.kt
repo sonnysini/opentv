@@ -772,6 +772,42 @@ class CatalogRepository(
             ?.variants.orEmpty()
     }
 
+    /** The show [ep] belongs to. */
+    suspend fun seriesOf(ep: Episode): app.opentv.data.model.Series? = withContext(Dispatchers.IO) {
+        seriesDao.byProviderId(ep.sourceId, ep.seriesId)
+    }
+
+    /** The episode after [ep] in its show (the next number, else the first of the next season), or null. */
+    suspend fun nextEpisode(ep: Episode): Episode? = withContext(Dispatchers.IO) {
+        episodeDao.forSeries(ep.sourceId, ep.seriesId).filter { it.order > ep.order }.minByOrNull { it.order }
+    }
+
+    /**
+     * The same episode in the other copies of its show (another provider, another quality), [ep]
+     * first. Copies are found as for [movieVariants]; a copy whose episodes were never loaded is
+     * asked for them once.
+     */
+    suspend fun episodeVariants(ep: Episode): List<Pair<Episode, app.opentv.data.model.Series>> = withContext(Dispatchers.IO) {
+        val show = seriesDao.byProviderId(ep.sourceId, ep.seriesId) ?: return@withContext emptyList()
+        val tmdbId = show.tmdbId?.takeIf { it.isNotBlank() && it != "0" }
+        val name = VOD_YEAR.replace(VodTitleCleaner.clean(show.name), " ").trim()
+        val copies = if (tmdbId != null) seriesDao.byTmdbIds(listOf(tmdbId))
+        else seriesDao.nameContains(name, VARIANT_LOOKUP)
+            .filter { VOD_YEAR.replace(VodTitleCleaner.clean(it.name), " ").trim().equals(name, ignoreCase = true) }
+        val foreign = categoryDao.allByKind(StreamKind.SERIES).filter { CategoryLanguage.isForeign(it.name) }.mapTo(HashSet()) { it.id }
+        val out = mutableListOf(ep to show)
+        for (copy in copies.filter { it.id != show.id && it.categoryId !in foreign }.take(EPISODE_COPIES)) {
+            val source = sourceDao.byId(copy.sourceId)?.takeIf { it.enabled } ?: continue
+            var eps = episodeDao.forSeries(copy.sourceId, copy.seriesId)
+            if (eps.isEmpty()) {
+                ensureEpisodes(source, copy.seriesId)
+                eps = episodeDao.forSeries(copy.sourceId, copy.seriesId)
+            }
+            eps.firstOrNull { it.season == ep.season && it.episodeNumber == ep.episodeNumber }?.let { out += it to copy }
+        }
+        out
+    }
+
     /**
      * Live catalogue for one source, honouring the Live TV toggle. Used by the periodic worker and
      * by a manual refresh; VOD follows separately through [syncVodCatalogue].
@@ -1297,6 +1333,7 @@ class CatalogRepository(
 
         /** Copies looked at by name when a film has no TMDB id. */
         private const val VARIANT_LOOKUP = 40
+        private const val EPISODE_COPIES = 6
 
         /** How many sibling logos the Change logo picker offers at most. */
         private const val SIMILAR_LOGOS_LIMIT = 48
