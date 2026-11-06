@@ -200,9 +200,11 @@ fun PlayerScreen(
         val window = context.findActivity()?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         view.keepScreenOn = true
+        app.opentv.core.EventLog.keepAwake("Player", "on", context.findActivity())
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             view.keepScreenOn = false
+            app.opentv.core.EventLog.keepAwake("Player", "off (closed)", context.findActivity())
             controller.release()
             scope.cancel()
         }
@@ -346,6 +348,7 @@ fun PlayerScreen(
     }
 
     fun tuneTo(channel: Channel) {
+        app.opentv.core.EventLog.log("player", "tune ${channel.id} ${channel.shownName}")
         currentId = channel.id
         paused = false
         tried = tried + channel.id
@@ -389,10 +392,12 @@ fun PlayerScreen(
                 // Out of sight, picture-in-picture closed included: stop streaming. Left playing,
                 // a box gone to standby keeps the line taken and another TV's stream gets cut.
                 Lifecycle.Event.ON_STOP -> if (!handedOff && !backgrounded && currentId != null) {
+                    app.opentv.core.EventLog.log("player", "stopped: app out of sight")
                     backgrounded = true
                     controller.stop()
                 }
                 Lifecycle.Event.ON_START -> if (backgrounded) {
+                    app.opentv.core.EventLog.log("player", "back in sight: retuning")
                     backgrounded = false
                     val id = currentId
                     scope.launch {

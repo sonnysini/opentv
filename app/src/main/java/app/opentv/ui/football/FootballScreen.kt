@@ -401,8 +401,14 @@ fun FootballScreen(
     // The box's screensaver would fire over a game playing at the top of the page.
     DisposableEffect(previewOn) {
         val window = context.findActivity()?.window
-        if (previewOn) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        if (previewOn) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            app.opentv.core.EventLog.keepAwake("Calcio", "on (preview)", context.findActivity())
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            app.opentv.core.EventLog.keepAwake("Calcio", "off (previewOn was $previewOn)", context.findActivity())
+        }
     }
     val rowList = ui.rows
     val listState = rememberLazyListState()

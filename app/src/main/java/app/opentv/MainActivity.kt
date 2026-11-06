@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -109,6 +110,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // A fresh launch (not a rotation/recreate) retries every channel's preferred quality.
         if (savedInstanceState == null) app.opentv.player.WorkingVariants.clear()
+        app.opentv.core.EventLog.log("activity", "create (${if (savedInstanceState == null) "fresh" else "recreated"})")
+        runCatching {
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                screenReceiver,
+                android.content.IntentFilter().apply {
+                    addAction(Intent.ACTION_DREAMING_STARTED)
+                    addAction(Intent.ACTION_DREAMING_STOPPED)
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_SCREEN_ON)
+                },
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }
         enableEdgeToEdge()
         handlePlayIntent(intent)
         val isTelevision = isRunningOnTelevision(this)
@@ -160,7 +175,49 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        app.opentv.core.EventLog.log("activity", "new intent ${intent.extras?.keySet()?.joinToString().orEmpty()}")
         handlePlayIntent(intent)
+    }
+
+    // The event log's view of the app coming and going, and of the box's screensaver/standby:
+    // what the screen's keep-awake state was at the moment the screensaver started is the clue.
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val what = when (intent.action) {
+                Intent.ACTION_DREAMING_STARTED -> "screensaver started"
+                Intent.ACTION_DREAMING_STOPPED -> "screensaver stopped"
+                Intent.ACTION_SCREEN_OFF -> "screen off"
+                Intent.ACTION_SCREEN_ON -> "screen on"
+                else -> intent.action.orEmpty()
+            }
+            app.opentv.core.EventLog.log("screen", "$what, ${app.opentv.core.EventLog.awakeState(this@MainActivity)}")
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        app.opentv.core.EventLog.log("activity", "start, ${app.opentv.core.EventLog.awakeState(this)}")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        app.opentv.core.EventLog.log("activity", "resume")
+    }
+
+    override fun onPause() {
+        app.opentv.core.EventLog.log("activity", "pause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+        app.opentv.core.EventLog.log("activity", "stop, ${app.opentv.core.EventLog.awakeState(this)}")
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(screenReceiver) }
+        app.opentv.core.EventLog.log("activity", "destroy")
+        super.onDestroy()
     }
 
     private fun handlePlayIntent(intent: Intent?) {
@@ -289,6 +346,20 @@ private fun OpenTvApp(isTelevision: Boolean) {
     val profiles by profilesViewModel.profiles.collectAsStateWithLifecycle()
     val activeProfileId by profilesViewModel.activeProfileId.collectAsStateWithLifecycle()
     val activeProfileName = profiles.firstOrNull { it.id == activeProfileId }?.name ?: "Me"
+
+    // Every screen change into the event log. Stream URLs and user agents stay out of it: a URL
+    // carries the provider login.
+    DisposableEffect(navController) {
+        val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, destination, args ->
+            val shown = args?.keySet()
+                ?.filter { it != "url" && it != "ua" && !it.startsWith("android-support-nav") }
+                ?.joinToString(" ") { key -> "$key=${args.get(key)}" }
+                .orEmpty()
+            app.opentv.core.EventLog.log("nav", "${destination.route} $shown".trim())
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
 
     // Until the saved sources have loaded from the database, we cannot tell a first run from a
     // returning user — and guessing "first run" drops a returning user on the setup screen and

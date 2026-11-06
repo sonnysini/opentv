@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.48.2 — 6 November 2026
+
+- **Event log.** The app keeps a small diary of what it does (screens opened, channels tuned,
+  the screen kept awake or let go, going to the background, the box's screensaver, player errors,
+  crashes) in its own files folder, at most about 1 MB. Nothing changes on screen: it is there to
+  find out what went wrong when something odd happens.
+
 ## 0.48.1 — 6 November 2026
 
 - **"Watch on …" in tonight's highlights works again after a list is synced or a provider is
