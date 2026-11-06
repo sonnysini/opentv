@@ -315,6 +315,7 @@ private fun StatusBar() {
     }
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun NavRail(
     tabs: List<Tab>,
