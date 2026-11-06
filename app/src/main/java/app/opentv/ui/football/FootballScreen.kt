@@ -22,6 +22,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
+import app.opentv.ui.CARD_GAP
+import app.opentv.ui.bottomFade
+import app.opentv.ui.cardWidth
 import app.opentv.core.ServiceLocator
 import app.opentv.core.findActivity
 import app.opentv.player.PlayerController
@@ -441,7 +444,7 @@ fun FootballScreen(
                     state = listState,
                     contentPadding = PaddingValues(bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().bottomFade(),
                 ) {
                     if (heroItem != null) item(key = "hero") {
                         val scope = rememberCoroutineScope()
@@ -550,7 +553,8 @@ private fun Message(text: String) {
 
 // ---- Top of the page ----------------------------------------------------------------------------
 
-private val HERO_HEIGHT = 318.dp
+/** As tall as the top of the Live, Movies and Shows pages. */
+private val HERO_HEIGHT = 280.dp
 
 /** Coming back up to the carousel: the page scrolls to its top after the focus has settled. */
 private const val HERO_SCROLL_DELAY_MILLIS = 120L
@@ -677,7 +681,7 @@ private fun Hero(
     LaunchedEffect(refocus) { if (refocus > 0) runCatching { watch.requestFocus() } }
 
     Column(
-        modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 30.dp, end = 48.dp)
+        modifier.fillMaxWidth().height(HERO_HEIGHT).padding(start = 48.dp, top = 24.dp, end = 48.dp)
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown) onKey()
                 false
@@ -715,7 +719,7 @@ private fun Hero(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth(0.72f),
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(18.dp))
         // One button that says where the game is by its look alone: OK finds the best feed, holding
         // OK picks one by hand. LEFT and RIGHT on it turn the carousel. Off, it still takes focus.
         WatchButton(
@@ -1528,9 +1532,12 @@ private fun MatchRow(
                 )
             }
         }
+        // Six games to a screen, whole, with the page's margin on both sides.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val tileWidth = cardWidth(TILES_PER_ROW, ROW_MARGIN)
         LazyRow(
-            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 8.dp, horizontal = ROW_MARGIN),
+            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
         ) {
             items(row.items, key = { it.match.id }) { item ->
                 val me = remember { FocusRequester() }
@@ -1540,11 +1547,15 @@ private fun MatchRow(
                         onRefocused()
                     }
                 }
-                MatchTile(item, Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
+                MatchTile(item, tileWidth, Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
             }
+        }
         }
     }
 }
+
+private const val TILES_PER_ROW = 6
+private val ROW_MARGIN = 48.dp
 
 /**
  * A game as a 16:9 tile: the two teams' colours split on a slant with their crests big, the time
@@ -1554,17 +1565,20 @@ private fun MatchRow(
 @Composable
 private fun MatchTile(
     item: FootballViewModel.Item,
+    width: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
     onHold: () -> Unit,
     onClick: () -> Unit,
 ) {
     val m = item.match
+    // The crests keep their share of the tile (52 on the old 200dp one).
+    val crest = (width.value * 0.26f).toInt().coerceIn(32, 52)
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
     // The whole tile takes focus, name included: scrolling brings that into view too.
     Column(
         modifier
-            .width(200.dp)
+            .width(width)
             .onFocusChanged { focused = it.isFocused }
             .onOkHeld(onHold)
             .clickable(interactionSource = null, indication = null, onClick = onClick),
@@ -1572,8 +1586,8 @@ private fun MatchTile(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(112.dp)
-                .lift(focused, 1.05f)
+                .aspectRatio(16f / 9f)
+                .lift(focused, 1.08f)
                 .clip(shape)
                 .then(if (m.goals) Modifier.background(goalShowBrush(m.league)) else Modifier.split(TeamColors.of(m.home), TeamColors.of(m.away)))
                 .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
@@ -1600,12 +1614,12 @@ private fun MatchTile(
             } else {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.05f), Color.Black.copy(alpha = 0.4f)))))
                 Row(
-                    Modifier.fillMaxSize().padding(horizontal = 22.dp),
+                    Modifier.fillMaxSize().padding(horizontal = (width.value * 0.11f).dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Crest(m.home, 52)
-                    Crest(m.away, 52)
+                    Crest(m.home, crest)
+                    Crest(m.away, crest)
                 }
                 val highlight = m.phase == Phase.FINISHED && item.highlights != null
                 Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, light = highlight, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))

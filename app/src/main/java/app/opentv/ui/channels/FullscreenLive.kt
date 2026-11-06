@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
+import app.opentv.ui.bottomFade
 import app.opentv.data.parser.CategoryMacro
 import app.opentv.data.parser.CategoryMacro.Macro
 import app.opentv.ui.ChannelsViewModel.Companion.LAST_GROUP_ALL
@@ -314,7 +315,8 @@ fun FullscreenLive(
         }
         Spacer(Modifier.height(12.dp))
 
-        Row(Modifier.weight(1f).fillMaxWidth()) {
+        // Whatever the lists leave cut off at the bottom fades into the page.
+        Row(Modifier.weight(1f).fillMaxWidth().bottomFade()) {
             val groupsWidth = 320.dp
             Box(Modifier.width(groupsWidth).fillMaxHeight().focusRequester(groupsFocus).focusGroup()) {
                 // A new tab, a new list: it opens on the tab's current group, or picks the first.

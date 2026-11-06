@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +67,8 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.opentv.R
@@ -75,6 +78,8 @@ import app.opentv.data.parser.displayTitle
 import app.opentv.data.repo.ChartHit
 import app.opentv.data.repo.MovieHit
 import app.opentv.data.repo.SeriesHit
+import app.opentv.ui.CARD_GAP
+import app.opentv.ui.exactCardWidth
 import coil.compose.AsyncImage
 
 /**
@@ -454,30 +459,37 @@ internal fun VodTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Uni
     }
 }
 
-/** "Top 10": big outlined numerals, each with its poster leaning on it. */
+/** "Top 10": big outlined numerals, each with its poster leaning on it, five to a screen. */
 @Composable
 internal fun <T : ChartHit> TopTenRow(title: String, hits: List<T>, onOpen: (T) -> Unit) {
     if (hits.isEmpty()) return
+    val sizes = LocalVodRowSizes.current
+    val posterWidth = sizes.topTen * TOP_TEN_POSTER_SHARE
+    // The art inside the card, under its 4dp inset: what the numeral stands as tall as.
+    val artHeight = (posterWidth - 8.dp) * 1.5f
+    val numeralSize = with(LocalDensity.current) { (artHeight * 0.82f).toSp() }
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(TOP_TEN_GAP),
         ) {
             itemsIndexed(hits, key = { _, it -> it.key }) { i, hit ->
-                Row(verticalAlignment = Alignment.Top) {
+                Box(Modifier.width(sizes.topTen)) {
                     Text(
                         "${i + 1}",
                         fontFamily = Oswald,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 118.sp,
-                        lineHeight = 118.sp,
+                        fontSize = numeralSize,
+                        lineHeight = numeralSize,
                         letterSpacing = (-6).sp,
                         color = Color(0xFF6E7672),
                         style = TextStyle(drawStyle = Stroke(width = 4f)),
-                        modifier = Modifier.requiredHeight(ROW_POSTER_WIDTH * 1.5f).offset(x = 14.dp),
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier = Modifier.requiredHeight(artHeight + 8.dp).align(Alignment.TopStart),
                     )
-                    HitPoster(hit, onOpen)
+                    Box(Modifier.align(Alignment.TopEnd)) { HitPoster(hit, onOpen, posterWidth) }
                 }
             }
         }
@@ -491,8 +503,8 @@ internal fun <T : ChartHit> HitRow(title: String, hits: List<T>, onOpen: (T) -> 
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
         ) {
             itemsIndexed(hits, key = { _, it -> it.key }) { _, hit -> HitPoster(hit, onOpen) }
         }
@@ -503,15 +515,15 @@ internal fun <T : ChartHit> HitRow(title: String, hits: List<T>, onOpen: (T) -> 
 @Composable
 internal fun <T : ChartHit> HitGridRow(hits: List<T>, onOpen: (T) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = ROW_MARGIN, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
     ) {
         hits.forEach { HitPoster(it, onOpen) }
     }
 }
 
 @Composable
-private fun <T : ChartHit> HitPoster(hit: T, onOpen: (T) -> Unit) {
+private fun <T : ChartHit> HitPoster(hit: T, onOpen: (T) -> Unit, width: Dp = LocalVodRowSizes.current.poster) {
     PosterCard(
         title = hit.tmdb.title,
         posterUrl = hit.posterUrl,
@@ -519,9 +531,33 @@ private fun <T : ChartHit> HitPoster(hit: T, onOpen: (T) -> Unit) {
         rating = hit.tmdb.rating,
         qualityBadge = hit.badge,
         onClick = { onOpen(hit) },
-        modifier = Modifier.width(ROW_POSTER_WIDTH),
+        modifier = Modifier.width(width),
     )
 }
+
+/**
+ * How wide the cards of the VOD rows are on this page, so a whole number of them fills the screen
+ * with the same margin left and right: posters seven to a row, Continue Watching four, the Top 10
+ * five (numeral and poster together).
+ */
+@androidx.compose.runtime.Immutable
+internal data class VodRowSizes(val poster: Dp, val resume: Dp, val topTen: Dp)
+
+internal fun vodRowSizes(pageWidth: Dp) = VodRowSizes(
+    poster = exactCardWidth(pageWidth, POSTERS_PER_ROW, ROW_MARGIN),
+    resume = exactCardWidth(pageWidth, RESUME_PER_ROW, ROW_MARGIN),
+    topTen = exactCardWidth(pageWidth, TOP_TEN_PER_ROW, ROW_MARGIN, TOP_TEN_GAP),
+)
+
+/** Outside a page that measured itself (a detail page's "more like this"): a 1280dp-wide page's. */
+internal val LocalVodRowSizes = staticCompositionLocalOf { vodRowSizes(1280.dp - 80.dp) }
+
+internal const val POSTERS_PER_ROW = 7
+private const val RESUME_PER_ROW = 4
+private const val TOP_TEN_PER_ROW = 5
+private const val TOP_TEN_POSTER_SHARE = 0.7f
+internal val ROW_MARGIN = 16.dp
+private val TOP_TEN_GAP = 4.dp
 
 /** A slide for a hit off the week's chart. */
 internal fun MovieHit.toSlide(rank: Int?, logoUrl: String?, genres: String): HeroSlide = HeroSlide(
@@ -589,8 +625,7 @@ internal fun Series.toSlide(): HeroSlide = HeroSlide(
     posterUrl = posterUrl,
 )
 
-internal val ROW_POSTER_WIDTH = 104.dp
-private val HERO_HEIGHT = 272.dp
+private val HERO_HEIGHT = 280.dp
 private val LOGO_HEIGHT = 64.dp
 private val DETAIL_HEIGHT = 312.dp
 private val DETAIL_LOGO_HEIGHT = 80.dp
