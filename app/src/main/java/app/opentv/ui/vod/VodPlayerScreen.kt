@@ -237,21 +237,23 @@ fun VodPlayerScreen(
         }
     }
 
-    suspend fun savePosition() {
+    /** Where the player is now, as a resume point — null before it knows the length or in the first seconds. */
+    fun currentPoint(): app.opentv.data.model.PlaybackPosition? {
         val player = controller.player
         val pos = player.currentPosition
-        val dur = player.duration.takeIf { it > 0 } ?: return
-        if (pos > 5_000) {
-            graph.playbackPositions.upsert(
-                app.opentv.data.model.PlaybackPosition(
-                    profileId = settings.activeProfileId.value,
-                    mediaKey = mediaKey,
-                    positionMillis = pos,
-                    durationMillis = dur,
-                    updatedAtMillis = System.currentTimeMillis(),
-                ),
-            )
-        }
+        val dur = player.duration.takeIf { it > 0 } ?: return null
+        if (pos <= 5_000) return null
+        return app.opentv.data.model.PlaybackPosition(
+            profileId = settings.activeProfileId.value,
+            mediaKey = mediaKey,
+            positionMillis = pos,
+            durationMillis = dur,
+            updatedAtMillis = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun savePosition() {
+        currentPoint()?.let { graph.playbackPositions.upsert(it) }
     }
 
     // Keep the screen awake during playback — see the note in PlayerScreen; a film is exactly when
@@ -265,7 +267,11 @@ fun VodPlayerScreen(
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             view.keepScreenOn = false
             app.opentv.core.EventLog.keepAwake("VodPlayer", "off (closed)", context.findActivity())
-            scope.launch { savePosition() }
+            // Read the point before the player goes, and write it outside this screen's scope:
+            // cancelled right below, it would drop the write (leaving only the 15 s saves).
+            currentPoint()?.let { last ->
+                CoroutineScope(Dispatchers.IO).launch { graph.playbackPositions.upsert(last) }
+            }
             controller.release()
             scope.cancel()
         }

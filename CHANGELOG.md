@@ -15,6 +15,9 @@
   *Choose the source* (another provider or quality, from the same point); for a show *Go to the
   episodes* and *Mark as watched* (the next episode takes its place on the shelf); *Remove from
   the list*; *Open in an external player*.
+- **Films and episodes remember where you stopped, to the second.** Leaving the player used to
+  lose the last point (only the saves every 15 seconds stuck), so an episode watched for a few
+  seconds didn't reach Continue Watching and resume could start up to 15 seconds back.
 
 ## 0.50.0 — 6 November 2026
 
