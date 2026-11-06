@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -79,6 +82,8 @@ import app.opentv.data.repo.ChartHit
 import app.opentv.data.repo.MovieHit
 import app.opentv.data.repo.SeriesHit
 import app.opentv.ui.CARD_GAP
+import app.opentv.ui.JustEnough
+import app.opentv.ui.wholeCardsWindow
 import app.opentv.ui.exactCardWidth
 import coil.compose.AsyncImage
 
@@ -470,10 +475,7 @@ internal fun <T : ChartHit> TopTenRow(title: String, hits: List<T>, onOpen: (T) 
     val numeralSize = with(LocalDensity.current) { (artHeight * 0.82f).toSp() }
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(TOP_TEN_GAP),
-        ) {
+        VodRow {
             itemsIndexed(hits, key = { _, it -> it.key }) { i, hit ->
                 Box(Modifier.width(sizes.topTen)) {
                     Text(
@@ -502,10 +504,7 @@ internal fun <T : ChartHit> HitRow(title: String, hits: List<T>, onOpen: (T) -> 
     if (hits.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
-        ) {
+        VodRow {
             itemsIndexed(hits, key = { _, it -> it.key }) { _, hit -> HitPoster(hit, onOpen) }
         }
     }
@@ -536,6 +535,25 @@ private fun <T : ChartHit> HitPoster(hit: T, onOpen: (T) -> Unit, width: Dp = Lo
 }
 
 /**
+ * A shelf of whole cards: the page's margin on both sides, nothing peeking past it, and moving past
+ * the last card on screen shifts the shelf by exactly one card.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+internal fun VodRow(content: LazyListScope.() -> Unit) {
+    val density = LocalDensity.current
+    val spec = remember(density) { JustEnough(with(density) { ROW_MARGIN.toPx() }) }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
+        LazyRow(
+            modifier = Modifier.wholeCardsWindow(ROW_MARGIN),
+            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
+            content = content,
+        )
+    }
+}
+
+/**
  * How wide the cards of the VOD rows are on this page, so a whole number of them fills the screen
  * with the same margin left and right: posters seven to a row, Continue Watching four, the Top 10
  * five (numeral and poster together).
@@ -546,7 +564,7 @@ internal data class VodRowSizes(val poster: Dp, val resume: Dp, val topTen: Dp)
 internal fun vodRowSizes(pageWidth: Dp) = VodRowSizes(
     poster = exactCardWidth(pageWidth, POSTERS_PER_ROW, ROW_MARGIN),
     resume = exactCardWidth(pageWidth, RESUME_PER_ROW, ROW_MARGIN),
-    topTen = exactCardWidth(pageWidth, TOP_TEN_PER_ROW, ROW_MARGIN, TOP_TEN_GAP),
+    topTen = exactCardWidth(pageWidth, TOP_TEN_PER_ROW, ROW_MARGIN),
 )
 
 /** Outside a page that measured itself (a detail page's "more like this"): a 1280dp-wide page's. */
@@ -557,7 +575,6 @@ private const val RESUME_PER_ROW = 4
 private const val TOP_TEN_PER_ROW = 5
 private const val TOP_TEN_POSTER_SHARE = 0.7f
 internal val ROW_MARGIN = 16.dp
-private val TOP_TEN_GAP = 4.dp
 
 /** A slide for a hit off the week's chart. */
 internal fun MovieHit.toSlide(rank: Int?, logoUrl: String?, genres: String): HeroSlide = HeroSlide(

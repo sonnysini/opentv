@@ -23,6 +23,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
 import app.opentv.ui.CARD_GAP
+import app.opentv.ui.JustEnough
+import app.opentv.ui.wholeCardsWindow
 import app.opentv.ui.bottomFade
 import app.opentv.ui.cardWidth
 import app.opentv.core.ServiceLocator
@@ -33,7 +35,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.background
 import androidx.compose.runtime.CompositionLocalProvider
@@ -436,8 +437,8 @@ fun FootballScreen(
                 if (heroItem != null) Backdrop(backdrop, heroItem.match, looks, if (previewOn) previewController.player else null, Modifier.alpha(fade))
                 // TV's default keeps the focused item a third of the way down, which would cut off
                 // the top of the page under "Watch now": up and down scroll only as far as needed.
-                // The rows keep the TV default sideways.
-                val sideways = LocalBringIntoViewSpec.current
+                // Sideways too, so a row moves by one whole game past its sixth.
+                val sideways = remember(density) { JustEnough(with(density) { ROW_MARGIN.toPx() }) }
                 val justEnough = remember(density) { JustEnough(with(density) { 16.dp.toPx() }) }
                 CompositionLocalProvider(LocalBringIntoViewSpec provides justEnough) {
                 LazyColumn(
@@ -525,21 +526,6 @@ fun FootballScreen(
                     Text(stringResource(R.string.football_highlights_loading), style = MaterialTheme.typography.titleMedium)
                 }
             }
-        }
-    }
-}
-
-/** Scrolls just enough to show the focused item whole, as on a phone, with [margin] to spare. */
-@OptIn(ExperimentalFoundationApi::class)
-private class JustEnough(private val margin: Float) : BringIntoViewSpec {
-    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-        val start = offset - margin
-        val end = offset + size + margin
-        return when {
-            start >= 0f && end <= containerSize -> 0f
-            start < 0f && end > containerSize -> 0f
-            kotlin.math.abs(start) < kotlin.math.abs(end - containerSize) -> start
-            else -> end - containerSize
         }
     }
 }
@@ -1536,6 +1522,7 @@ private fun MatchRow(
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
         val tileWidth = cardWidth(TILES_PER_ROW, ROW_MARGIN)
         LazyRow(
+            modifier = Modifier.wholeCardsWindow(ROW_MARGIN),
             contentPadding = PaddingValues(vertical = 8.dp, horizontal = ROW_MARGIN),
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
         ) {

@@ -401,10 +401,7 @@ fun SeriesScreen(
 private fun NewEpisodesRow(items: List<app.opentv.data.repo.CatalogRepository.NewEpisodes>, onOpenSeries: (Series) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.vod_new_episodes))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
-        ) {
+        VodRow {
             items(items, key = { it.series.id }) { item ->
                 val next = "S${item.next.season} E${item.next.episodeNumber}"
                 PosterCard(
@@ -484,10 +481,7 @@ private fun SeriesCategoryGrid(series: List<Series>, onOpenSeries: (Series) -> U
 internal fun MoviePosterRow(title: String, movies: List<Movie>, onOpenMovie: (Movie) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
-        ) {
+        VodRow {
             items(movies, key = { it.id }) { movie ->
                 PosterCard(
                     title = movie.displayTitle,
@@ -507,10 +501,7 @@ internal fun MoviePosterRow(title: String, movies: List<Movie>, onOpenMovie: (Mo
 internal fun SeriesPosterRow(title: String, series: List<Series>, onOpenSeries: (Series) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
-        ) {
+        VodRow {
             items(series, key = { it.id }) { item ->
                 PosterCard(
                     title = item.displayTitle,
@@ -651,10 +642,7 @@ internal fun ContinueWatchingRow(
 ) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.vod_continue_watching))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
-        ) {
+        VodRow {
             items(items, key = { it.mediaKey }) { item ->
                 ResumeCard(item) { onResume(item.mediaKey, item.streamUrl, item.title) }
             }
