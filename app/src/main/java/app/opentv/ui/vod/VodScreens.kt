@@ -35,12 +35,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import app.opentv.ui.CARD_GAP
+import app.opentv.ui.bottomFade
 import app.opentv.data.remote.TmdbLists
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -176,12 +179,14 @@ fun MoviesScreen(
         if (hasHero && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val columns = ((maxWidth - 32.dp + 12.dp) / (ROW_POSTER_WIDTH + 12.dp)).toInt().coerceAtLeast(3)
+    val columns = POSTERS_PER_ROW
+    val sizes = remember(maxWidth) { vodRowSizes(maxWidth) }
+    CompositionLocalProvider(LocalVodRowSizes provides sizes) {
     LazyColumn(
         state = listState,
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().bottomFade(),
     ) {
         if (slides.isNotEmpty()) item(key = "hero") {
             VodHero(slides, kicker, onWatch = { it.movie?.let(play) }, onDetails = { it.movie?.let(onOpenMovie) })
@@ -220,6 +225,7 @@ fun MoviesScreen(
                 }
             }
         }
+    }
     }
     }
 }
@@ -340,12 +346,14 @@ fun SeriesScreen(
         if (hasHero && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val columns = ((maxWidth - 32.dp + 12.dp) / (ROW_POSTER_WIDTH + 12.dp)).toInt().coerceAtLeast(3)
+    val columns = POSTERS_PER_ROW
+    val sizes = remember(maxWidth) { vodRowSizes(maxWidth) }
+    CompositionLocalProvider(LocalVodRowSizes provides sizes) {
     LazyColumn(
         state = listState,
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().bottomFade(),
     ) {
         if (slides.isNotEmpty()) item(key = "hero") {
             val open: (HeroSlide) -> Unit = { s -> s.series?.let(onOpenSeries) }
@@ -385,6 +393,7 @@ fun SeriesScreen(
         }
     }
     }
+    }
 }
 
 /** "New episodes": the show's poster, the first episode not yet reached, and how many there are. */
@@ -392,10 +401,7 @@ fun SeriesScreen(
 private fun NewEpisodesRow(items: List<app.opentv.data.repo.CatalogRepository.NewEpisodes>, onOpenSeries: (Series) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.vod_new_episodes))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        VodRow(LocalVodRowSizes.current.poster) {
             items(items, key = { it.series.id }) { item ->
                 val next = "S${item.next.season} E${item.next.episodeNumber}"
                 PosterCard(
@@ -404,7 +410,7 @@ private fun NewEpisodesRow(items: List<app.opentv.data.repo.CatalogRepository.Ne
                     subtitle = if (item.count > 1) stringResource(R.string.vod_new_episodes_more, next, item.count - 1) else next,
                     qualityBadge = stringResource(R.string.vod_new_episodes_badge),
                     onClick = { onOpenSeries(item.series) },
-                    modifier = Modifier.width(ROW_POSTER_WIDTH),
+                    modifier = Modifier.width(LocalVodRowSizes.current.poster),
                 )
             }
         }
@@ -475,10 +481,7 @@ private fun SeriesCategoryGrid(series: List<Series>, onOpenSeries: (Series) -> U
 internal fun MoviePosterRow(title: String, movies: List<Movie>, onOpenMovie: (Movie) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        VodRow(LocalVodRowSizes.current.poster) {
             items(movies, key = { it.id }) { movie ->
                 PosterCard(
                     title = movie.displayTitle,
@@ -486,7 +489,7 @@ internal fun MoviePosterRow(title: String, movies: List<Movie>, onOpenMovie: (Mo
                     subtitle = movie.year?.toString(),
                     rating = movie.rating,
                     onClick = { onOpenMovie(movie) },
-                    modifier = Modifier.width(ROW_POSTER_WIDTH),
+                    modifier = Modifier.width(LocalVodRowSizes.current.poster),
                 )
             }
         }
@@ -498,10 +501,7 @@ internal fun MoviePosterRow(title: String, movies: List<Movie>, onOpenMovie: (Mo
 internal fun SeriesPosterRow(title: String, series: List<Series>, onOpenSeries: (Series) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        VodRow(LocalVodRowSizes.current.poster) {
             items(series, key = { it.id }) { item ->
                 PosterCard(
                     title = item.displayTitle,
@@ -509,7 +509,7 @@ internal fun SeriesPosterRow(title: String, series: List<Series>, onOpenSeries: 
                     subtitle = item.year?.toString(),
                     rating = item.rating,
                     onClick = { onOpenSeries(item) },
-                    modifier = Modifier.width(ROW_POSTER_WIDTH),
+                    modifier = Modifier.width(LocalVodRowSizes.current.poster),
                 )
             }
         }
@@ -547,7 +547,7 @@ internal fun PosterCard(
     progress: Float? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, label = "posterScale")
+    val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "posterScale")
     Column(
         modifier
             .width(POSTER_WIDTH)
@@ -642,10 +642,7 @@ internal fun ContinueWatchingRow(
 ) {
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.vod_continue_watching))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        VodRow(LocalVodRowSizes.current.resume) {
             items(items, key = { it.mediaKey }) { item ->
                 ResumeCard(item) { onResume(item.mediaKey, item.streamUrl, item.title) }
             }
@@ -657,10 +654,10 @@ internal fun ContinueWatchingRow(
 @Composable
 private fun ResumeCard(item: VodViewModel.ResumeItem, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, label = "resumeScale")
+    val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "resumeScale")
     Column(
         Modifier
-            .width(190.dp)
+            .width(LocalVodRowSizes.current.resume)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(8.dp))
@@ -670,7 +667,7 @@ private fun ResumeCard(item: VodViewModel.ResumeItem, onClick: () -> Unit) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(107.dp)
+                .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(6.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .then(
@@ -847,6 +844,9 @@ internal fun VodSyncStrip(progress: app.opentv.data.repo.CatalogRepository.VodPr
 
 /** Poster shelf card width; the grid uses an adaptive min size close to this. */
 private val POSTER_WIDTH = 140.dp
+
+/** The focused card grows this much, on top of its teal ring. */
+private const val FOCUS_SCALE = 1.08f
 
 /** Rating to one decimal place, locale-independent (the "★" is drawn beside it). */
 internal fun formatRating(rating: Double): String = String.format(java.util.Locale.US, "%.1f", rating)

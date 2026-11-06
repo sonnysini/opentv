@@ -26,11 +26,8 @@
     <!-- ============================ Navigation rail ============================ -->
     <string name="nav_live_tv">Live TV</string>
     <string name="nav_football">Football</string>
-    <string name="football_auto_hint">Picks the best feed by itself</string>
-    <string name="football_auto_scanning">Looking for the best feed…</string>
     <string name="football_auto_wrong_game">another game</string>
     <string name="football_auto_dead">doesn\'t start</string>
-    <string name="football_scanning_bar">Scanning %1$s · %2$d/%3$d</string>
     <string name="football_pick_source">Pick the source</string>
     <string name="football_recommended">recommended</string>
     <string name="football_rescan">Check sources again</string>
@@ -47,10 +44,11 @@
     <string name="football_scan_checking">checking</string>
     <string name="football_scan_back">Back</string>
     <string name="football_scan_cancel">to cancel</string>
-    <string name="football_checked_count">%1$d sources checked</string>
     <string name="football_preview_muted">Preview, sound off</string>
     <string name="football_highlights_later">Highlights soon</string>
     <string name="football_watch">Watch</string>
+    <string name="football_watch_from">From %1$s</string>
+    <string name="football_watch_unavailable">Not available</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">Live now</string>
     <string name="football_today">Today</string>
@@ -58,8 +56,6 @@
     <string name="football_last_round">Last matchday</string>
     <string name="football_highlights">Highlights</string>
     <string name="football_highlights_loading">Loading highlights…</string>
-    <string name="football_no_channel">Not found in your guide</string>
-    <string name="football_channels_soon">Channels once the guide lists it</string>
     <string name="football_full_time">Full time</string>
     <string name="football_tile_finished">Finished</string>
     <string name="football_round">%1$s · MATCHDAY %2$s</string>

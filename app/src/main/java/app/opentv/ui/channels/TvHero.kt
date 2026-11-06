@@ -345,5 +345,6 @@ private fun clock(utcMillis: Long): String = CLOCK.format(Date(utcMillis))
 private val CLOCK = SimpleDateFormat("HH:mm", Locale.getDefault())
 private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 private val LIVE_RED = Color(0xFFE53935)
-private val EXPANDED_HEIGHT = 292.dp
+/** As tall as the top of the Football, Movies and Shows pages. */
+private val EXPANDED_HEIGHT = 280.dp
 private const val TURN_MILLIS = 8_000
