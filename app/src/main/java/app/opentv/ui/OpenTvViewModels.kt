@@ -8,6 +8,7 @@ package app.opentv.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.opentv.core.EventLog
 import app.opentv.core.LiveLayout
 import app.opentv.core.QualityPreference
 import app.opentv.core.ServiceLocator
@@ -1083,8 +1084,8 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
             .flatMapLatest { pid -> graph.playbackPositions.observeRecent(pid) }
             .mapLatest { positions ->
                 positions.filter { !it.isFinished }.mapNotNull { p ->
-                    resolveResume(p).also { if (it == null) app.opentv.core.EventLog.log("resume", "unresolved ${p.mediaKey}") }
-                }.also { list -> app.opentv.core.EventLog.log("resume", "shelf " + list.take(4).joinToString { it.mediaKey }) }
+                    resolveResume(p).also { if (it == null) EventLog.log("resume", "unresolved ${p.mediaKey}") }
+                }.also { list -> EventLog.log("resume", "shelf " + list.take(4).joinToString { it.mediaKey }) }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -1175,7 +1176,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
             if (next != null && already?.isFinished != true) {
                 graph.playbackPositions.upsert(PlaybackPosition(pid, "ep:${next.id}", 0, 0, now + 1))
             }
-            app.opentv.core.EventLog.log(
+            EventLog.log(
                 "resume",
                 "watched ${item.mediaKey} next=${next?.let { "ep:${it.id}" }} had=${already?.let { "${it.positionMillis}/${it.durationMillis}" }} " +
                     "now=${graph.playbackPositions.get(pid, next?.let { "ep:${it.id}" } ?: "-")?.let { "${it.positionMillis}/${it.durationMillis}" }}",
