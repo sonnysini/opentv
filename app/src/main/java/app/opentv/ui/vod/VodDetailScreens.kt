@@ -445,7 +445,6 @@ fun SeriesDetailScreen(
 @Composable
 private fun EpisodeCard(ep: Episode, fallbackArt: String?, position: PlaybackPosition?, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, label = "episodeScale")
     val minutes = ep.durationSeconds?.takeIf { it > 0 }?.div(60)
         ?: position?.durationMillis?.takeIf { it > 0 }?.div(60_000)?.toInt()
     val progress = position?.let {
@@ -454,7 +453,6 @@ private fun EpisodeCard(ep: Episode, fallbackArt: String?, position: PlaybackPos
     Column(
         Modifier
             .width(EPISODE_WIDTH)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(10.dp))
             .clickable(interactionSource = null, indication = null, onClick = onClick)

@@ -1461,7 +1461,7 @@ private fun MatchRow(
                 )
             }
         }
-        // Six games to a screen, whole, with the page's margin on both sides.
+        // Five games to a screen, whole, with the page's margin on both sides.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
         val tileWidth = cardWidth(TILES_PER_ROW, ROW_MARGIN)
         LazyRow(
@@ -1484,7 +1484,7 @@ private fun MatchRow(
     }
 }
 
-private const val TILES_PER_ROW = 6
+private const val TILES_PER_ROW = 5
 private val ROW_MARGIN = 48.dp
 
 /**
@@ -1517,7 +1517,6 @@ private fun MatchTile(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .lift(focused, 1.08f)
                 .clip(shape)
                 .then(if (m.goals) Modifier.background(goalShowBrush(m.league)) else Modifier.split(TeamColors.of(m.home), TeamColors.of(m.away)))
                 .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
