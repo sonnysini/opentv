@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -641,6 +642,16 @@ fun HomeScreen(
         }
         val close = { recordTarget = null }
         val hasPrimary = liveNow || !isPast || channel.tvArchive
+        // Up/down into the chips lands on the one chosen, not on whichever sits under the row's middle.
+        val chosenChip = remember { FocusRequester() }
+        val choices: List<Pair<Channel, String>> = when {
+            isPast -> emptyList()
+            multiSource -> sourceOptions.map { opt -> opt to (sources.firstOrNull { it.id == opt.sourceId }?.name ?: unknownSource) }
+            targetRow.variants.size > 1 -> targetRow.variants.map { it to it.qualityLabel.ifBlank { sdLabel } }
+            else -> emptyList()
+        }
+        val downToChip = Modifier.focusProperties { if (choices.isNotEmpty()) down = chosenChip }
+        val upToChip = Modifier.focusProperties { if (choices.isNotEmpty()) up = chosenChip }
         ActionPanel(
             kicker = "$day ${formatTime(programme.startUtcMillis)} – ${formatTime(programme.endUtcMillis)} · ${channel.shownName}",
             title = programme.title,
@@ -649,14 +660,14 @@ fun HomeScreen(
             if (hasPrimary) item(key = "primary") {
                 when {
                     liveNow && recordingThis != null -> ActionRow(
-                        stringResource(R.string.panel_stop_recording), Modifier.startFocus(first), icon = R.drawable.ic_act_stop,
+                        stringResource(R.string.panel_stop_recording), downToChip.startFocus(first), icon = R.drawable.ic_act_stop,
                     ) {
                         graph.recordingEngine.stop(recordingThis.id)
                         Toast.makeText(context, context.getString(R.string.rec_recording_stopped), Toast.LENGTH_SHORT).show()
                         close()
                     }
                     liveNow -> ActionRow(
-                        stringResource(R.string.panel_record_live), Modifier.startFocus(first), icon = R.drawable.ic_act_record, iconTint = RecordRed,
+                        stringResource(R.string.panel_record_live), downToChip.startFocus(first), icon = R.drawable.ic_act_record, iconTint = RecordRed,
                     ) {
                         recordScope.launch { graph.recordingEngine.startChannel(chosenVariant, programme) }
                         Toast.makeText(context, context.getString(R.string.rec_recording_channel, channel.shownName), Toast.LENGTH_LONG).show()
@@ -665,7 +676,7 @@ fun HomeScreen(
                     }
                     // A finished programme on a catch-up channel plays back from the archive.
                     isPast -> ActionRow(
-                        stringResource(R.string.panel_watch_from_start), Modifier.startFocus(first), icon = R.drawable.ic_act_from_start,
+                        stringResource(R.string.panel_watch_from_start), downToChip.startFocus(first), icon = R.drawable.ic_act_from_start,
                     ) {
                         recordScope.launch {
                             val source = graph.sourceRepository.byId(channel.sourceId)
@@ -685,7 +696,7 @@ fun HomeScreen(
                         close()
                     }
                     else -> ActionRow(
-                        stringResource(R.string.panel_schedule), Modifier.startFocus(first), icon = R.drawable.ic_act_record, iconTint = RecordRed,
+                        stringResource(R.string.panel_schedule), downToChip.startFocus(first), icon = R.drawable.ic_act_record, iconTint = RecordRed,
                     ) {
                         recordScope.launch { graph.recordingEngine.scheduleProgramme(chosenVariant, programme) }
                         Toast.makeText(context, context.getString(R.string.rec_scheduled_title, programme.title), Toast.LENGTH_LONG).show()
@@ -695,19 +706,20 @@ fun HomeScreen(
                 }
             }
             // Record from which provider (keeps the other account free to watch on), or in which quality.
-            val choices: List<Pair<Channel, String>> = when {
-                multiSource -> sourceOptions.map { opt -> opt to (sources.firstOrNull { it.id == opt.sourceId }?.name ?: unknownSource) }
-                targetRow.variants.size > 1 -> targetRow.variants.map { it to it.qualityLabel.ifBlank { sdLabel } }
-                else -> emptyList()
-            }
-            if (choices.isNotEmpty() && !isPast) {
+            if (choices.isNotEmpty()) {
                 item(key = "label:in") {
                     ActionLabel(stringResource(if (multiSource) R.string.rec_record_from else R.string.rec_quality_label))
                 }
                 item(key = "chips") {
                     ActionChips {
-                        choices.forEach { (opt, label) ->
-                            ActionChip(label, selected = opt.id == chosenVariant.id) { chosenVariant = opt }
+                        // Always one chip holds the requester, even before the chosen one is known.
+                        val target = choices.indexOfFirst { it.first.id == chosenVariant.id }.coerceAtLeast(0)
+                        choices.forEachIndexed { i, (opt, label) ->
+                            ActionChip(
+                                label,
+                                selected = opt.id == chosenVariant.id,
+                                modifier = if (i == target) Modifier.focusRequester(chosenChip) else Modifier,
+                            ) { chosenVariant = opt }
                         }
                     }
                 }
@@ -715,7 +727,7 @@ fun HomeScreen(
             item(key = "series") {
                 ActionRow(
                     stringResource(R.string.rec_record_series),
-                    Modifier.startFocus(first, on = !hasPrimary),
+                    upToChip.startFocus(first, on = !hasPrimary),
                     icon = R.drawable.ic_act_series,
                 ) {
                     recordScope.launch { graph.recordingEngine.recordSeries(channel, programme, targetRow.programmes) }

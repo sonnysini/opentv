@@ -286,7 +286,7 @@ fun ActionChips(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun ActionChip(label: String, selected: Boolean, onClick: () -> Unit) {
+fun ActionChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     val (bg, fg, edge) = when {
@@ -300,7 +300,7 @@ fun ActionChip(label: String, selected: Boolean, onClick: () -> Unit) {
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         maxLines = 1,
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(5.dp))
             .border(1.dp, edge, RoundedCornerShape(5.dp))
             .background(bg)
