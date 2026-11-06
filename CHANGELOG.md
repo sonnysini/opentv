@@ -9,6 +9,8 @@
   cards kept resizing as the side menu opened and closed; now the page keeps its size and moves
   right, as on Live TV.
 - **Football: five games to a row** instead of six, a little bigger.
+- **Left into the menu lands on the page you're on**, not on Recordings when you came from a
+  row low on the screen.
 
 ## 0.51.0 — 6 November 2026
 

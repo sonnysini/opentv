@@ -47,6 +47,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -357,6 +359,9 @@ private fun NavRail(
             .background(MaterialTheme.colorScheme.surface)
             .onFocusChanged { expanded = it.hasFocus }
             .onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onRight() }
+            // LEFT from the page lands on the page you're on, not on whichever item happens to
+            // be level with the card you left (Recordings, from a row low on the screen).
+            .focusProperties { enter = { if (it == FocusDirection.Left && currentFocus != null) currentFocus else FocusRequester.Default } }
             .focusGroup()
             .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
