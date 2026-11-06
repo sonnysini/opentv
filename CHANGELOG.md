@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.51.0 — 6 November 2026
+
+- **Hold OK: one panel down the right, everywhere.** The menus for a channel and for a programme
+  in the guide now slide in from the right, like the Football feed picker: a small line on top
+  (what's on and until when, or the day and time of the programme), the name in big letters, a
+  thin bar with the time left for what's on, then the choices with an icon each, in groups —
+  *Later* (the next programmes, by time), *Channel* (favourites, merge, logo, guide), *Reminder*,
+  *More* (external player). The qualities to record in are small chips in a row. Back closes the
+  panel, so there's no "Cancel" any more. The warning before watching live during a recording
+  stays in the middle of the screen, restyled, with the focus on "Keep recording".
+
 ## 0.50.0 — 6 November 2026
 
 - **Cleaner pages: the same top everywhere, whole cards, bigger posters.**

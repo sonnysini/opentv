@@ -831,4 +831,24 @@
     <string name="logos_groups_title">Loghi dei gruppi</string>
     <string name="logos_groups_external">Loghi dei gruppi esterni</string>
     <string name="logos_groups_external_desc">Loghi delle emittenti e bandiere accanto ai gruppi (☰). Spento, o se non ne trova, resta l\'emoji del fornitore.</string>
+    <!-- Hold-OK action panels -->
+    <string name="panel_watch">Guarda</string>
+    <string name="panel_record_now">Registra il programma in onda</string>
+    <string name="panel_record_series_named">Registra la serie · %1$s</string>
+    <string name="panel_stop_recording">Interrompi registrazione</string>
+    <string name="panel_record_live">Registra ora</string>
+    <string name="panel_schedule">Pianifica registrazione</string>
+    <string name="panel_watch_from_start">Guarda dall\'inizio</string>
+    <string name="panel_remind_me">Ricordamelo</string>
+    <string name="panel_cancel_reminder">Annulla promemoria</string>
+    <string name="panel_auto_switch">Passa automaticamente all\'inizio</string>
+    <string name="panel_later">Più tardi</string>
+    <string name="panel_channel">Canale</string>
+    <string name="panel_more">Altro</string>
+    <string name="panel_reminder">Promemoria</string>
+    <string name="panel_left">ancora %1$s</string>
+    <string name="panel_hours_minutes">%1$d h %2$d min</string>
+    <string name="panel_minutes">%1$d min</string>
+    <string name="panel_live_watch">Guarda la diretta e ferma la registrazione</string>
+    <string name="panel_live_warn_body">Hai una sola connessione: se guardi la diretta adesso, la registrazione si ferma.</string>
 </resources>

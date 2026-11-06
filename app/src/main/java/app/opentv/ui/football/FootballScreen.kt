@@ -1012,13 +1012,6 @@ private fun SourcePicker(
     val sources = remember(item, looks) { viewModel.sources(item) }
     val (playing, gone) = remember(sources) { sources.partition { it.usable } }
     val progress by viewModel.progress.collectAsStateWithLifecycle()
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
-    // Opened by holding OK, the same press keeps repeating into the picker and its release
-    // would tap the first source. Ignore OK until a fresh press.
-    var armed by remember { mutableStateOf(false) }
-    val surface = MaterialTheme.colorScheme.surface
-    val shown = remember { androidx.compose.animation.core.MutableTransitionState(false) }.apply { targetState = true }
     val sub = progress?.takeIf { it.matchId == item.match.id }
         ?.let { stringResource(R.string.football_rescan_running, it.done, it.total) }
         ?: run {
@@ -1032,73 +1025,23 @@ private fun SourcePicker(
                 sources.size,
             )
         }
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.horizontalGradient(0f to Color(0xFF08090A).copy(alpha = 0.55f), 0.6f to Color(0xFF08090A).copy(alpha = 0.8f)),
-        ),
-    ) {
-        androidx.compose.animation.AnimatedVisibility(
-            visibleState = shown,
-            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            enter = androidx.compose.animation.slideInHorizontally(tween(220)) { it } + androidx.compose.animation.fadeIn(tween(220)),
-        ) {
-            Row(Modifier.fillMaxHeight()) {
-                // The panel's edge melts into the darkened page.
-                Box(Modifier.width(60.dp).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color.Transparent, surface))))
-                Column(
-                    Modifier
-                        .width(PICKER_WIDTH)
-                        .fillMaxHeight()
-                        .background(surface)
-                        .onPreviewKeyEvent { e ->
-                            val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-                            when {
-                                armed || !ok -> false
-                                e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { armed = true; false }
-                                e.type == KeyEventType.KeyUp -> { armed = true; true }
-                                else -> true
-                            }
-                        }
-                        .padding(start = 28.dp, end = 36.dp, top = 32.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.football_pick_source).uppercase(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.5.sp,
-                    )
-                    Text(
-                        name(item.match).uppercase(),
-                        Modifier.padding(top = 4.dp, bottom = 16.dp),
-                        fontFamily = Oswald,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp,
-                        lineHeight = 28.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    LazyColumn(
-                        Modifier.weight(1f),
-                        contentPadding = PaddingValues(bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        item(key = "rescan") { RescanLine(sub, onRescan) }
-                        if (playing.isNotEmpty()) item(key = "label:on") { ListLabel(stringResource(R.string.football_sources)) }
-                        items(playing, key = { "on:" + it.feed.id }) { s ->
-                            Box(if (s === playing.first()) Modifier.focusRequester(first) else Modifier) {
-                                SourceLine(s, recommended = s === playing.first() && s.looked) { onPick(s.feed) }
-                            }
-                        }
-                        if (gone.isNotEmpty()) item(key = "label:off") { ListLabel(stringResource(R.string.football_sources_unavailable)) }
-                        items(gone, key = { "off:" + it.feed.id }) { s ->
-                            Box(if (playing.isEmpty() && s === gone.first()) Modifier.focusRequester(first) else Modifier) {
-                                SourceLine(s, recommended = false) { onPick(s.feed) }
-                            }
-                        }
-                    }
-                }
+    app.opentv.ui.ActionPanel(
+        kicker = stringResource(R.string.football_pick_source),
+        title = name(item.match),
+        onDismiss = null,
+        width = PICKER_WIDTH,
+    ) { first ->
+        item(key = "rescan") { RescanLine(sub, onRescan) }
+        if (playing.isNotEmpty()) item(key = "label:on") { ListLabel(stringResource(R.string.football_sources)) }
+        items(playing, key = { "on:" + it.feed.id }) { s ->
+            Box(if (s === playing.first()) Modifier.focusRequester(first) else Modifier) {
+                SourceLine(s, recommended = s === playing.first() && s.looked) { onPick(s.feed) }
+            }
+        }
+        if (gone.isNotEmpty()) item(key = "label:off") { ListLabel(stringResource(R.string.football_sources_unavailable)) }
+        items(gone, key = { "off:" + it.feed.id }) { s ->
+            Box(if (playing.isEmpty() && s === gone.first()) Modifier.focusRequester(first) else Modifier) {
+                SourceLine(s, recommended = false) { onPick(s.feed) }
             }
         }
     }
