@@ -18,11 +18,8 @@
     <string name="common_try_again">Riprova</string>
     <string name="nav_live_tv">TV in diretta</string>
     <string name="nav_football">Calcio</string>
-    <string name="football_auto_hint">Sceglie da solo il flusso migliore</string>
-    <string name="football_auto_scanning">Cerco il flusso migliore…</string>
     <string name="football_auto_wrong_game">altra partita</string>
     <string name="football_auto_dead">non parte</string>
-    <string name="football_scanning_bar">Scansiono %1$s · %2$d/%3$d</string>
     <string name="football_pick_source">Scegli la fonte</string>
     <string name="football_recommended">consigliata</string>
     <string name="football_rescan">Ricontrolla fonti</string>
@@ -39,10 +36,11 @@
     <string name="football_scan_checking">controllo in corso</string>
     <string name="football_scan_back">Indietro</string>
     <string name="football_scan_cancel">per annullare</string>
-    <string name="football_checked_count">%1$d fonti controllate</string>
     <string name="football_preview_muted">Anteprima senza audio</string>
     <string name="football_highlights_later">Highlights a breve</string>
     <string name="football_watch">Guarda</string>
+    <string name="football_watch_from">Dalle %1$s</string>
+    <string name="football_unavailable">Non disponibile</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">In diretta</string>
     <string name="football_today">Oggi</string>
@@ -50,8 +48,6 @@
     <string name="football_last_round">Ultima giornata</string>
     <string name="football_highlights">Highlights</string>
     <string name="football_highlights_loading">Carico gli highlights…</string>
-    <string name="football_no_channel">Non trovata in guida</string>
-    <string name="football_channels_soon">Canali in guida a breve</string>
     <string name="football_full_time">Finale</string>
     <string name="football_tile_finished">Finita</string>
     <string name="football_round">%1$s · %2$sª GIORNATA</string>

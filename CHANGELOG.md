@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.49.0 — 6 November 2026
+
+- **Football: the "Watch" button tells you where the game is, with no line of text above it.**
+  Before 15 minutes to kick-off it is grey with a clock and "From 20:30"; then it is "Watch",
+  filling up in white while the app looks for the best feed by itself, and solid white once the
+  best one is found. A game on with no channel to play it: grey, "Not available". Pressing OK on a
+  grey button only shakes it; holding OK still lets you pick a channel by hand. The "12/30"
+  counters on the cards and the thin scanning line under the button are gone.
+
 ## 0.48.2 — 6 November 2026
 
 - **Event log.** The app keeps a small diary of what it does (screens opened, channels tuned,

@@ -13,6 +13,10 @@ import android.view.WindowManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.drawscope.clipRect
 import android.widget.Toast
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -73,7 +77,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -461,7 +464,6 @@ fun FootballScreen(
                             turned = turn.value,
                             item = heroItem,
                             firstId = ui.hero!!.match.id,
-                            best = heroBest,
                             viewModel = viewModel,
                             looks = looks,
                             progress = progress,
@@ -489,7 +491,7 @@ fun FootballScreen(
                     rowList.forEach { row ->
                         item(key = "row:${row.league}") {
                             CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
-                                MatchRow(row, viewModel, progress, looks, open, hold, refocus) { refocus = null }
+                                MatchRow(row, viewModel, looks, open, hold, refocus) { refocus = null }
                             }
                         }
                     }
@@ -635,9 +637,9 @@ private fun Backdrop(file: java.io.File?, match: Match, looks: Int, player: ExoP
 }
 
 /**
- * The game on now (or next), big: round and time, the crests, the teams in tall capitals, one line
- * on the feed that will play, then "Watch now" (focused) and "Pick source". Games on together come
- * as tabs above.
+ * The game on now (or next), big: round and time, the crests, the teams in tall capitals, then the
+ * "Watch" button (focused), whose look alone says where the game is. Games on together come as
+ * cards turned with LEFT and RIGHT.
  */
 @Composable
 private fun Hero(
@@ -648,7 +650,6 @@ private fun Hero(
     turned: Float,
     item: FootballViewModel.Item,
     firstId: Long,
-    best: FootballViewModel.Source?,
     viewModel: FootballViewModel,
     looks: Int,
     progress: FootballViewModel.Progress?,
@@ -662,7 +663,15 @@ private fun Hero(
     val m = item.match
     val watch = remember { FocusRequester() }
     val feeds = viewModel.feedsOf(item)
-    val checked = remember(item, looks) { viewModel.sources(item).count { it.looked && it.usable } }
+    // The clock ticks by itself: "From 20:30" turns into "Watch" with nobody touching anything.
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            kotlinx.coroutines.delay(WATCH_TICK_MILLIS)
+            value = System.currentTimeMillis()
+        }
+    }
+    val ready = remember(item, looks, progress) { viewModel.ready(item) }
+    val state = watchState(m, feeds.isNotEmpty(), progress?.takeIf { it.matchId == m.id }, ready, now)
     // The buttons stay whatever card is on: focus doesn't drop off the carousel as it turns.
     LaunchedEffect(firstId) { runCatching { watch.requestFocus() } }
     LaunchedEffect(refocus) { if (refocus > 0) runCatching { watch.requestFocus() } }
@@ -706,33 +715,11 @@ private fun Hero(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth(0.72f),
         )
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            val meta = MaterialTheme.typography.bodyLarge
-            val faint = Color.White.copy(alpha = 0.8f)
-            when {
-                feeds.isEmpty() -> Text(
-                    stringResource(if (m.phase == Phase.LIVE) R.string.football_no_channel else R.string.football_channels_soon),
-                    style = meta, color = faint,
-                )
-                progress?.matchId == m.id -> Text(
-                    stringResource(R.string.football_auto_scanning) + " " + progress.done + "/" + progress.total,
-                    style = meta, color = faint,
-                )
-                best != null -> {
-                    Text(FeedLabel.split(best.feed.shownName, best.feed.qualityLabel).name, style = meta, color = faint, maxLines = 1)
-                    best.probe?.let { Tag(compact(it)) }
-                    Dot()
-                    Text(stringResource(R.string.football_checked_count, checked), style = meta, color = faint)
-                }
-                else -> Text(stringResource(R.string.football_auto_hint), style = meta, color = faint)
-            }
-        }
-        Spacer(Modifier.height(20.dp))
-        // One button: OK finds the best feed, holding OK picks one by hand. LEFT and RIGHT on it
-        // turn the carousel.
+        Spacer(Modifier.height(24.dp))
+        // One button that says where the game is by its look alone: OK finds the best feed, holding
+        // OK picks one by hand. LEFT and RIGHT on it turn the carousel. Off, it still takes focus.
         WatchButton(
-            stringResource(R.string.football_watch),
+            state,
             Modifier.focusRequester(watch).onOkHeld(onPick).onPreviewKeyEvent { e ->
                 e.type == KeyEventType.KeyDown && when (e.key) {
                     Key.DirectionLeft -> onStep(-1)
@@ -743,43 +730,112 @@ private fun Hero(
             onClick = onWatch,
         )
         Dots(count, at, turned, Modifier.padding(top = 14.dp, start = 2.dp))
-        // Looking at another game's feeds by itself: a thin line, out of the way.
-        progress?.takeIf { it.matchId != m.id }?.let { p ->
-            Spacer(Modifier.height(14.dp))
-            Text(
-                stringResource(R.string.football_scanning_bar, p.title, p.done, p.total),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            LinearProgressIndicator(
-                progress = { if (p.total == 0) 0f else p.done / p.total.toFloat() },
-                modifier = Modifier.width(320.dp).padding(top = 4.dp).height(2.dp).clip(RoundedCornerShape(1.dp)),
-            )
+    }
+}
+
+/** What the button on top says about its game, by its look. */
+private sealed interface WatchState {
+    /** Too early: grey, a clock and the time it opens ("From 20:30"). OK only shakes it. */
+    data class From(val at: Long) : WatchState
+    /** On (or about to be) with nothing to play it on: grey, a crossed sign. OK only shakes it. */
+    data object Unavailable : WatchState
+    /** Its feeds being looked at by themselves: the pill fills up left to right. */
+    data class Scanning(val share: Float) : WatchState
+    /** Can be watched; the best feed is still to be found when OK comes. */
+    data object Watch : WatchState
+    /** The best feed is known: solid white, OK plays it at once. */
+    data object Ready : WatchState
+}
+
+private fun watchState(m: FootballRepository.Match, hasFeeds: Boolean, scanning: FootballViewModel.Progress?, ready: Boolean, now: Long): WatchState {
+    val opensAt = m.kickoffUtcMillis - WATCH_OPENS_MILLIS
+    return when {
+        m.phase == Phase.SCHEDULED && now < opensAt -> WatchState.From(opensAt)
+        !hasFeeds -> WatchState.Unavailable
+        scanning != null -> WatchState.Scanning(if (scanning.total == 0) 0f else scanning.done / scanning.total.toFloat())
+        ready -> WatchState.Ready
+        else -> WatchState.Watch
+    }
+}
+
+/** How long before kick-off "Watch" opens: when the feeds of the game are worth looking at. */
+private const val WATCH_OPENS_MILLIS = 15 * 60_000L
+private const val WATCH_TICK_MILLIS = 20_000L
+private val WATCH_GREY = Color(0x736E7672)
+private val WATCH_OFF = Color(0x40565C59)
+
+/**
+ * The pill on top: grey with the clock while too early or crossed when there's nothing to play it
+ * on (OK shakes it, holding OK still picks by hand), grey "▶ Watch" filling up in white while the
+ * feeds are looked at, solid white once the best is known. Focus is a ring and a lift — never the
+ * colour, which is the state's.
+ */
+@Composable
+private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val shake = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val off = state is WatchState.From || state is WatchState.Unavailable
+    val fill by animateFloatAsState(
+        when (state) {
+            is WatchState.Scanning -> state.share.coerceIn(0.04f, 1f)
+            WatchState.Ready -> 1f
+            else -> 0f
+        },
+        tween(600, easing = LinearEasing),
+        label = "watchFill",
+    )
+    val shape = RoundedCornerShape(50)
+    val text = when (state) {
+        is WatchState.From -> stringResource(R.string.football_watch_from, clock(state.at))
+        WatchState.Unavailable -> stringResource(R.string.football_unavailable)
+        else -> stringResource(R.string.football_watch)
+    }
+    val icon = when (state) {
+        is WatchState.From -> Icons.Rounded.Schedule
+        WatchState.Unavailable -> Icons.Rounded.Block
+        else -> Icons.Filled.PlayArrow
+    }
+    // The label twice: white on the grey, black on the white that fills it.
+    val label: @Composable (Color) -> Unit = { fg ->
+        Row(
+            Modifier.padding(start = 18.dp, end = 24.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+            Text(text, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1)
+        }
+    }
+    Box(
+        modifier
+            .graphicsLayer { translationX = shake.value }
+            .lift(focused, 1.06f)
+            .then(if (focused) Modifier.border(2.dp, Color.White.copy(alpha = if (fill >= 1f) 0.45f else 0.9f), shape).padding(3.dp) else Modifier.padding(3.dp))
+            .clip(shape)
+            .background(if (off) WATCH_OFF else WATCH_GREY)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null) {
+                if (off) scope.launch {
+                    for (x in listOf(-10f, 9f, -6f, 4f, 0f)) shake.animateTo(x, tween(55))
+                } else onClick()
+            },
+    ) {
+        label(if (off) Color.White.copy(alpha = 0.55f) else Color.White)
+        if (fill > 0f) Box(
+            Modifier.matchParentSize().drawWithContent {
+                clipRect(right = size.width * fill) { this@drawWithContent.drawContent() }
+            },
+        ) {
+            Box(Modifier.matchParentSize().background(Color.White))
+            label(Color.Black)
         }
     }
 }
 
-/** "▶ Watch": a pill, translucent grey, white with black text and a faint ring in focus. */
-@Composable
-private fun WatchButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val fg = if (focused) Color.Black else Color.White
-    Row(
-        modifier
-            .lift(focused, 1.06f)
-            .then(if (focused) Modifier.border(2.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(50)).padding(2.dp) else Modifier.padding(2.dp))
-            .clip(RoundedCornerShape(50))
-            .background(if (focused) Color.White else Color(0x736E7672))
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(start = 18.dp, end = 24.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        androidx.compose.material3.Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
-        Text(text, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1)
-    }
-}
+/** "20:30", in the box's own time. */
+private fun clock(millis: Long): String =
+    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
 
 /** One dot per card; this one's is a pill filling up until the next turns over. */
 @Composable
@@ -797,25 +853,6 @@ private fun Dots(count: Int, current: Int, turned: Float, modifier: Modifier = M
             }
         }
     }
-}
-
-/** "1080p50" in a thin outline. */
-@Composable
-private fun Tag(text: String) {
-    Text(
-        text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = Color.White,
-        modifier = Modifier
-            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-    )
-}
-
-@Composable
-private fun Dot() {
-    Box(Modifier.size(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.5f)))
 }
 
 /**
@@ -1465,7 +1502,6 @@ private const val LEAVE_PAUSE_MILLIS = 500L
 private fun MatchRow(
     row: FootballViewModel.LeagueRow,
     viewModel: FootballViewModel,
-    progress: FootballViewModel.Progress?,
     looks: Int,
     onOpen: (FootballViewModel.Item) -> Unit,
     onHold: (FootballViewModel.Item) -> Unit,
@@ -1504,7 +1540,7 @@ private fun MatchRow(
                         onRefocused()
                     }
                 }
-                MatchTile(item, corner(item, progress), Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
+                MatchTile(item, Modifier.focusRequester(me), onHold = { onHold(item) }) { onOpen(item) }
             }
         }
     }
@@ -1518,7 +1554,6 @@ private fun MatchRow(
 @Composable
 private fun MatchTile(
     item: FootballViewModel.Item,
-    corner: String?,
     modifier: Modifier = Modifier,
     onHold: () -> Unit,
     onClick: () -> Unit,
@@ -1575,20 +1610,6 @@ private fun MatchTile(
                 val highlight = m.phase == Phase.FINISHED && item.highlights != null
                 Chip(chip(m, item.highlights), live = m.phase == Phase.LIVE, light = highlight, modifier = Modifier.align(Alignment.TopStart).padding(7.dp))
             }
-            corner?.let {
-                Text(
-                    it,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(7.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
         }
         // The teams under the card, centred; the goal show says it inside.
         if (!m.goals) Text(
@@ -1624,10 +1645,6 @@ private fun Chip(text: String, live: Boolean, light: Boolean = false, modifier: 
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
-
-/** Bottom right of a tile, only while its feeds are being looked at by themselves: "12/30". */
-private fun corner(item: FootballViewModel.Item, progress: FootballViewModel.Progress?): String? =
-    progress?.takeIf { it.matchId == item.match.id && item.match.phase != Phase.FINISHED }?.let { "${it.done}/${it.total}" }
 
 /** FotMob's competition logo drawn for a dark page. */
 private fun darkLogo(league: Int) = "https://images.fotmob.com/image_resources/logo/leaguelogo/dark/$league.png"
@@ -1783,9 +1800,3 @@ private fun chip(m: Match, highlights: String?): String = when (m.phase) {
     Phase.OFF -> "—"
 }
 
-/** "1080p50", "720p" */
-private fun compact(p: AutoScan.Probe): String {
-    val res = FeedLabel.resolution(p.height)
-    val fps = p.fps?.takeIf { it >= 48 }?.let { if (it >= 56) 60 else 50 }
-    return if (fps != null && res.endsWith("p")) "$res$fps" else res
-}
