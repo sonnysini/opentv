@@ -40,7 +40,7 @@
     <string name="football_highlights_later">Highlights a breve</string>
     <string name="football_watch">Guarda</string>
     <string name="football_watch_from">Dalle %1$s</string>
-    <string name="football_unavailable">Non disponibile</string>
+    <string name="football_watch_unavailable">Non disponibile</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">In diretta</string>
     <string name="football_today">Oggi</string>

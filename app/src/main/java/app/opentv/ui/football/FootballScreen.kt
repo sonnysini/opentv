@@ -788,7 +788,7 @@ private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClic
     val shape = RoundedCornerShape(50)
     val text = when (state) {
         is WatchState.From -> stringResource(R.string.football_watch_from, clock(state.at))
-        WatchState.Unavailable -> stringResource(R.string.football_unavailable)
+        WatchState.Unavailable -> stringResource(R.string.football_watch_unavailable)
         else -> stringResource(R.string.football_watch)
     }
     val icon = when (state) {

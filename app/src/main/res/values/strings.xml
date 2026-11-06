@@ -48,7 +48,7 @@
     <string name="football_highlights_later">Highlights soon</string>
     <string name="football_watch">Watch</string>
     <string name="football_watch_from">From %1$s</string>
-    <string name="football_unavailable">Not available</string>
+    <string name="football_watch_unavailable">Not available</string>
     <string name="football_live">LIVE</string>
     <string name="football_live_row">Live now</string>
     <string name="football_today">Today</string>
