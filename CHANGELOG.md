@@ -10,6 +10,11 @@
   *More* (external player). The qualities to record in are small chips in a row. Back closes the
   panel, so there's no "Cancel" any more. The warning before watching live during a recording
   stays in the middle of the screen, restyled, with the focus on "Keep recording".
+- **Continue Watching: hold OK on a card.** The same panel: the episode and the show (or the
+  film), a bar with the time to go, then *Resume from 6:40*, *Start again*, *Next episode*,
+  *Choose the source* (another provider or quality, from the same point); for a show *Go to the
+  episodes* and *Mark as watched* (the next episode takes its place on the shelf); *Remove from
+  the list*; *Open in an external player*.
 
 ## 0.50.0 — 6 November 2026
 

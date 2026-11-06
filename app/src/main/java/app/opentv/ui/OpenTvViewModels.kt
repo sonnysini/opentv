@@ -1068,6 +1068,13 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         val posterUrl: String?,
         val streamUrl: String,
         val progress: Float,
+        val positionMillis: Long = 0,
+        val durationMillis: Long = 0,
+        /** Set for a film… */
+        val movie: Movie? = null,
+        /** …or for an episode, with its show's name. */
+        val episode: app.opentv.data.model.Episode? = null,
+        val seriesName: String? = null,
     )
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -1085,7 +1092,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
             if (pos.durationMillis > 0) (pos.positionMillis.toFloat() / pos.durationMillis).coerceIn(0f, 1f) else 0f
         return when (parts[0]) {
             "movie" -> graph.catalogRepository.movie(id)?.let {
-                ResumeItem(pos.mediaKey, it.displayTitle, it.posterUrl, it.streamUrl, progress)
+                ResumeItem(pos.mediaKey, it.displayTitle, it.posterUrl, it.streamUrl, progress, pos.positionMillis, pos.durationMillis, movie = it)
             }
             "ep" -> graph.catalogRepository.episode(id)?.let {
                 ResumeItem(
@@ -1094,11 +1101,86 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
                     it.stillUrl,
                     it.streamUrl,
                     progress,
+                    pos.positionMillis,
+                    pos.durationMillis,
+                    episode = it,
+                    seriesName = graph.catalogRepository.seriesOf(it)?.name,
                 )
             }
             else -> null
         }
     }
+
+    /** A copy of a Continue Watching title to play instead (another provider or quality). */
+    data class ResumeSource(val label: String, val url: String, val current: Boolean)
+
+    /** What the hold-OK panel of a Continue Watching card needs beyond the card. */
+    data class ResumeExtras(
+        val series: Series? = null,
+        val next: app.opentv.data.model.Episode? = null,
+        val sources: List<ResumeSource> = emptyList(),
+    )
+
+    /** The show, the episode after and the other copies of [item] — looked up when its panel opens. */
+    suspend fun resumeExtras(item: ResumeItem): ResumeExtras = runCatching {
+        val names = HashMap<Long, String>()
+        suspend fun sourceName(id: Long) = names.getOrPut(id) { graph.sourceRepository.byId(id)?.name.orEmpty() }
+        item.movie?.let { movie ->
+            val variants = graph.catalogRepository.movieVariants(movie)
+            val manySources = variants.map { it.movie.sourceId }.distinct().size > 1
+            return@runCatching ResumeExtras(
+                sources = variants.map { v ->
+                    val label = listOf(v.qualityLabel, if (manySources) sourceName(v.movie.sourceId) else "")
+                        .filter(String::isNotBlank).joinToString(" · ").ifBlank { sourceName(v.movie.sourceId) }
+                    ResumeSource(label, v.movie.streamUrl, v.movie.id == movie.id)
+                },
+            )
+        }
+        val ep = item.episode ?: return@runCatching ResumeExtras()
+        val series = graph.catalogRepository.seriesOf(ep)
+        val copies = graph.catalogRepository.episodeVariants(ep)
+        ResumeExtras(
+            series = series,
+            next = graph.catalogRepository.nextEpisode(ep),
+            sources = copies.map { (e, show) ->
+                val label = listOf(sourceName(e.sourceId), if (show.name != series?.name) show.name else "")
+                    .filter(String::isNotBlank).joinToString(" · ")
+                ResumeSource(label, e.streamUrl, e.id == ep.id)
+            },
+        )
+    }.getOrDefault(ResumeExtras())
+
+    /** "Start again": the saved point goes back to zero, so the player opens at the start. */
+    suspend fun restart(item: ResumeItem) {
+        graph.playbackPositions.upsert(
+            PlaybackPosition(settings.activeProfileId.value, item.mediaKey, 0, item.durationMillis, System.currentTimeMillis()),
+        )
+    }
+
+    /**
+     * "Mark as watched": the title counts as finished and leaves the shelf; for an episode, the one
+     * after it takes its place, from the start.
+     */
+    fun markWatched(item: ResumeItem, next: app.opentv.data.model.Episode?) {
+        viewModelScope.launch {
+            val pid = settings.activeProfileId.value
+            val now = System.currentTimeMillis()
+            val length = item.durationMillis.takeIf { it > 0 } ?: 1L
+            graph.playbackPositions.upsert(PlaybackPosition(pid, item.mediaKey, length, length, now))
+            if (next != null && graph.playbackPositions.get(pid, "ep:${next.id}")?.isFinished != true) {
+                graph.playbackPositions.upsert(PlaybackPosition(pid, "ep:${next.id}", 0, 0, now + 1))
+            }
+        }
+    }
+
+    /** "Remove from the list": forgets the saved point, so the card goes (nothing else changes). */
+    fun removeResume(item: ResumeItem) {
+        viewModelScope.launch { graph.playbackPositions.delete(settings.activeProfileId.value, item.mediaKey) }
+    }
+
+    /** The user-agent [item]'s provider wants. */
+    suspend fun userAgentFor(item: ResumeItem): String =
+        userAgentForSource(item.movie?.sourceId ?: item.episode?.sourceId ?: 0L)
 
     private val movieCategory = MutableStateFlow<String?>(null)
     private val seriesCategory = MutableStateFlow<String?>(null)

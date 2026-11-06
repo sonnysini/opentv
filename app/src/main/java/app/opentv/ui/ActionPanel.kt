@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -355,3 +356,26 @@ fun ActionCard(
 /** Puts the panel's starting focus on this entry. */
 fun Modifier.startFocus(first: FocusRequester, on: Boolean = true): Modifier =
     if (on) focusRequester(first) else this
+
+/**
+ * Holding OK on this (while [isFocused]) calls [onHold] once; the rest of that press — repeats and
+ * the release that would also click it — is swallowed.
+ */
+fun Modifier.holdOk(isFocused: () -> Boolean, onHold: () -> Unit): Modifier = composed {
+    var held by remember { mutableStateOf(false) }
+    onPreviewKeyEvent { e ->
+        val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+        when {
+            !ok -> false
+            // A fresh press: the last one may have ended in a panel that took its release.
+            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { held = false; false }
+            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.isLongPress && isFocused() -> {
+                held = true
+                onHold()
+                true
+            }
+            held && e.type == KeyEventType.KeyUp -> { held = false; true }
+            else -> held
+        }
+    }
+}

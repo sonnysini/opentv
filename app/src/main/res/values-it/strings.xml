@@ -851,4 +851,14 @@
     <string name="panel_minutes">%1$d min</string>
     <string name="panel_live_watch">Guarda la diretta e ferma la registrazione</string>
     <string name="panel_live_warn_body">Hai una sola connessione: se guardi la diretta adesso, la registrazione si ferma.</string>
+    <string name="panel_resume_from">Riprendi da %1$s</string>
+    <string name="panel_restart">Ricomincia dall\'inizio</string>
+    <string name="panel_next_episode">Episodio successivo · S%1$d E%2$d</string>
+    <string name="panel_pick_source">Scegli la fonte</string>
+    <string name="panel_series">Serie</string>
+    <string name="panel_go_episodes">Vai agli episodi</string>
+    <string name="panel_mark_watched">Segna come visto</string>
+    <string name="panel_remove">Togli dalla lista</string>
+    <string name="panel_remaining">mancano %1$s</string>
+    <string name="panel_film">Film</string>
 </resources>

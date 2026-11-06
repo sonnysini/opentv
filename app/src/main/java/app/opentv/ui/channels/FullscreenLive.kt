@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.channels
 
+import app.opentv.ui.holdOk
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
@@ -936,7 +937,7 @@ private fun FullscreenChannelRow(
     Row(
         modifier
             .leftReveals({ focused }, onLeft)
-            .longPressOk({ focused }, onLongPress)
+            .holdOk({ focused }, onLongPress)
             .fillMaxWidth()
             .focusLift(focused)
             .clip(shape)
@@ -1026,29 +1027,6 @@ private fun Modifier.leftReveals(isRowFocused: () -> Boolean, onLeft: () -> Unit
             false
         }
     }
-
-/**
- * Holding OK on the row (not on the star) calls [onLongPress] once; the rest of that press —
- * repeats and the release that would play the channel — is swallowed.
- */
-private fun Modifier.longPressOk(isRowFocused: () -> Boolean, onLongPress: () -> Unit): Modifier = composed {
-    var held by remember { mutableStateOf(false) }
-    onPreviewKeyEvent { e ->
-        val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-        when {
-            !ok -> false
-            // A fresh press: the last one may have ended in a dialog that took its release.
-            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> { held = false; false }
-            e.type == KeyEventType.KeyDown && e.nativeKeyEvent.isLongPress && isRowFocused() -> {
-                held = true
-                onLongPress()
-                true
-            }
-            held && e.type == KeyEventType.KeyUp -> { held = false; true }
-            else -> held
-        }
-    }
-}
 
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
 
