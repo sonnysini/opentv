@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -47,6 +49,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filter
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -545,8 +549,19 @@ internal fun VodRow(itemWidth: Dp, centreToEnd: Dp = itemWidth / 2, content: Laz
     val spec = remember(density, itemWidth, centreToEnd) {
         with(density) { WholeCards(ROW_MARGIN.toPx(), itemWidth.toPx(), centreToEnd.toPx()) }
     }
+    // Whatever the focus scroll lands on, a row at rest starts with a whole card at its margin:
+    // nudge it onto the nearest one when it stops a few pixels off.
+    val state = rememberLazyListState()
+    LaunchedEffect(state) {
+        snapshotFlow { state.isScrollInProgress }.filter { !it }.collect {
+            val nearest = state.layoutInfo.visibleItemsInfo.minByOrNull { kotlin.math.abs(it.offset) } ?: return@collect
+            val off = nearest.offset
+            if (off != 0 && kotlin.math.abs(off) < nearest.size / 2) state.animateScrollBy(off.toFloat())
+        }
+    }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
         LazyRow(
+            state = state,
             modifier = Modifier.wholeCardsWindow(ROW_MARGIN),
             contentPadding = PaddingValues(horizontal = ROW_MARGIN, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
