@@ -82,7 +82,7 @@ import app.opentv.data.repo.ChartHit
 import app.opentv.data.repo.MovieHit
 import app.opentv.data.repo.SeriesHit
 import app.opentv.ui.CARD_GAP
-import app.opentv.ui.JustEnough
+import app.opentv.ui.WholeCards
 import app.opentv.ui.wholeCardsWindow
 import app.opentv.ui.exactCardWidth
 import coil.compose.AsyncImage
@@ -475,7 +475,7 @@ internal fun <T : ChartHit> TopTenRow(title: String, hits: List<T>, onOpen: (T) 
     val numeralSize = with(LocalDensity.current) { (artHeight * 0.82f).toSp() }
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        VodRow {
+        VodRow(sizes.topTen, posterWidth / 2) {
             itemsIndexed(hits, key = { _, it -> it.key }) { i, hit ->
                 Box(Modifier.width(sizes.topTen)) {
                     Text(
@@ -504,7 +504,7 @@ internal fun <T : ChartHit> HitRow(title: String, hits: List<T>, onOpen: (T) -> 
     if (hits.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(title)
-        VodRow {
+        VodRow(LocalVodRowSizes.current.poster) {
             itemsIndexed(hits, key = { _, it -> it.key }) { _, hit -> HitPoster(hit, onOpen) }
         }
     }
@@ -540,9 +540,11 @@ private fun <T : ChartHit> HitPoster(hit: T, onOpen: (T) -> Unit, width: Dp = Lo
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-internal fun VodRow(content: LazyListScope.() -> Unit) {
+internal fun VodRow(itemWidth: Dp, centreToEnd: Dp = itemWidth / 2, content: LazyListScope.() -> Unit) {
     val density = LocalDensity.current
-    val spec = remember(density) { JustEnough(with(density) { ROW_MARGIN.toPx() }) }
+    val spec = remember(density, itemWidth, centreToEnd) {
+        with(density) { WholeCards(ROW_MARGIN.toPx(), itemWidth.toPx(), centreToEnd.toPx()) }
+    }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
         LazyRow(
             modifier = Modifier.wholeCardsWindow(ROW_MARGIN),

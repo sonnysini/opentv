@@ -81,3 +81,22 @@ class JustEnough(private val margin: Float) : BringIntoViewSpec {
         }
     }
 }
+
+/**
+ * [JustEnough] for a row of cards [itemWidth] wide whose focused part may be inset or grown (padding
+ * inside the card, the focus lift): the card's edges are worked out from the centre of what asked
+ * to be shown, which neither changes. [centreToEnd] is how far the card's right edge is from that
+ * centre (half the card, unless the focused part sits elsewhere in it, as the Top 10's poster).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+class WholeCards(
+    private val margin: Float,
+    private val itemWidth: Float,
+    private val centreToEnd: Float = itemWidth / 2f,
+) : BringIntoViewSpec {
+    private val inner = JustEnough(margin)
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val end = offset + size / 2f + centreToEnd
+        return inner.calculateScrollDistance(end - itemWidth, itemWidth, containerSize)
+    }
+}
