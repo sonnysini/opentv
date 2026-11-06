@@ -30,6 +30,8 @@ internal fun ResumePanel(
     onResume: (mediaKey: String, url: String, title: String) -> Unit,
     onOpenSeries: (Series) -> Unit,
     onPickSource: (List<VodViewModel.ResumeSource>) -> Unit,
+    /** The card is about to leave the shelf (removed, or marked watched). */
+    onLeaveShelf: () -> Unit,
     onClose: () -> Unit,
 ) {
     val extras by produceState<VodViewModel.ResumeExtras?>(null, item.mediaKey) { value = viewModel.resumeExtras(item) }
@@ -107,6 +109,7 @@ internal fun ResumePanel(
             }
             item(key = "watched") {
                 ActionRow(stringResource(R.string.panel_mark_watched), icon = R.drawable.ic_act_check) {
+                    onLeaveShelf()
                     viewModel.markWatched(item, extras?.next)
                     onClose()
                 }
@@ -115,6 +118,7 @@ internal fun ResumePanel(
         item(key = "label:shelf") { ActionLabel(stringResource(R.string.vod_continue_watching)) }
         item(key = "remove") {
             ActionRow(stringResource(R.string.panel_remove), icon = R.drawable.ic_act_remove) {
+                onLeaveShelf()
                 viewModel.removeResume(item)
                 onClose()
             }

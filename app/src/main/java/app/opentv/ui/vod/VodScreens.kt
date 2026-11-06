@@ -29,6 +29,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -647,11 +649,28 @@ internal fun ContinueWatchingRow(
     // Hold OK on a card: its panel; "Choose the source" swaps it for the list of copies.
     var held by remember { mutableStateOf<VodViewModel.ResumeItem?>(null) }
     var picking by remember { mutableStateOf<Pair<VodViewModel.ResumeItem, List<VodViewModel.ResumeSource>>?>(null) }
+    // A card taken off the shelf (removed, or watched): the focus stays in the row, on the card
+    // that takes its place, instead of jumping to the top of the page.
+    var focusedAt by remember { mutableIntStateOf(0) }
+    var refocusPending by remember { mutableStateOf(false) }
+    val refocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(items) {
+        if (!refocusPending) return@LaunchedEffect
+        refocusPending = false
+        kotlinx.coroutines.delay(50)
+        runCatching { refocus.requestFocus() }
+    }
+    val target = focusedAt.coerceAtMost(items.lastIndex)
     Column(Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.vod_continue_watching))
         VodRow(LocalVodRowSizes.current.resume) {
-            items(items, key = { it.mediaKey }) { item ->
-                ResumeCard(item, onHold = { held = item }) { onResume(item.mediaKey, item.streamUrl, item.title) }
+            itemsIndexed(items, key = { _, it -> it.mediaKey }) { i, item ->
+                Box(
+                    (if (i == target) Modifier.focusRequester(refocus) else Modifier)
+                        .onFocusChanged { if (it.hasFocus) focusedAt = i },
+                ) {
+                    ResumeCard(item, onHold = { held = item }) { onResume(item.mediaKey, item.streamUrl, item.title) }
+                }
             }
         }
     }
@@ -665,6 +684,7 @@ internal fun ContinueWatchingRow(
                 held = null
                 picking = item to sources
             },
+            onLeaveShelf = { refocusPending = true },
             onClose = { held = null },
         )
     }
