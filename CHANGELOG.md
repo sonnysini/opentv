@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.52.1 — 7 November 2026
+
+- **OK on a menu entry takes you into the page, everywhere.** Live TV and Football already moved
+  the cursor into the page and closed the menu; Films, Shows and Recordings left it on the menu,
+  waiting for RIGHT. Now every page does the same, and so do Search, Profiles, Settings and the
+  screens inside them: the cursor starts on the first item, no press needed to wake it.
+
 ## 0.52.0 — 6 November 2026
 
 - **No more zoom on the selected card.** Posters, Continue Watching, episodes and football games

@@ -58,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
+import app.opentv.ui.focusOnEnter
 import androidx.navigation.compose.rememberNavController
 import app.opentv.core.AppSettings
 import app.opentv.core.ServiceLocator
@@ -513,14 +516,14 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.PROFILES) {
+            screen(Routes.PROFILES) {
                 ProfilesScreen(
                     viewModel = profilesViewModel,
                     onBack = { navController.popBackStack() },
                 )
             }
 
-            composable(Routes.SEARCH) {
+            screen(Routes.SEARCH) {
                 SearchScreen(
                     onPlayChannel = { channel -> navController.navigate(Routes.player(channel.id)) },
                     onPlayMovie = { movie ->
@@ -538,7 +541,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.SETTINGS_HUB) {
+            screen(Routes.SETTINGS_HUB) {
                 SettingsHubScreen(
                     onOpenProviders = { navController.navigate(Routes.PROVIDERS) },
                     onOpenAddons = { navController.navigate(Routes.ADDONS) },
@@ -559,35 +562,35 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.SYNC) {
+            screen(Routes.SYNC) {
                 SyncScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.REC_SETTINGS) {
+            screen(Routes.REC_SETTINGS) {
                 RecordingSettingsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.CHANNELS) {
+            screen(Routes.CHANNELS) {
                 ChannelManagerScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.WEB_MANAGER) {
+            screen(Routes.WEB_MANAGER) {
                 WebManagerScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.CATEGORIES) {
+            screen(Routes.CATEGORIES) {
                 CategoriesScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.GROUPING) {
+            screen(Routes.GROUPING) {
                 GroupingScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.PARENTAL) {
+            screen(Routes.PARENTAL) {
                 ParentalControlsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.PROVIDERS) {
+            screen(Routes.PROVIDERS) {
                 ProvidersScreen(
                     viewModel = sourcesViewModel,
                     onAddSource = { navController.navigate(Routes.ADD_SOURCE) },
@@ -596,31 +599,31 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.ADDONS) {
+            screen(Routes.ADDONS) {
                 StremioAddonsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.ABOUT) {
+            screen(Routes.ABOUT) {
                 AboutScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.EPG_SETTINGS) {
+            screen(Routes.EPG_SETTINGS) {
                 EpgSettingsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.APPEARANCE) {
+            screen(Routes.APPEARANCE) {
                 AppearanceSettingsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.PLAYBACK) {
+            screen(Routes.PLAYBACK) {
                 PlaybackSettingsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.TMDB) {
+            screen(Routes.TMDB) {
                 TmdbSettingsScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.LOGOS) {
+            screen(Routes.LOGOS) {
                 LogoSettingsScreen(onBack = { navController.popBackStack() })
             }
 
@@ -640,8 +643,8 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.SERIES_DETAIL) { entry ->
-                val seriesId = entry.arguments?.getString("seriesId")?.toLongOrNull() ?: return@composable
+            screen(Routes.SERIES_DETAIL) { entry ->
+                val seriesId = entry.arguments?.getString("seriesId")?.toLongOrNull() ?: return@screen
                 SeriesDetailScreen(
                     seriesId = seriesId,
                     viewModel = vodViewModel,
@@ -655,8 +658,8 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.MOVIE_DETAIL) { entry ->
-                val movieId = entry.arguments?.getString("movieId")?.toLongOrNull() ?: return@composable
+            screen(Routes.MOVIE_DETAIL) { entry ->
+                val movieId = entry.arguments?.getString("movieId")?.toLongOrNull() ?: return@screen
                 MovieDetailScreen(
                     movieId = movieId,
                     viewModel = vodViewModel,
@@ -680,7 +683,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            composable(Routes.PERSON) { entry ->
+            screen(Routes.PERSON) { entry ->
                 val name = entry.arguments?.getString("name")
                     ?.let { java.net.URLDecoder.decode(it, "UTF-8") }.orEmpty()
                 PersonScreen(
@@ -784,3 +787,12 @@ fun isRunningOnTelevision(context: Context): Boolean {
     return packageManager.hasSystemFeature("android.software.leanback") ||
         packageManager.hasSystemFeature("android.hardware.type.television")
 }
+
+/**
+ * A destination that takes focus on its first item when it opens and places none itself (Settings,
+ * Search, Profiles and the rest), so the remote works on it without a first press to wake focus.
+ * Not for the players, the source form (its first item is a text field: the keyboard would pop up)
+ * or the home shell, which handles its own.
+ */
+private fun NavGraphBuilder.screen(route: String, content: @Composable (NavBackStackEntry) -> Unit) =
+    composable(route) { entry -> Box(Modifier.fillMaxSize().focusOnEnter()) { content(entry) } }
