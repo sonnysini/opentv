@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -61,6 +62,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -131,6 +133,11 @@ fun SearchScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     var toResults by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf<LiveHit.InGuide?>(null) }
+    val focusManager = LocalFocusManager.current
+    // Onto the first result; if its row has scrolled it away, onto whatever is under the bar.
+    val focusResults = {
+        if (runCatching { firstResult.requestFocus() }.isFailure) focusManager.moveFocus(FocusDirection.Down)
+    }
 
     LaunchedEffect(Unit) {
         if (!opened) {
@@ -140,7 +147,7 @@ fun SearchScreen(
             keyboard?.show()
         } else if (!results.isEmpty) {
             delay(KEYBOARD_DELAY_MILLIS)
-            runCatching { firstResult.requestFocus() }
+            focusResults()
         }
     }
     // Typed and the keyboard closed with Back rather than Search: the results are there all the same.
@@ -150,12 +157,13 @@ fun SearchScreen(
         toResults = false
         if (!results.isEmpty) {
             delay(FOCUS_DELAY_MILLIS)
-            runCatching { firstResult.requestFocus() }
+            focusResults()
         }
     }
     BackHandler { onBack() }
 
     val submit = {
+        android.util.Log.i("Search", "submit '$text'")
         viewModel.search(text, now = true)
         keyboard?.hide()
         toResults = true
@@ -178,7 +186,7 @@ fun SearchScreen(
                 text = text,
                 onText = { if (it.length <= MAX_QUERY) text = it },
                 onSubmit = submit,
-                onDown = { runCatching { firstResult.requestFocus() } },
+                onDown = { focusResults() },
                 modifier = Modifier.weight(1f).focusRequester(field),
             )
         }
