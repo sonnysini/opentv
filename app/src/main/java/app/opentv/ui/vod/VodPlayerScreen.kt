@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -86,7 +87,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
@@ -101,6 +106,10 @@ import app.opentv.core.ServiceLocator
 import app.opentv.core.SleepTimer
 import app.opentv.core.findActivity
 import app.opentv.player.PlayerController
+import app.opentv.player.StreamInfo
+import app.opentv.data.repo.PlayerHeading
+import app.opentv.ui.player.StreamInfoPanel
+import coil.compose.AsyncImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -192,6 +201,49 @@ fun VodPlayerScreen(
     }
 
     var controlsVisible by remember { mutableStateOf(true) }
+
+    // Heading: the title's TMDB logo (or its name) and, for an episode, "S4 · E7 · name".
+    var heading by remember { mutableStateOf<PlayerHeading?>(null) }
+    var headingLogo by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(mediaKey) {
+        val found = runCatching { graph.catalogRepository.playerHeading(mediaKey) }.getOrNull() ?: return@LaunchedEffect
+        heading = found
+        headingLogo = runCatching {
+            graph.vodHomeRepository.logoUrl(
+                if (found.isMovie) app.opentv.data.remote.TmdbLists.Kind.MOVIE else app.opentv.data.remote.TmdbLists.Kind.TV,
+                found.tmdbId,
+            )
+        }.getOrNull()
+    }
+
+    // "Stats for nerds", from the i button: stays up with the bar hidden until closed.
+    var showStats by remember { mutableStateOf(false) }
+    var statsInfo by remember { mutableStateOf<StreamInfo.Snapshot?>(null) }
+    var statsExtra by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val fileLabel = stringResource(R.string.stream_info_file)
+    val screenLabel = stringResource(R.string.stream_info_screen)
+    LaunchedEffect(showStats) {
+        if (!showStats) return@LaunchedEffect
+        val meter = StreamInfo.Meter()
+        while (isActive) {
+            val stats = controller.stats()
+            statsInfo = meter.sample(android.os.SystemClock.elapsedRealtime(), stats)
+            statsExtra = listOfNotNull(
+                fileRow(stats, streamUrl)?.let { fileLabel to it },
+                screenRow(view)?.let { screenLabel to it },
+            )
+            delay(1_000)
+        }
+    }
+
+    // The wall clock for "Ends at", refreshed while the bar is up (a paused film keeps moving it on).
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(controlsVisible) {
+        while (controlsVisible) {
+            nowMillis = System.currentTimeMillis()
+            delay(10_000)
+        }
+    }
     var interaction by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val seekFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -383,6 +435,7 @@ fun VodPlayerScreen(
         when {
             vodPanel != VodPanel.NONE -> vodPanel = VodPanel.NONE
             pendingSeekMs != null -> { seekCommit?.cancel(); pendingSeekMs = null; interaction++ }
+            showStats -> showStats = false
             controlsVisible && activelyPlaying && !paused -> controlsVisible = false
             else -> onBack()
         }
@@ -478,6 +531,61 @@ fun VodPlayerScreen(
             else -> Unit
         }
 
+        // "Ends at 23:14" in the top right corner, with the bar. The stats panel takes that corner.
+        val shownPositionTop = pendingSeekMs ?: positionMs
+        AnimatedVisibility(
+            visible = controlsVisible && !showStats && !growingRec && durationMs > 0,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent))),
+            ) {
+                val endsAt = remember(nowMillis, durationMs, shownPositionTop / 60_000) {
+                    android.text.format.DateFormat.getTimeFormat(context)
+                        .format(java.util.Date(nowMillis + (durationMs - shownPositionTop).coerceAtLeast(0)))
+                }
+                Row(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                        .padding(horizontal = 28.dp, vertical = 22.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.vod_ends_at),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.75f),
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        endsAt,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                }
+            }
+        }
+
+        if (showStats) {
+            StreamInfoPanel(
+                statsInfo,
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                    .padding(32.dp),
+                extraRows = statsExtra,
+                title = stringResource(R.string.stream_info_nerd_title),
+            )
+        }
+
         AnimatedVisibility(
             visible = controlsVisible,
             enter = fadeIn(),
@@ -532,23 +640,38 @@ fun VodPlayerScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                 }
-                Text(title, style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                PlayerHeadingArt(title, heading, headingLogo)
                 Spacer(Modifier.height(12.dp))
 
                 // Full-width seek bar. It holds focus when the bar comes up: left/right seek (faster
                 // the longer they're held), OK pauses, down reaches the buttons.
+                // Times either side of it: where you are on the left, the length on the right.
                 val shownPosition = pendingSeekMs ?: positionMs
-                SeekBar(
-                    positionMs = positionMs,
-                    bufferedMs = bufferedMs,
-                    durationMs = durationMs,
-                    pendingMs = pendingSeekMs,
-                    focusRequester = seekFocus,
-                    downFocus = playFocus,
-                    onSeek = { forward, repeat -> nudgeSeek(forward, repeat) },
-                    onToggle = { togglePause() },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        formatDuration(shownPosition),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    SeekBar(
+                        positionMs = positionMs,
+                        bufferedMs = bufferedMs,
+                        durationMs = durationMs,
+                        pendingMs = pendingSeekMs,
+                        focusRequester = seekFocus,
+                        downFocus = playFocus,
+                        onSeek = { forward, repeat -> nudgeSeek(forward, repeat) },
+                        onToggle = { togglePause() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        if (durationMs > 0) formatDuration(durationMs) else "",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.6f),
+                    )
+                }
 
                 Spacer(Modifier.height(8.dp))
 
@@ -601,20 +724,10 @@ fun VodPlayerScreen(
                             modifier = Modifier.padding(start = 4.dp),
                         )
                     }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        formatDuration(shownPosition) + " / " + formatDuration(durationMs),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White,
-                    )
-                    // Time left reads better than the total when deciding whether to finish tonight.
-                    if (durationMs > 0 && !growingRec) {
-                        Text(
-                            "  −" + formatDuration(durationMs - shownPosition),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.6f),
-                        )
-                    }
+                    VodIconButton(
+                        Icons.Outlined.Info, stringResource(R.string.stream_info_nerd_title), seekFocus, ::hideFromButtons,
+                        active = showStats,
+                    ) { showStats = !showStats; interaction++ }
                 }
             }
         }
@@ -622,6 +735,73 @@ fun VodPlayerScreen(
 }
 
 private const val SEEK_COMMIT_DELAY_MILLIS = 800L
+
+/**
+ * The bar's heading: the title's own lettering from TMDB when there is one, else its name; under it,
+ * for an episode, "S4 · E7 · name". Recordings and catch-up keep the plain title they came with.
+ */
+@Composable
+private fun PlayerHeadingArt(fallbackTitle: String, heading: PlayerHeading?, logoUrl: String?) {
+    var logoFailed by remember(logoUrl) { mutableStateOf(false) }
+    val name = heading?.title ?: fallbackTitle
+    if (logoUrl != null && !logoFailed) {
+        AsyncImage(
+            model = logoUrl,
+            contentDescription = name,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.BottomStart,
+            onError = { logoFailed = true },
+            modifier = Modifier.heightIn(max = 48.dp).widthIn(max = 380.dp),
+        )
+    } else {
+        Text(
+            name,
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    heading?.episode?.let { ep ->
+        Spacer(Modifier.height(8.dp))
+        Text(
+            listOfNotNull("S${ep.season}", "E${ep.episodeNumber}", episodeName(ep)).joinToString(" · "),
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White.copy(alpha = 0.85f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** "MKV · 22.8 GB": the file's container and size, as far as they're known. */
+@OptIn(UnstableApi::class)
+private fun fileRow(stats: PlayerController.Stats, url: String): String? {
+    val container = when (stats.video?.containerMimeType ?: stats.audio?.containerMimeType) {
+        MimeTypes.VIDEO_MATROSKA, MimeTypes.AUDIO_MATROSKA -> "MKV"
+        MimeTypes.VIDEO_WEBM, MimeTypes.AUDIO_WEBM -> "WebM"
+        MimeTypes.VIDEO_MP4, MimeTypes.AUDIO_MP4 -> "MP4"
+        MimeTypes.VIDEO_MP2T -> "TS"
+        else -> url.substringBefore('?').substringAfterLast('/').substringAfterLast('.', "")
+            .takeIf { it.length in 2..4 }?.uppercase(java.util.Locale.ROOT)
+    }
+    val size = stats.fileBytes?.let { bytes ->
+        val gb = bytes / 1_073_741_824.0
+        if (gb >= 1) String.format(java.util.Locale.getDefault(), "%.1f GB", gb)
+        else String.format(java.util.Locale.getDefault(), "%.0f MB", bytes / 1_048_576.0)
+    }
+    return listOfNotNull(container, size).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+/** "3840×2160 · 60 Hz": the mode the screen is in now, to see whether it follows the film. */
+private fun screenRow(view: android.view.View): String? {
+    val mode = view.display?.mode ?: return null
+    val hz = mode.refreshRate
+    val rate = if (kotlin.math.abs(hz - Math.round(hz)) < 0.05f) "${Math.round(hz)}"
+    else String.format(java.util.Locale.getDefault(), "%.3f", hz).trimEnd('0')
+    return "${mode.physicalWidth}×${mode.physicalHeight} · $rate Hz"
+}
 
 /** Subtitle text size as a fraction of the video height: small, medium (Media3's default), large. */
 private val SUBTITLE_SIZES = floatArrayOf(0.045f, 0.0533f, 0.068f)
