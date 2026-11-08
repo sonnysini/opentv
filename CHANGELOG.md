@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.53.0 — 8 November 2026
+
+- **A new Search.** The bar on top opens the TV's own keyboard straight away (on a Fire TV, the
+  full-screen one with "type from your phone"); its Search key closes it and puts the cursor on
+  the first result, and up to the bar and OK types again. The results come one row per page of
+  the menu, in the menu's order: **Live TV** (the channels by name, with what's on, then the
+  programmes in the guide from now to the next two days, LIVE or with day and time, ● REC when
+  booked), **Football** (today's and the week's games of the team), **Films**, **Shows** and
+  **Recordings**. Rows with nothing are left out. A live programme plays its channel; one still
+  to come opens the panel to record it, set a reminder or watch the channel now; a game goes to
+  the Football page and plays as from there.
+- The guide search is quick on a big guide: the titles are indexed after each guide download
+  (a couple of seconds, in the background), so a search takes milliseconds instead of a second.
+  It finds words by how they start ("juve" finds Juventus).
+- The search's own on-screen keyboard is gone.
+
+## 0.52.1 — 7 November 2026
+
+- **OK on a menu entry takes you into the page, everywhere.** Live TV and Football already moved
+  the cursor into the page and closed the menu; Films, Shows and Recordings left it on the menu,
+  waiting for RIGHT. Now every page does the same, and so do Search, Profiles, Settings and the
+  screens inside them: the cursor starts on the first item, no press needed to wake it.
+
 ## 0.52.0 — 6 November 2026
 
 - **No more zoom on the selected card.** Posters, Continue Watching, episodes and football games

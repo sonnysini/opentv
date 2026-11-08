@@ -483,6 +483,8 @@
     <string name="search_type_name">Digita un nome</string>
     <string name="search_start_hint">Inizia a digitare per cercare canali, film e serie.</string>
     <string name="search_no_results">Nessun risultato per “%1$s”.</string>
+    <string name="search_ok_to_type">OK per scrivere</string>
+    <string name="search_channel">Canale</string>
     <string name="kbd_space">Spazio</string>
     <string name="kbd_del">Canc</string>
     <string name="kbd_clear">Cancella tutto</string>

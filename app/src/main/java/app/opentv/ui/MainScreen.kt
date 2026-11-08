@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -155,6 +156,8 @@ fun MainScreen(
     // RIGHT out of the rail on Live TV: back into the groups, not onto whatever sits nearest the
     // menu item (the top's button). Set by the full-screen list while it's on screen.
     var liveNavExit by remember { mutableStateOf<(() -> Boolean)?>(null) }
+    // Bumped by OK on a rail entry: the page then takes focus (see focusOnEnter below).
+    var enterPage by remember { mutableIntStateOf(0) }
     LaunchedEffect(navRevealed) {
         if (navRevealed) {
             delay(50)
@@ -202,9 +205,9 @@ fun MainScreen(
         NavRail(
             tabs = visibleTabs,
             current = tab,
-            // Keep the rail while it holds focus — picking Live from it mustn't pull it out from
-            // under the cursor; it goes once focus moves on into the list.
-            onSelect = { tab = it; navRevealed = true },
+            // OK on a page's entry opens it and moves focus into it, closing the rail — the same
+            // on every page (and again on the page already open).
+            onSelect = { tab = it; enterPage++ },
             currentFocus = navFocus,
             onFocusLeft = { navRevealed = false },
             onRight = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
@@ -223,7 +226,14 @@ fun MainScreen(
                 .wrapContentWidth(Alignment.Start, unbounded = true)
                 .requiredWidth(screenWidth - RAIL_COLLAPSED)
                 .fillMaxHeight()
-          Box(page) {
+          Box(
+              page.focusOnEnter(
+                  key = enterPage,
+                  enabled = enterPage > 0,
+                  // Live TV: into the groups, as RIGHT out of the rail does.
+                  enter = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
+              ),
+          ) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,

@@ -111,7 +111,13 @@ object ServiceLocator {
                 sourceDao = database.sources(),
                 api = xtreamApi,
                 http = httpClient,
+                searchIndex = guideSearchIndex,
             )
+        }
+
+        /** Title search over the guide (FTS), rebuilt after each guide download. */
+        val guideSearchIndex: app.opentv.data.repo.GuideSearchIndex by lazy {
+            app.opentv.data.repo.GuideSearchIndex(appContext, database)
         }
 
         val footballRepository: app.opentv.data.repo.FootballRepository by lazy {
