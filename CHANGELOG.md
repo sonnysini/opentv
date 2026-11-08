@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.53.1 — 8 November 2026
+
+- **One look for the selected card.** Every card with a picture (films, shows, Continue
+  watching, episodes, football games, search results) now shows the selection with the same
+  white 3dp outline; before, films and shows used a green one and football a thinner white one.
+  Rows, buttons and the guide stay green.
+- **The Live TV groups look like the menu.** The focused group is a solid green pill (still
+  sliding from group to group) with dark text; the open group has a light green veil and green
+  text, instead of two near-identical greys and a thin outline. The broadcaster before a group's
+  name ("SKY", "DAZN", "DIFFERITA") is no longer green, just the same colour as the name.
+
 ## 0.53.0 — 8 November 2026
 
 - **A new Search.** The bar on top opens the TV's own keyboard straight away (on a Fire TV, the
