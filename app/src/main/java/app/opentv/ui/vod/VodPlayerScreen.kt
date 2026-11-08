@@ -542,7 +542,7 @@ fun VodPlayerScreen(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(110.dp)
                     .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent))),
             ) {
                 val endsAt = remember(nowMillis, durationMs, shownPositionTop / 60_000) {
@@ -553,19 +553,19 @@ fun VodPlayerScreen(
                     Modifier
                         .align(Alignment.TopEnd)
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
-                        .padding(horizontal = 28.dp, vertical = 22.dp),
+                        .padding(horizontal = 28.dp, vertical = 20.dp),
                 ) {
                     Text(
                         stringResource(R.string.vod_ends_at),
-                        fontSize = 20.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.75f),
                         modifier = Modifier.alignByBaseline(),
                     )
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         endsAt,
-                        fontSize = 30.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
                         modifier = Modifier.alignByBaseline(),

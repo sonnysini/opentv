@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.54.1 — 8 November 2026
+
+- **A smaller "Ends at".** The film player's end time in the top right corner is quieter
+  (14 + 18 instead of 20 + 30), with a shorter shade behind it.
+
 ## 0.54.0 — 8 November 2026
 
 - **Film player: times beside the bar, and when it ends.** Where you are sits at the left end of
