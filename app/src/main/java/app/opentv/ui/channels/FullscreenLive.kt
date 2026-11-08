@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -20,7 +21,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -88,9 +88,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.opentv.R
@@ -418,6 +415,17 @@ private fun GroupsList(
             .onGloballyPositioned { glide.origin = it.positionInRoot().y }
             .onFocusChanged { glide.listFocused = it.hasFocus },
     ) {
+    // The focus box: a solid pill drawn once under the list, so it can slide from group to group
+    // and show through the rows' see-through grounds.
+    Spacer(
+        Modifier.fillMaxSize().drawBehind {
+            if (!glide.visible || glide.key == null) return@drawBehind
+            val top = glide.top - glide.origin
+            val height = glide.height
+            val radius = CornerRadius(10.dp.toPx())
+            drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, height), radius)
+        },
+    )
     FocusedList(
         count = entries.size,
         startIndex = selectedIndex,
@@ -448,21 +456,6 @@ private fun GroupsList(
             )
         }
     }
-    // The focus box, drawn once over the list so it can slide from group to group.
-    Spacer(
-        Modifier.fillMaxSize().drawBehind {
-            if (!glide.visible || glide.key == null) return@drawBehind
-            val top = glide.top - glide.origin
-            val height = glide.height
-            val radius = CornerRadius(10.dp.toPx())
-            drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, height), radius)
-            val stroke = 2.dp.toPx()
-            drawRoundRect(
-                Accent, Offset(stroke / 2, top + stroke / 2), Size(size.width - stroke, height - stroke),
-                CornerRadius(radius.x - stroke / 2), style = Stroke(stroke),
-            )
-        },
-    )
     }
 }
 
@@ -700,8 +693,9 @@ private fun FocusedList(
 }
 
 /**
- * One group: the broadcaster (or country code) in the accent before the name, in tall capitals, the count
- * on the right. The current group sits on a lighter ground with an accent down its left edge.
+ * One group: the broadcaster (or country code) before the name, in tall capitals, the count on
+ * the right. Focused = the solid accent pill sliding under the list; the open group = a veil of
+ * the accent with accent text, as the open page in the menu.
  */
 @Composable
 private fun CategoryEntry(
@@ -734,9 +728,14 @@ private fun CategoryEntry(
             .fillMaxWidth()
             .onGloballyPositioned { placed[0] = it; if (focused) report(it) }
             .clip(shape)
-            // The focus itself is the box sliding over the list (see [Glide]).
-            .background(if (selected) GroupSelected else MaterialTheme.colorScheme.surface)
-            .drawBehind { if (selected) drawRect(Accent, size = Size(3.dp.toPx(), size.height)) }
+            // The focus itself is the pill sliding under the list (see [Glide]).
+            .background(
+                when {
+                    focused -> Color.Transparent
+                    selected -> GroupOpenVeil
+                    else -> GroupGround
+                },
+            )
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) {
@@ -749,16 +748,21 @@ private fun CategoryEntry(
             .padding(start = 16.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The broadcaster in the accent, then the name, on one line: "SKY INTRATTENIMENTO".
-        Text(
-            buildAnnotatedString {
-                if (kicker != null) {
-                    withStyle(SpanStyle(color = Accent)) { append(kicker.uppercase()) }
-                    append(' ')
-                }
-                append(label.uppercase())
+        // The broadcaster, then the name, on one line and in one colour: "SKY INTRATTENIMENTO".
+        // Dark on the focus pill, the accent on the open group, white otherwise; the colour
+        // follows the pill over its slide instead of jumping ahead of it.
+        val ink by animateColorAsState(
+            when {
+                focused -> MaterialTheme.colorScheme.onPrimary
+                selected -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurface
             },
-            color = MaterialTheme.colorScheme.onSurface,
+            tween(GLIDE_MILLIS.toInt()),
+            label = "groupInk",
+        )
+        Text(
+            if (kicker != null) "${kicker.uppercase()} ${label.uppercase()}" else label.uppercase(),
+            color = ink,
             fontFamily = Oswald,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             fontSize = 18.sp,
@@ -771,7 +775,7 @@ private fun CategoryEntry(
             Spacer(Modifier.width(10.dp))
             Text(
                 "%,d".format(Locale.ITALIAN, count),
-                color = if (focused || selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                color = if (focused || selected) ink else MaterialTheme.colorScheme.outline,
                 fontFamily = Oswald,
                 fontWeight = FontWeight.Light,
                 fontSize = 17.sp,
@@ -1035,7 +1039,12 @@ private const val GROUP_FOLLOW_DELAY_MILLIS = 120L
 // The groups' focus box slides for as long as the channels wait to follow.
 private const val GLIDE_MILLIS = GROUP_FOLLOW_DELAY_MILLIS
 private const val GLIDE_EXIT_MILLIS = 150L
-private val GlideFill = Color.White.copy(alpha = 0.11f)
+// The focus pill: the theme's accent, as every other focused row and button in the app.
+private val GlideFill = Color(0xFF52DBC8)
+// The open group, out of focus: a veil of the accent, as the open page in the menu.
+private val GroupOpenVeil = Color(0xFF52DBC8).copy(alpha = 0.16f)
+// The other groups: see-through, so the focus pill shows under them as it slides by.
+private val GroupGround = Color.White.copy(alpha = 0.035f)
 private const val TAB_FOLLOW_DELAY_MILLIS = 300L
 
 private val Accent = Color(0xFF57D9C5)
