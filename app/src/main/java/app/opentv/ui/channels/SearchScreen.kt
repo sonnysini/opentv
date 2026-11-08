@@ -54,6 +54,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -173,6 +178,7 @@ fun SearchScreen(
                 text = text,
                 onText = { if (it.length <= MAX_QUERY) text = it },
                 onSubmit = submit,
+                onDown = { runCatching { firstResult.requestFocus() } },
                 modifier = Modifier.weight(1f).focusRequester(field),
             )
         }
@@ -290,8 +296,15 @@ private fun openMatch(item: FootballViewModel.Item) {
 
 /** The pill on top: what's typed, "OK to type" at the end. */
 @Composable
-private fun SearchBar(text: String, onText: (String) -> Unit, onSubmit: () -> Unit, modifier: Modifier = Modifier) {
+private fun SearchBar(
+    text: String,
+    onText: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onDown: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var focused by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
     val shape = RoundedCornerShape(50)
     val scheme = MaterialTheme.colorScheme
     BasicTextField(
@@ -301,8 +314,27 @@ private fun SearchBar(text: String, onText: (String) -> Unit, onSubmit: () -> Un
         textStyle = MaterialTheme.typography.titleLarge.copy(color = scheme.onSurface),
         cursorBrush = SolidColor(scheme.primary),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, autoCorrectEnabled = false),
-        keyboardActions = KeyboardActions(onSearch = { onSubmit() }, onDone = { onSubmit() }, onGo = { onSubmit() }),
-        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        // Fire TV's "Next" key (Avanti) closes its keyboard with ImeAction.Next whatever was asked.
+        keyboardActions = KeyboardActions(
+            onSearch = { onSubmit() }, onDone = { onSubmit() }, onGo = { onSubmit() }, onNext = { onSubmit() },
+        ),
+        // The remote, with the keyboard closed: the field would keep the arrows for its cursor.
+        // Down goes to the results, OK opens the keyboard again.
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { e ->
+                when (e.key) {
+                    Key.DirectionDown -> {
+                        if (e.type == KeyEventType.KeyDown) onDown()
+                        true
+                    }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        if (e.type == KeyEventType.KeyUp) keyboard?.show()
+                        true
+                    }
+                    else -> false
+                }
+            },
         decorationBox = { inner ->
             Row(
                 Modifier
