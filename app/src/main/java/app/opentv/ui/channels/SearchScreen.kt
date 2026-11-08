@@ -131,7 +131,7 @@ fun SearchScreen(
     val field = remember { FocusRequester() }
     val firstResult = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    var toResults by remember { mutableStateOf(false) }
+    var toResults by remember { mutableStateOf(0) }
     var panel by remember { mutableStateOf<LiveHit.InGuide?>(null) }
     val focusManager = LocalFocusManager.current
     // Onto the first result; if its row has scrolled it away, onto whatever is under the bar.
@@ -152,9 +152,12 @@ fun SearchScreen(
     }
     // Typed and the keyboard closed with Back rather than Search: the results are there all the same.
     LaunchedEffect(text) { viewModel.search(text) }
+    // Once per Search key, when its results are in. The jump done is kept outside the effect's keys:
+    // changing a key would cancel the effect in the middle of its wait.
+    val jumped = remember { intArrayOf(0) }
     LaunchedEffect(results, toResults) {
-        if (!toResults || !results.done || results.query != text.trim()) return@LaunchedEffect
-        toResults = false
+        if (toResults == jumped[0] || !results.done || results.query != text.trim()) return@LaunchedEffect
+        jumped[0] = toResults
         if (!results.isEmpty) {
             delay(FOCUS_DELAY_MILLIS)
             focusResults()
@@ -165,7 +168,7 @@ fun SearchScreen(
     val submit = {
         viewModel.search(text, now = true)
         keyboard?.hide()
-        toResults = true
+        toResults++
     }
 
     Column(Modifier.fillMaxSize().padding(top = 22.dp)) {
@@ -665,7 +668,7 @@ private const val TILES_PER_ROW = 5
 private const val POSTERS_PER_ROW = 7
 private const val MAX_QUERY = 60
 private const val KEYBOARD_DELAY_MILLIS = 150L
-private const val FOCUS_DELAY_MILLIS = 400L
+private const val FOCUS_DELAY_MILLIS = 200L
 private const val WATCH_AHEAD_MILLIS = 30L * 60 * 1000
 private val LIVE_RED = Color(0xFFE50914)
 private val CHANNEL_BRUSH = Brush.linearGradient(listOf(Color(0xFF34373A), Color(0xFF17191B)))
