@@ -23,7 +23,7 @@ behind them.
   the top of the live page draws them, not at the source's full resolution.
 - **Fix: Films/Shows "All" tab crashed the app.** Opening the last tab could read one genre past
   the end of the list for a frame (`Index: 8, Size: 8`) and close the app; it now waits for the
-  All layout instead. Broken since 0.47 (3 November).
+  All layout instead. Broken since 0.42 (3 November).
 
 ## 0.54.1 — 8 November 2026
 
