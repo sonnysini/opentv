@@ -163,7 +163,6 @@ fun SearchScreen(
     BackHandler { onBack() }
 
     val submit = {
-        android.util.Log.i("Search", "submit '$text'")
         viewModel.search(text, now = true)
         keyboard?.hide()
         toResults = true
@@ -666,7 +665,7 @@ private const val TILES_PER_ROW = 5
 private const val POSTERS_PER_ROW = 7
 private const val MAX_QUERY = 60
 private const val KEYBOARD_DELAY_MILLIS = 150L
-private const val FOCUS_DELAY_MILLIS = 80L
+private const val FOCUS_DELAY_MILLIS = 400L
 private const val WATCH_AHEAD_MILLIS = 30L * 60 * 1000
 private val LIVE_RED = Color(0xFFE50914)
 private val CHANNEL_BRUSH = Brush.linearGradient(listOf(Color(0xFF34373A), Color(0xFF17191B)))
