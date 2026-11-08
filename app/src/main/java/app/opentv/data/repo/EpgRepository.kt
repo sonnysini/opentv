@@ -69,6 +69,7 @@ class EpgRepository(
     private val sourceDao: SourceDao,
     private val api: XtreamApi,
     private val http: OkHttpClient,
+    private val searchIndex: GuideSearchIndex? = null,
 ) {
 
     data class SyncSummary(
@@ -225,6 +226,8 @@ class EpgRepository(
             }
 
             val (matched, total) = runMatcher()
+            // New programmes: the Search screen's title index follows (a couple of seconds).
+            if (written > 0) searchIndex?.rebuild() else searchIndex?.ensureFresh()
             SyncSummary(succeeded, failed, written, matched, total)
         }
 

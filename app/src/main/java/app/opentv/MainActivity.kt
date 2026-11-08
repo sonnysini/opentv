@@ -439,6 +439,33 @@ private fun OpenTvApp(isTelevision: Boolean) {
     }
 
     Box(Modifier.fillMaxSize()) {
+        val playRecording: (app.opentv.data.model.Recording) -> Unit = { rec ->
+            // A NAS recording plays straight off its smb:// locator and a USB one off
+            // its content:// document URI (Media3 reads both); an internal one through
+            // a file:// uri. An internal recording that's still capturing plays through
+            // the tail-following optvrec:// source, so it can be watched as it records
+            // with no second connection to the provider. All go through the VOD player.
+            val stillRecording = rec.status == app.opentv.data.model.RecordingStatus.RECORDING
+            // Internal and NAS in-progress recordings are both tail-followable via the
+            // growing source; USB (content://) isn't.
+            val growable = !app.opentv.recording.RecordingStorage.isContent(rec.filePath) &&
+                !app.opentv.recording.RecordingStorage.isUsbPlaceholder(rec.filePath)
+            val url = when {
+                stillRecording && growable -> "optvrec://${rec.id}"
+                app.opentv.recording.SmbClient.isSmb(rec.filePath) -> rec.filePath
+                app.opentv.recording.RecordingStorage.isContent(rec.filePath) -> rec.filePath
+                else -> android.net.Uri.fromFile(java.io.File(rec.filePath)).toString()
+            }
+            navController.navigate(
+                Routes.vodPlayer(
+                    key = "rec:${rec.id}",
+                    url = url,
+                    title = rec.title,
+                    ua = rec.userAgent,
+                ),
+            )
+        }
+
         NavHost(navController = navController, startDestination = start) {
             composable(Routes.ADD_SOURCE) {
                 AddSourceScreen(
@@ -482,32 +509,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS_HUB) },
                     onOpenProfiles = { navController.navigate(Routes.PROFILES) },
-                    onPlayRecording = { rec ->
-                        // A NAS recording plays straight off its smb:// locator and a USB one off
-                        // its content:// document URI (Media3 reads both); an internal one through
-                        // a file:// uri. An internal recording that's still capturing plays through
-                        // the tail-following optvrec:// source, so it can be watched as it records
-                        // with no second connection to the provider. All go through the VOD player.
-                        val stillRecording = rec.status == app.opentv.data.model.RecordingStatus.RECORDING
-                        // Internal and NAS in-progress recordings are both tail-followable via the
-                        // growing source; USB (content://) isn't.
-                        val growable = !app.opentv.recording.RecordingStorage.isContent(rec.filePath) &&
-                            !app.opentv.recording.RecordingStorage.isUsbPlaceholder(rec.filePath)
-                        val url = when {
-                            stillRecording && growable -> "optvrec://${rec.id}"
-                            app.opentv.recording.SmbClient.isSmb(rec.filePath) -> rec.filePath
-                            app.opentv.recording.RecordingStorage.isContent(rec.filePath) -> rec.filePath
-                            else -> android.net.Uri.fromFile(java.io.File(rec.filePath)).toString()
-                        }
-                        navController.navigate(
-                            Routes.vodPlayer(
-                                key = "rec:${rec.id}",
-                                url = url,
-                                title = rec.title,
-                                ua = rec.userAgent,
-                            ),
-                        )
-                    },
+                    onPlayRecording = playRecording,
                     onPlayCatchup = { key, url, title, ua ->
                         // Catch-up is a seekable archive stream — plays through the VOD player.
                         navController.navigate(Routes.vodPlayer(key, url, title, ua))
@@ -537,6 +539,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                         )
                     },
                     onOpenSeries = { series -> navController.navigate(Routes.seriesDetail(series.id)) },
+                    onPlayRecording = playRecording,
                     onBack = { navController.popBackStack() },
                 )
             }

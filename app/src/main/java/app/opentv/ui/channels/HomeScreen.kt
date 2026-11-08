@@ -962,7 +962,7 @@ fun HomeScreen(
 }
 
 /** Inserts a reminder for a future programme and arms its alarm. No-op if one already exists. */
-private suspend fun setReminder(
+internal suspend fun setReminder(
     graph: ServiceLocator.Graph,
     context: android.content.Context,
     channel: Channel,

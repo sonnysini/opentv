@@ -1493,7 +1493,7 @@ private val ROW_MARGIN = 48.dp
  * teams (and score) under it.
  */
 @Composable
-private fun MatchTile(
+internal fun MatchTile(
     item: FootballViewModel.Item,
     width: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
