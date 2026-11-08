@@ -346,5 +346,19 @@ private val CLOCK = SimpleDateFormat("HH:mm", Locale.getDefault())
 private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 private val LIVE_RED = Color(0xFFE53935)
 /** As tall as the top of the Football, Movies and Shows pages. */
-private val EXPANDED_HEIGHT = 280.dp
+private const val EXPANDED_HEIGHT_DP = 280
+private val EXPANDED_HEIGHT = EXPANDED_HEIGHT_DP.dp
+
+/**
+ * The backdrop's size on screen in pixels — 16:9 at the hero's full height, at the app's UI scale
+ * (as MainActivity scales the density) — so a prefetch decodes the still at the size it is drawn
+ * at, not at the source's full resolution. A little over, so the cached copy always serves the
+ * image on screen.
+ */
+fun heroStillPixels(context: android.content.Context, uiScalePercent: Int): Pair<Int, Int> {
+    val density = context.resources.displayMetrics.density *
+        app.opentv.core.AppSettings.UI_SCALE_BASE * uiScalePercent / 100f
+    val height = (EXPANDED_HEIGHT_DP * density * 1.1f).toInt().coerceAtLeast(1)
+    return (height * 16 / 9) to height
+}
 private const val TURN_MILLIS = 8_000

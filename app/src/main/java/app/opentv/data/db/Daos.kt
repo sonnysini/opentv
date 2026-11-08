@@ -300,6 +300,13 @@ interface ChannelDao {
     @Query("SELECT * FROM channels")
     suspend fun allForMatching(): List<Channel>
 
+    /** Just the columns the matcher reads and writes, in a stable order: its change fingerprint. */
+    @Query(
+        "SELECT id, name, groupKey, epgChannelId, epgOverrideId, logoUrl, matchedEpgId, guideLogoUrl " +
+            "FROM channels ORDER BY id"
+    )
+    suspend fun matchInputs(): List<ChannelMatchInput>
+
     @Upsert
     suspend fun upsertAll(channels: List<Channel>)
 
@@ -477,6 +484,17 @@ interface ProgrammeDao {
         """
     )
     fun observeWindow(fromUtcMillis: Long, toUtcMillis: Long): Flow<List<Programme>>
+
+    /** One read of [observeWindow]'s rows, for callers that pick their own moment to re-read. */
+    @Query(
+        """
+        SELECT * FROM programmes
+        WHERE endUtcMillis > :fromUtcMillis
+          AND startUtcMillis < :toUtcMillis
+        ORDER BY epgChannelId, startUtcMillis
+        """
+    )
+    suspend fun window(fromUtcMillis: Long, toUtcMillis: Long): List<Programme>
 
     /** What is on right now, for the channel list's "now playing" line. */
     @Query(
@@ -1051,3 +1069,15 @@ interface ReminderDao {
     @Query("DELETE FROM reminders WHERE endUtcMillis < :beforeMillis")
     suspend fun deleteEndedBefore(beforeMillis: Long)
 }
+
+/** One channel as the guide matcher sees it — see [ChannelDao.matchInputs]. */
+data class ChannelMatchInput(
+    val id: Long,
+    val name: String,
+    val groupKey: String,
+    val epgChannelId: String?,
+    val epgOverrideId: String?,
+    val logoUrl: String?,
+    val matchedEpgId: String?,
+    val guideLogoUrl: String?,
+)

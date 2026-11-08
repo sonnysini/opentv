@@ -105,6 +105,8 @@ data class Category(
     indices = [
         Index(value = ["sourceId", "streamId"], unique = true),
         Index(value = ["sourceId", "categoryId"]),
+        // A category's channels are read by category alone (any source): without this, a full scan.
+        Index(value = ["categoryId"]),
         Index(value = ["groupKey"]),
         Index(value = ["favourite"]),
     ],
@@ -338,6 +340,10 @@ data class Programme(
         // the whole library. Matters at 300k titles.
         Index(value = ["addedMillis"]),
         Index(value = ["rating"]),
+        // The browse grid reads one category by its id alone; search walks the names in order
+        // (narrow index entries instead of whole rows with plots and cast) and stops at LIMIT.
+        Index(value = ["categoryId"]),
+        Index(value = ["name"]),
     ],
 )
 data class Movie(
@@ -384,6 +390,9 @@ data class Movie(
         // the whole library. Matters at 300k titles.
         Index(value = ["addedMillis"]),
         Index(value = ["rating"]),
+        // See Movie: category browse and name search.
+        Index(value = ["categoryId"]),
+        Index(value = ["name"]),
     ],
 )
 data class Series(

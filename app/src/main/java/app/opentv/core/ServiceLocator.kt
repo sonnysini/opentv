@@ -7,6 +7,7 @@ package app.opentv.core
 
 import android.content.Context
 import app.opentv.data.db.OpenTvDatabase
+import app.opentv.data.db.tableChanges
 import app.opentv.data.remote.StalkerApi
 import app.opentv.data.remote.StremioClient
 import app.opentv.data.remote.XtreamApi
@@ -112,6 +113,9 @@ object ServiceLocator {
                 api = xtreamApi,
                 http = httpClient,
                 searchIndex = guideSearchIndex,
+                programmeChanges = database.tableChanges("programmes"),
+                database = database,
+                matcherMemo = appContext.getSharedPreferences("epg_matcher", Context.MODE_PRIVATE),
             )
         }
 

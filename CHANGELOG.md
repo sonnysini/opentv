@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.55.0 — 8 November 2026
+
+Lighter on the box, nothing else changes: the same lists, guide, search and logos, with less work
+behind them.
+
+- **The guide stops rebuilding itself while it downloads.** A guide is written 500 programmes at a
+  time, and the live list used to re-read the whole 12-hour guide and regroup every channel after
+  each of those batches — hundreds of times per download. Now it catches up at most every 20
+  seconds while a download runs, and once more when it ends.
+- **Guide matching only when something changed.** Every start re-matched every channel to the
+  guides. It now remembers what it matched from (channels, guides, programmes left, name rules)
+  and skips the work when all of that is the same; when it does run, its changes are written in
+  one go, so the list is rebuilt once instead of once per channel. Regroup and restore still always
+  match.
+- **Indexes for categories and search.** Opening a live category, a film or show category, and
+  searching films and shows by name no longer scan the whole table. Built once, in a few seconds,
+  on the first start after the update.
+- **Fewer flushes to flash.** The database no longer forces every commit to storage (WAL
+  `synchronous=NORMAL`): the stick's slow flash was most of the cost of a guide download.
+- **Tonight's stills prefetched at their size.** The start-up prefetch decodes them at the size
+  the top of the live page draws them, not at the source's full resolution.
+
 ## 0.54.1 — 8 November 2026
 
 - **A smaller "Ends at".** The film player's end time in the top right corner is quieter

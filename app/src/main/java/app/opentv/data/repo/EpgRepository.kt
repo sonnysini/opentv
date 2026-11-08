@@ -5,7 +5,10 @@
  */
 package app.opentv.data.repo
 
+import android.content.SharedPreferences
 import android.util.Log
+import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import app.opentv.core.SettingsBackup
 import app.opentv.data.db.ChannelDao
 import app.opentv.data.db.EpgChannelAliasDao
@@ -28,7 +31,13 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import app.opentv.data.db.throttleWhile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -70,7 +79,24 @@ class EpgRepository(
     private val api: XtreamApi,
     private val http: OkHttpClient,
     private val searchIndex: GuideSearchIndex? = null,
+    /**
+     * Commits to the programmes table (see [app.opentv.data.db.tableChanges]). When set, the guide
+     * window is re-read on these signals — paced while a download runs — instead of through a
+     * Room Flow that re-runs the whole window query after every 500-row batch.
+     */
+    private val programmeChanges: Flow<Unit>? = null,
+    /** Runs the matcher's writes as one transaction: one list rebuild instead of one per channel. */
+    private val database: RoomDatabase? = null,
+    /** Where the matcher remembers what it last matched from (see [runMatcherIfChanged]). */
+    private val matcherMemo: SharedPreferences? = null,
 ) {
+
+    /** Guide feeds being downloaded right now (several syncs can overlap: start-up, worker, refresh). */
+    private val downloads = java.util.concurrent.atomic.AtomicInteger()
+    private val _downloading = MutableStateFlow(false)
+
+    /** True while any guide feed is being downloaded and written batch by batch. */
+    val downloading: StateFlow<Boolean> = _downloading.asStateFlow()
 
     data class SyncSummary(
         val feedsSucceeded: Int,
@@ -84,8 +110,18 @@ class EpgRepository(
 
     fun observeFeeds(): Flow<List<EpgFeed>> = feedDao.observeAll()
 
-    fun observeWindow(fromUtcMillis: Long, toUtcMillis: Long): Flow<List<Programme>> =
-        programmeDao.observeWindow(fromUtcMillis, toUtcMillis)
+    /**
+     * Everything overlapping the window, re-read when the guide changes. While a download is
+     * writing, at most once per [DOWNLOAD_REFRESH_MILLIS] and once more when it ends: the same
+     * rows land on screen, without re-reading and regrouping the whole window for every batch.
+     */
+    fun observeWindow(fromUtcMillis: Long, toUtcMillis: Long): Flow<List<Programme>> {
+        val changes = programmeChanges ?: return programmeDao.observeWindow(fromUtcMillis, toUtcMillis)
+        return changes
+            .throttleWhile(downloading, DOWNLOAD_REFRESH_MILLIS)
+            .conflate()
+            .map { programmeDao.window(fromUtcMillis, toUtcMillis) }
+    }
 
     fun observeNow(nowUtcMillis: Long): Flow<List<Programme>> =
         programmeDao.observeNow(nowUtcMillis)
@@ -201,7 +237,7 @@ class EpgRepository(
                     succeeded++
                     continue
                 }
-                when (val result = syncFeed(feed, nowUtcMillis)) {
+                when (val result = downloadingWhile { syncFeed(feed, nowUtcMillis) }) {
                     is FeedResult.Success -> {
                         succeeded++
                         written += result.programmes
@@ -225,11 +261,20 @@ class EpgRepository(
                 programmeDao.deleteEndedBefore(nowUtcMillis - RETENTION_PAST_MILLIS)
             }
 
-            val (matched, total) = runMatcher()
+            val (matched, total) = runMatcherIfChanged()
             // New programmes: the Search screen's title index follows (a couple of seconds).
             if (written > 0) searchIndex?.rebuild() else searchIndex?.ensureFresh()
             SyncSummary(succeeded, failed, written, matched, total)
         }
+
+    private suspend fun <T> downloadingWhile(block: suspend () -> T): T {
+        _downloading.value = downloads.incrementAndGet() > 0
+        try {
+            return block()
+        } finally {
+            _downloading.value = downloads.decrementAndGet() > 0
+        }
+    }
 
     private sealed interface FeedResult {
         data class Success(val programmes: Int, val channels: Int) : FeedResult
@@ -328,11 +373,53 @@ class EpgRepository(
     // ---- Matching --------------------------------------------------------------------------
 
     /**
+     * [runMatcher], unless nothing it reads has changed since it last ran: the same channels (name,
+     * key, guide ids, logos, its own last answers), the same guide feeds at the same download, the
+     * same guide channels with programmes left and the same name rules. Then its answer would be
+     * the one already stored, so the work — every channel against every guide, at every launch —
+     * is skipped. Explicit requests (regroup, a restore) call [runMatcher] and always run.
+     */
+    suspend fun runMatcherIfChanged(): Pair<Int, Int> {
+        val memo = matcherMemo ?: return runMatcher()
+        val startedAt = System.currentTimeMillis()
+        val inputs = runCatching { matcherInputs() }.getOrNull()
+        if (inputs != null && memo.getString(KEY_MATCH_INPUTS, null) == inputs) {
+            val matched = memo.getInt(KEY_MATCHED, -1)
+            val total = memo.getInt(KEY_TOTAL, -1)
+            if (matched >= 0 && total >= 0) {
+                app.opentv.core.EventLog.log("guide", "matcher skipped, nothing changed (${System.currentTimeMillis() - startedAt} ms)")
+                return matched to total
+            }
+        }
+        return runMatcher()
+    }
+
+    /** A fingerprint of everything [runMatcher] reads (see [runMatcherIfChanged]). */
+    private suspend fun matcherInputs(): String {
+        val feeds = feedDao.enabled().sortedBy { it.id }
+            .joinToString(",") { "${it.id}@${it.lastSyncMillis}/${it.providerSourceId}" }
+        val populated = programmeDao.channelIdsWithProgrammes().sorted()
+        val aliases = aliasDao.count()
+        val rows = channelDao.matchInputs()
+        var hash = 17L
+        for (row in rows) hash = hash * 31 + row.hashCode()
+        return "m$MATCHER_INPUTS_VERSION|n${CatalogRepository.NORMALIZER_VERSION}|$feeds|a$aliases|" +
+            "${populated.size}:${populated.hashCode()}|${rows.size}:$hash"
+    }
+
+    /** How many times [runMatcher] has really run in this process — for tests. */
+    @androidx.annotation.VisibleForTesting
+    internal var matcherRuns = 0
+
+    /**
      * Joins every channel to the merged guide by normalised name.
      * Returns (channels with a working guide id, total channels).
      */
     suspend fun runMatcher(): Pair<Int, Int> {
+        matcherRuns++
         val startedAt = System.currentTimeMillis()
+        // Every change is collected and written at the end in one transaction (see [database]).
+        val writes = ArrayList<suspend () -> Unit>()
         // Only ids that actually have programmes count — and only those are matched to. A
         // guide that lists a channel but never fills it (epgshare's empty `TG.NORBA.24.it`)
         // must not win over another guide that does.
@@ -419,7 +506,7 @@ class EpgRepository(
             val exactByName = named?.takeIf { it.tier == EpgMatcher.Tier.EXACT }?.epgId
             val provider = channel.epgChannelId?.takeIf { populated(it) && providerAgrees(channel, it, exactByName) }
             val newMatch = provider ?: named?.epgId
-            if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
+            if (newMatch != channel.matchedEpgId) writes += { channelDao.setMatchedEpgId(channel.id, newMatch) }
             val working = (listOfNotNull(channel.epgOverrideId, newMatch)).firstOrNull(::populated)
             if (working != null) {
                 matched++
@@ -430,7 +517,7 @@ class EpgRepository(
             val guideLogo = guideLogoOf(channel.groupKey, working)
             guideLogo?.let { baseGuideLogo.putIfAbsent(channel.groupKey, it) }
             if (guideLogo != null) guideLogos++
-            if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
+            if (guideLogo != channel.guideLogoUrl) writes += { channelDao.setGuideLogo(channel.id, guideLogo) }
         }
 
         // Pass 2: `+1`/`+2`/`+3` copies. Their own guide if one exists; otherwise the base
@@ -455,23 +542,39 @@ class EpgRepository(
                 providerOwn != null -> providerOwn
                 else -> null
             }
-            if (newMatch != channel.matchedEpgId) channelDao.setMatchedEpgId(channel.id, newMatch)
+            if (newMatch != channel.matchedEpgId) writes += { channelDao.setMatchedEpgId(channel.id, newMatch) }
             if (populated(channel.epgOverrideId) || newMatch != null) matched++
-            if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { channelDao.setLogo(channel.id, it) }
+            if (channel.logoUrl.isNullOrBlank()) baseLogo[baseKey]?.let { logo -> writes += { channelDao.setLogo(channel.id, logo) } }
             // The base channel's logo first: a `+1` is the same channel, and guides often give
             // the copies a poorer icon or a mismatched one.
             val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own?.epgId).firstOrNull(::populated)
             val guideLogo = baseGuideLogo[baseKey] ?: ownGuide?.let { guideLogoOf(channel.groupKey, it) }
             if (guideLogo != null) guideLogos++
-            if (guideLogo != channel.guideLogoUrl) channelDao.setGuideLogo(channel.id, guideLogo)
+            if (guideLogo != channel.guideLogoUrl) writes += { channelDao.setGuideLogo(channel.id, guideLogo) }
         }
 
+        if (writes.isNotEmpty()) {
+            val db = database
+            if (db != null) db.withTransaction { for (write in writes) write() } else for (write in writes) write()
+        }
+        val took = System.currentTimeMillis() - startedAt
         Log.i(
             TAG,
             "Matcher: $matched of ${channels.size} channels have a working guide " +
-                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo) " +
-                "in ${System.currentTimeMillis() - startedAt} ms",
+                "(${counts.size} populated guide channels, ${shifted.size} timeshift copies, $guideLogos with a guide logo, " +
+                "${writes.size} changes) in $took ms",
         )
+        app.opentv.core.EventLog.log("guide", "matcher ran: ${channels.size} channels, ${writes.size} changes, $took ms")
+        // What it matched from, read after its own writes: the next unchanged start skips it.
+        matcherMemo?.let { memo ->
+            runCatching { matcherInputs() }.getOrNull()?.let { inputs ->
+                memo.edit()
+                    .putString(KEY_MATCH_INPUTS, inputs)
+                    .putInt(KEY_MATCHED, matched)
+                    .putInt(KEY_TOTAL, channels.size)
+                    .apply()
+            }
+        }
         return matched to channels.size
     }
 
@@ -561,6 +664,15 @@ class EpgRepository(
 
         /** Writes per transaction. Large enough to be fast, small enough not to hold WAL open. */
         const val BATCH_SIZE = 500
+
+        /** Bump whenever [runMatcher]'s logic changes, so the next start matches again. */
+        const val MATCHER_INPUTS_VERSION = 1
+        private const val KEY_MATCH_INPUTS = "inputs"
+        private const val KEY_MATCHED = "matched"
+        private const val KEY_TOTAL = "total"
+
+        /** How often the guide on screen catches up with a download still in progress. */
+        const val DOWNLOAD_REFRESH_MILLIS = 20_000L
 
         /** Keep finished programmes for a day so "what was on" still works. */
         val RETENTION_PAST_MILLIS: Long = TimeUnit.DAYS.toMillis(1)
