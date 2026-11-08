@@ -658,6 +658,10 @@
     <string name="stream_info_buffer">Buffer</string>
     <string name="stream_info_live_delay">Ritardo sulla diretta</string>
     <string name="stream_info_format">Formato</string>
+    <string name="vod_ends_at">Termina alle</string>
+    <string name="stream_info_nerd_title">Statistiche per nerd</string>
+    <string name="stream_info_file">File</string>
+    <string name="stream_info_screen">Schermo</string>
     <string name="player_channel_unavailable">Canale non disponibile</string>
     <string name="player_channel_unavailable_hint">OK per riprovare · ↑/↓ per cambiare canale</string>
     <string name="settings_grouping_title">Raggruppamento canali</string>

@@ -725,6 +725,10 @@
     <string name="stream_info_buffer">Buffer</string>
     <string name="stream_info_live_delay">Behind live</string>
     <string name="stream_info_format">Format</string>
+    <string name="vod_ends_at">Ends at</string>
+    <string name="stream_info_nerd_title">Stats for nerds</string>
+    <string name="stream_info_file">File</string>
+    <string name="stream_info_screen">Screen</string>
     <string name="player_channel_unavailable">Channel not available</string>
     <string name="player_channel_unavailable_hint">OK to try again · ↑/↓ to change channel</string>
     <string name="settings_grouping_title">Channel grouping</string>

@@ -1507,7 +1507,13 @@ private fun StreamBadges(badges: List<String>) {
 
 /** The full technical read-out, like Kodi's codec info: what the stream is and how it's playing. */
 @Composable
-private fun StreamInfoPanel(info: StreamInfo.Snapshot?, modifier: Modifier = Modifier) {
+internal fun StreamInfoPanel(
+    info: StreamInfo.Snapshot?,
+    modifier: Modifier = Modifier,
+    /** Rows only some players know (the film player's file and screen), shown after the format. */
+    extraRows: List<Pair<String, String>> = emptyList(),
+    title: String? = null,
+) {
     val hardware = stringResource(R.string.stream_info_hardware)
     val software = stringResource(R.string.stream_info_software)
     val rows = buildList {
@@ -1528,6 +1534,7 @@ private fun StreamInfoPanel(info: StreamInfo.Snapshot?, modifier: Modifier = Mod
                 )
             }
             info.container?.let { add(stringResource(R.string.stream_info_format) to it) }
+            addAll(extraRows)
             listOfNotNull(info.download, info.downloaded).takeIf { it.isNotEmpty() }
                 ?.let { add(stringResource(R.string.stream_info_network) to it.joinToString(" · ")) }
             add(stringResource(R.string.stream_info_buffer) to String.format(Locale.getDefault(), "%.1f s", info.bufferedSeconds))
@@ -1544,7 +1551,7 @@ private fun StreamInfoPanel(info: StreamInfo.Snapshot?, modifier: Modifier = Mod
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Text(
-            stringResource(R.string.stream_info_title),
+            title ?: stringResource(R.string.stream_info_title),
             style = MaterialTheme.typography.titleMedium,
             color = Color.White.copy(alpha = 0.7f),
         )

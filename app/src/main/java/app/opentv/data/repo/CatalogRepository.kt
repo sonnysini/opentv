@@ -314,6 +314,24 @@ class CatalogRepository(
 
     suspend fun series(id: Long): app.opentv.data.model.Series? = seriesDao.byId(id)
 
+    /**
+     * What the film player shows as its heading: the film's or show's name and TMDB id (for its
+     * logo) and, for an episode, which one. Found by the player's key ("movie:7", "ep:12"); null
+     * for anything else (recordings, catch-up), which keep the plain title they were opened with.
+     */
+    suspend fun playerHeading(mediaKey: String): PlayerHeading? = withContext(Dispatchers.IO) {
+        val id = mediaKey.substringAfter(':').toLongOrNull() ?: return@withContext null
+        when (mediaKey.substringBefore(':')) {
+            "movie" -> movieDao.byId(id)?.let { PlayerHeading(VodTitleCleaner.clean(it.name), it.tmdbId, isMovie = true) }
+            "ep" -> {
+                val ep = episodeDao.byId(id) ?: return@withContext null
+                val show = seriesDao.byProviderId(ep.sourceId, ep.seriesId) ?: return@withContext null
+                PlayerHeading(VodTitleCleaner.clean(show.name), show.tmdbId, isMovie = false, episode = ep)
+            }
+            else -> null
+        }
+    }
+
     // ---- Netflix-style home feeds ---------------------------------------------------------------
     // All local: derived from the catalogue already on disk plus the active profile's watch history.
     // Every row is a bounded SQL read — never a scan of the whole library into memory. A provider
@@ -1390,3 +1408,11 @@ class CatalogRepository(
         private const val MAX_MERGE_HOPS = 8
     }
 }
+
+/** The film player's heading — see [CatalogRepository.playerHeading]. */
+data class PlayerHeading(
+    val title: String,
+    val tmdbId: String?,
+    val isMovie: Boolean,
+    val episode: Episode? = null,
+)

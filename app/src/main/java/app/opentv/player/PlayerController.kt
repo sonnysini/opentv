@@ -142,6 +142,9 @@ class PlayerController(
 
     /** Bytes read off the network so far, for the download speed in the stream info panel. */
     private val bytesLoaded = AtomicLong()
+
+    /** The whole file's size in bytes when the server said it (the pinning probe's Content-Range); -1 otherwise. */
+    @Volatile private var fileBytes = -1L
     @Volatile private var videoDecoderName: String? = null
     @Volatile private var audioDecoderName: String? = null
 
@@ -348,6 +351,7 @@ class PlayerController(
             consecutiveFailures = 0
             httpFactory.setDefaultRequestProperties(mapOf("User-Agent" to request.userAgent))
             bytesLoaded.set(0)
+            fileBytes = -1L
             _state.value = State.Buffering(request.title)
 
             val uri = if (vod && !request.isLive) pinnedUrl(request) else request.url
@@ -402,6 +406,9 @@ class PlayerController(
                         .header("Range", "bytes=0-0")
                         .build()
                     httpClient.newCall(probe).execute().use { response ->
+                        // "bytes 0-0/1234567" — the total after the slash is the file's size.
+                        response.header("Content-Range")?.substringAfterLast('/', "")?.toLongOrNull()
+                            ?.takeIf { it > 0 }?.let { fileBytes = it }
                         response.request.url.toString().takeIf { response.isSuccessful }
                     }
                 }.getOrNull()
@@ -457,6 +464,8 @@ class PlayerController(
         val bytesLoaded: Long,
         /** HLS, DASH or MPEG-TS, told from the stream's address; null when it doesn't say. */
         val streamMime: String?,
+        /** The film file's size in bytes, when known (VOD over HTTP, or a local file); null otherwise. */
+        val fileBytes: Long? = null,
     )
 
     fun stats(): Stats {
@@ -475,7 +484,14 @@ class PlayerController(
             liveOffsetMillis = player.currentLiveOffset,
             bytesLoaded = bytesLoaded.get(),
             streamMime = player.currentMediaItem?.localConfiguration?.let { streamMimeOf(it.uri, it.mimeType) },
+            fileBytes = fileBytes.takeIf { it > 0 } ?: localFileBytes(),
         )
+    }
+
+    private fun localFileBytes(): Long? {
+        val uri = player.currentMediaItem?.localConfiguration?.uri ?: return null
+        if (uri.scheme != "file") return null
+        return uri.path?.let { java.io.File(it).length() }?.takeIf { it > 0 }
     }
 
     private fun streamMimeOf(uri: android.net.Uri, declared: String?): String? = when (Util.inferContentTypeForUriAndMimeType(uri, declared)) {

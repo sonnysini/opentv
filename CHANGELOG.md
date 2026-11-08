@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.54.0 — 8 November 2026
+
+- **Film player: times beside the bar, and when it ends.** Where you are sits at the left end of
+  the seek bar and the length at the right, in place of "1:02:13 / 2:46:12 −1:43:59" by the
+  buttons. With the bar up, the top right corner says when the film ends ("Ends at 23:14").
+- **The title's own lettering in the player.** Films and shows show their TMDB logo above the bar,
+  as on their pages (the name when there's none); an episode adds "S4 · E7 · name" under it.
+- **Stats for nerds.** A new i button in the film player opens the stream read-out of the live
+  player, plus the file (container and size, e.g. "MKV · 22.8 GB") and the screen's mode
+  ("3840×2160 · 60 Hz"). It stays up with the bar hidden; i again or Back closes it.
+
 ## 0.53.1 — 8 November 2026
 
 - **One look for the selected card.** Every card with a picture (films, shows, Continue

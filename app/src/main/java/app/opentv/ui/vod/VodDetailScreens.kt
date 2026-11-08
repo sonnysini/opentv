@@ -521,7 +521,7 @@ private fun EpisodeCard(ep: Episode, fallbackArt: String?, position: PlaybackPos
 /** Provider episode titles repeat the show and the code ("Bleach (2004) - S01E03 - Title"): keep the title. */
 private val EPISODE_PREFIX = Regex("""^.*?\bS\d{1,3}\s*E\d{1,4}\b[\s\-–:·.]*""", RegexOption.IGNORE_CASE)
 
-private fun episodeName(ep: Episode): String? = EPISODE_PREFIX.replace(ep.title, "").trim().takeIf { it.isNotEmpty() }
+internal fun episodeName(ep: Episode): String? = EPISODE_PREFIX.replace(ep.title, "").trim().takeIf { it.isNotEmpty() }
 
 private fun episodePlayerTitle(ep: Episode): String = "S${ep.season}E${ep.episodeNumber} · ${episodeName(ep) ?: ep.title}"
 
