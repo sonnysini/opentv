@@ -165,7 +165,7 @@ fun SearchScreen(
     }
     BackHandler { onBack() }
 
-    val submit = {
+    val submit: () -> Unit = {
         viewModel.search(text, now = true)
         keyboard?.hide()
         toResults++
