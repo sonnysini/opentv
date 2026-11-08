@@ -219,7 +219,9 @@ fun MoviesScreen(
                 }
             }
         } else {
-            val genreId = genres[tab - 1].key
+            // The list's content can be re-read with the new tab a beat before this screen swaps to
+            // the All layout (tab == allTab, past the last genre): nothing to add then.
+            val genreId = genres.getOrNull(tab - 1)?.key ?: return@LazyColumn
             val hits = genreHits[genreId]
             item(key = "load:$genreId") { LaunchedEffect(genreId) { if (hits == null) viewModel.loadMovieGenre(genreId) } }
             when {
@@ -385,7 +387,9 @@ fun SeriesScreen(
                 }
             }
         } else {
-            val genreId = genres[tab - 1].key
+            // The list's content can be re-read with the new tab a beat before this screen swaps to
+            // the All layout (tab == allTab, past the last genre): nothing to add then.
+            val genreId = genres.getOrNull(tab - 1)?.key ?: return@LazyColumn
             val hits = genreHits[genreId]
             item(key = "load:$genreId") { LaunchedEffect(genreId) { if (hits == null) viewModel.loadSeriesGenre(genreId) } }
             when {
