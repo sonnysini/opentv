@@ -1519,7 +1519,7 @@ internal fun MatchTile(
                 .aspectRatio(16f / 9f)
                 .clip(shape)
                 .then(if (m.goals) Modifier.background(goalShowBrush(m.league)) else Modifier.split(TeamColors.of(m.home), TeamColors.of(m.away)))
-                .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
+                .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier),
         ) {
             if (m.goals) {
                 // The goal show: the competition's logo and "DIRETTA GOL" on its colour, no chip.

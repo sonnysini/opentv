@@ -516,7 +516,7 @@ private fun Card(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .clip(shape)
-                .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier),
+                .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier),
             content = art,
         )
         Text(

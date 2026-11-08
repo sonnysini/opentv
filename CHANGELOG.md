@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.53.1 — 8 November 2026
+
+- **One look for the selected card.** Every card with a picture (films, shows, Continue
+  watching, episodes, football games, search results) now shows the selection with the same
+  white 3dp outline; before, films and shows used a green one and football a thinner white one.
+  Rows, buttons and the guide stay green.
+
 ## 0.53.0 — 8 November 2026
 
 - **A new Search.** The bar on top opens the TV's own keyboard straight away (on a Fire TV, the
