@@ -543,7 +543,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun load() {
         val now = System.currentTimeMillis()
         val today = repo.today().map { byClock(it, now) }
-        val upcoming = FootballRepository.sameMatchday(today, repo.upcoming())
+        val upcoming = FootballRepository.nextMatchdays(today, repo.upcoming())
         if (today.isEmpty() && upcoming.isEmpty()) {
             _ui.value = _ui.value.copy(loading = false, failed = _ui.value.hero == null && _ui.value.rows.isEmpty())
             return

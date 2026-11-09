@@ -1713,12 +1713,18 @@ private fun title(m: Match): AnnotatedString = buildAnnotatedString {
 /** Under a tile: the teams, never the score. */
 private fun name(m: Match): String = if (m.goals) m.home.name else "${m.home.name} – ${m.away.name}"
 
-/** The tile's chip: day and kick-off ("OGGI 21:00", "GIO 18:45"), LIVE minute, Highlights. */
+/** The tile's chip: day and kick-off ("OGGI 21:00", "GIO 18:45", "SAB 21 15:00"), LIVE minute, Highlights. */
 @Composable
 private fun chip(m: Match, highlights: String?): String = when (m.phase) {
     Phase.SCHEDULED -> {
         val at = Instant.ofEpochMilli(m.kickoffUtcMillis).atZone(ZoneId.systemDefault())
-        val day = if (at.toLocalDate() == LocalDate.now()) stringResource(R.string.football_today) else WEEKDAY.format(at).trimEnd('.')
+        val date = at.toLocalDate()
+        // Past this week the weekday alone is ambiguous: "SAB 21 15:00".
+        val day = when {
+            date == LocalDate.now() -> stringResource(R.string.football_today)
+            date > LocalDate.now().plusDays(6) -> DAY.format(at).replace(".", "")
+            else -> WEEKDAY.format(at).trimEnd('.')
+        }
         day.uppercase() + " " + TIME.format(at)
     }
     Phase.LIVE -> if (m.goals) stringResource(R.string.football_live) else m.minute ?: stringResource(R.string.football_live)
