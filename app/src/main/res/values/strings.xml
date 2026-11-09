@@ -551,6 +551,8 @@
     <string name="vod_sync_progress">Updating catalogue… %1$s movies · %2$s shows</string>
     <string name="vod_no_shows">No shows</string>
     <string name="vod_no_shows_provider">This provider didn\'t return any shows.</string>
+    <string name="vod_category_empty_movies">The provider has no films in this category.</string>
+    <string name="vod_category_empty_shows">The provider has no shows in this category.</string>
     <string name="vod_no_shows_add">Add a provider to see its shows here.</string>
     <string name="vod_loading_episodes">Loading episodes…</string>
     <string name="vod_all">All</string>

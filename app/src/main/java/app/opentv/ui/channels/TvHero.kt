@@ -41,12 +41,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -175,7 +177,7 @@ fun TvHero(
                         below?.let { down = it }
                     },
             )
-            Dots(items.size, index, turn.value, Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 18.dp))
+            TurnDots(items.size, index, { turn.value }, Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 18.dp))
         }
     }
 }
@@ -322,17 +324,28 @@ private fun WatchButton(
     )
 }
 
-/** One dot per programme; this one's is a pill filling up until the next turns over. */
+/**
+ * One dot per programme; this one's is a pill filling up until the next turns over.
+ * [turned] is read only while drawing, so the fill moves every frame without recomposing the hero.
+ */
 @Composable
-private fun Dots(count: Int, current: Int, turned: Float, modifier: Modifier = Modifier) {
+internal fun TurnDots(count: Int, current: Int, turned: () -> Float, modifier: Modifier = Modifier) {
     if (count < 2) return
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(count) { i ->
             val dim = Color.White.copy(alpha = 0.28f)
             if (i == current) {
-                Box(Modifier.width(28.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(dim)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(turned.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(3.dp)).background(Color.White))
-                }
+                Box(
+                    Modifier
+                        .width(28.dp)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(dim)
+                        .drawBehind {
+                            val r = CornerRadius(size.height / 2)
+                            drawRoundRect(Color.White, size = size.copy(width = size.width * turned().coerceIn(0.05f, 1f)), cornerRadius = r)
+                        },
+                )
             } else {
                 Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(dim))
             }

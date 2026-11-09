@@ -26,10 +26,16 @@ import app.opentv.data.parser.XmltvParser
 import app.opentv.data.remote.XtreamApi
 import java.io.BufferedInputStream
 import java.io.InputStream
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import app.opentv.data.db.throttleWhile
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +44,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -224,7 +232,33 @@ class EpgRepository(
 
     /** Downloads every enabled feed, merges, prunes, and re-runs the matcher. */
     suspend fun syncAll(nowUtcMillis: Long, force: Boolean = false): SyncSummary =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { syncLock.withLock { syncAllLocked(nowUtcMillis, force) } }
+
+    /**
+     * One pass at a time: launch, the background worker and the refresh button can all ask at
+     * once. The second waits, then finds the feeds fresh and the matcher's fingerprint unchanged,
+     * so it costs nothing instead of downloading and matching everything a second time.
+     */
+    private val syncLock = Mutex()
+
+    /**
+     * "Refresh the guide now", run outside any screen: leaving the guide settings no longer
+     * cancels a download halfway. A second tap while one is running joins it.
+     */
+    private val manualScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var manual: Deferred<SyncSummary>? = null
+
+    fun refreshNow(): Deferred<SyncSummary> = synchronized(this) {
+        manual?.takeIf { it.isActive } ?: manualScope.async {
+            syncAll(System.currentTimeMillis(), force = true)
+        }.also { manual = it }
+    }
+
+    /** The manual refresh still running, if any (a screen reopened mid-download picks it up). */
+    fun runningRefresh(): Deferred<SyncSummary>? = manual?.takeIf { it.isActive }
+
+    private suspend fun syncAllLocked(nowUtcMillis: Long, force: Boolean): SyncSummary =
+        run {
             ensureFeeds()
             maybeAutoEnableRegionalFeed()
 
@@ -233,7 +267,7 @@ class EpgRepository(
             var written = 0
 
             for (feed in feedDao.enabled()) {
-                if (!force && nowUtcMillis - feed.lastSyncMillis < REFRESH_INTERVAL_MILLIS) {
+                if (!force && syncedToday(feed.lastSyncMillis, nowUtcMillis)) {
                     succeeded++
                     continue
                 }
@@ -677,8 +711,18 @@ class EpgRepository(
         /** Keep finished programmes for a day so "what was on" still works. */
         val RETENTION_PAST_MILLIS: Long = TimeUnit.DAYS.toMillis(1)
 
-        /** Feeds publish rolling windows; refreshing more often than this is rude. */
-        val REFRESH_INTERVAL_MILLIS: Long = TimeUnit.HOURS.toMillis(6)
+        /**
+         * A guide is good for the whole day: once it landed today (local calendar day), it isn't
+         * downloaded again until tomorrow's first sync. A late change on air (a special news
+         * edition) is what the "refresh the guide now" button is for (force = true).
+         */
+        fun syncedToday(lastSyncMillis: Long, nowMillis: Long, zone: TimeZone = TimeZone.getDefault()): Boolean {
+            if (lastSyncMillis <= 0L || lastSyncMillis > nowMillis) return false
+            val last = Calendar.getInstance(zone).apply { timeInMillis = lastSyncMillis }
+            val now = Calendar.getInstance(zone).apply { timeInMillis = nowMillis }
+            return last.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
+                last.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
+        }
 
         /**
          * The curated built-in list. Criteria for being here: free, no key or signup,

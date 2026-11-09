@@ -1019,6 +1019,7 @@ class EpgViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { graph.epgRepository.ensureFeeds() }
+        graph.epgRepository.runningRefresh()?.let { follow(it) }
         viewModelScope.launch {
             graph.epgRepository.observeFeeds().collect { feeds ->
                 _ui.value = _ui.value.copy(feeds = feeds)
@@ -1046,9 +1047,17 @@ class EpgViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         if (_ui.value.syncing) return
+        follow(graph.epgRepository.refreshNow())
+    }
+
+    /** Shows a manual refresh through to its result; the download itself outlives this screen. */
+    private fun follow(job: kotlinx.coroutines.Deferred<EpgRepository.SyncSummary>) {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(syncing = true, statusLine = AppText.get(R.string.epg_downloading))
-            val summary = graph.epgRepository.syncAll(System.currentTimeMillis(), force = true)
+            val summary = runCatching { job.await() }.getOrElse {
+                _ui.value = _ui.value.copy(syncing = false, statusLine = null)
+                return@launch
+            }
             _ui.value = _ui.value.copy(
                 syncing = false,
                 statusLine = AppText.get(R.string.epg_matched, summary.channelsMatched, summary.channelsTotal) +
@@ -1216,14 +1225,16 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val movies: StateFlow<List<Movie>> = movieCategory
-        .flatMapLatest { graph.catalogRepository.observeMovies(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** null while the category's list is loading; empty once it's known to have nothing. */
+    val movies: StateFlow<List<Movie>?> = movieCategory
+        .flatMapLatest { id -> graph.catalogRepository.observeMovies(id).map<List<Movie>, List<Movie>?> { it }.onStart { emit(null) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val series: StateFlow<List<Series>> = seriesCategory
-        .flatMapLatest { graph.catalogRepository.observeSeries(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** null while the category's list is loading; empty once it's known to have nothing. */
+    val series: StateFlow<List<Series>?> = seriesCategory
+        .flatMapLatest { id -> graph.catalogRepository.observeSeries(id).map<List<Series>, List<Series>?> { it }.onStart { emit(null) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun selectMovieCategory(id: String?) { movieCategory.value = id }
 

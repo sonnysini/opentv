@@ -21,6 +21,17 @@ behind them.
   `synchronous=NORMAL`): the stick's slow flash was most of the cost of a guide download.
 - **Tonight's stills prefetched at their size.** The start-up prefetch decodes them at the size
   the top of the live page draws them, not at the source's full resolution.
+- **Carousels stop redrawing every frame.** The little bar filling up under the carousels (live
+  page, Films/Shows, Football) was redrawing the whole carousel 60 times a second — on Football
+  the whole page. Now only the bar is redrawn: same look, ~a third of the CPU back on a still page.
+- **The guide downloads once a day.** The first sync of the day fetches it, then it's left alone
+  until tomorrow (was: again every 6 hours). "Refresh the guide now" is there for a late change.
+- **One guide sync at a time.** Launch, the background job and the refresh button could start two
+  downloads and two matcher runs together; the second now waits and finds nothing to do.
+- **"Refresh the guide now" keeps going after you leave the screen.** It used to stop halfway when
+  you left the guide settings; reopening them shows it still running.
+- **Empty film/show categories say so.** A category the provider leaves empty showed "Loading
+  films" forever; it now says it's empty.
 - **Fix: Films/Shows "All" tab crashed the app.** Opening the last tab could read one genre past
   the end of the list for a frame (`Index: 8, Size: 8`) and close the app; it now waits for the
   All layout instead. Broken since 0.42 (3 November).
