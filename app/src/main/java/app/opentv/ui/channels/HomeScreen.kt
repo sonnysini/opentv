@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.Intent
 import android.view.WindowManager
@@ -225,12 +226,16 @@ fun HomeScreen(
         }
     }
 
-    // Re-evaluate "now" once a minute so progress bars advance without leaving the screen.
+    // Re-evaluate "now" on each minute so progress bars advance without leaving the screen; only
+    // while the app is on screen (pressing Home stops it, coming back catches up at once).
+    val tickLifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(Unit) {
-        while (true) {
-            nowMillis = System.currentTimeMillis()
-            viewModel.tick()
-            delay(60_000)
+        tickLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                nowMillis = System.currentTimeMillis()
+                viewModel.tick()
+                delay(60_000 - nowMillis % 60_000)
+            }
         }
     }
 
@@ -354,9 +359,14 @@ fun HomeScreen(
     // just drops the ones over and retries a read that failed.
     val highlights by androidx.compose.runtime.produceState(graph.tvHighlightsRepository.cached().orEmpty(), fullscreen) {
         if (!fullscreen) return@produceState
-        while (true) {
-            value = graph.tvHighlightsRepository.tonight()
-            delay(HIGHLIGHTS_REFRESH_MILLIS)
+        // No polling: woken when the next programme ends (or at midnight for tomorrow's), and only
+        // after a read that failed sooner, to try again. Paused while the app is in the background.
+        tickLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                val now = System.currentTimeMillis()
+                value = graph.tvHighlightsRepository.tonight(now)
+                delay(graph.tvHighlightsRepository.nextChangeAt(now, HIGHLIGHTS_RETRY_MILLIS) - now)
+            }
         }
     }
 
@@ -1205,7 +1215,8 @@ private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 private fun formatTime(utcMillis: Long): String = timeFormat.format(Date(utcMillis))
 
-private const val HIGHLIGHTS_REFRESH_MILLIS = 5 * 60_000L
+/** After a read of tonight's programmes that failed: when to try again. */
+private const val HIGHLIGHTS_RETRY_MILLIS = 5 * 60_000L
 
 /** Days from [now]'s day to [at]'s, in the device's time zone (0 = today, 1 = tomorrow). */
 private fun dayOffsetOf(at: Long, now: Long): Int {

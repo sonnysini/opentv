@@ -41,8 +41,11 @@ class OpenTvApp : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .memoryCache {
+                // A quarter of the heap, capped: with largeHeap that would be ~96 MB of bitmaps,
+                // a lot on a 1 GB stick for a screen that shows a few dozen images at a time
+                // (~350 posters fit in 48 MB). Coil already trims it when the system asks.
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizeBytes(minOf(Runtime.getRuntime().maxMemory() / 4, IMAGE_MEMORY_CAP_BYTES).toInt())
                     .build()
             }
             .diskCache {
@@ -182,3 +185,6 @@ private const val VOD_AUTOSTART_DELAY_MILLIS = 30_000L
 
 /** How long after launch the Film and Shows homes are built in the background. */
 private const val VOD_WARM_UP_DELAY_MILLIS = 8_000L
+
+/** Most memory the decoded-image cache may hold. */
+private const val IMAGE_MEMORY_CAP_BYTES = 48L * 1024 * 1024

@@ -32,6 +32,11 @@ behind them.
   you left the guide settings; reopening them shows it still running.
 - **Empty film/show categories say so.** A category the provider leaves empty showed "Loading
   films" forever; it now says it's empty.
+- **Tonight's carousel without polling.** It was re-read every 5 minutes; now it's read once a day
+  and woken only when a programme on it ends (or at midnight), retrying sooner only if the day's
+  read failed. Both the minute clock of the live page and this pause while the app is in the
+  background.
+- **Image memory cache capped at 48 MB** (was a quarter of the heap, ~96 MB on the stick).
 - **Fix: Films/Shows "All" tab crashed the app.** Opening the last tab could read one genre past
   the end of the list for a frame (`Index: 8, Size: 8`) and close the app; it now waits for the
   All layout instead. Broken since 0.42 (3 November).

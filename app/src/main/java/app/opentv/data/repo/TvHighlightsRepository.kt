@@ -107,6 +107,18 @@ class TvHighlightsRepository(
         (fresh ?: stored?.items.orEmpty()).filter { it.endUtcMillis > now }
     }
 
+    /**
+     * When [tonight] can next give a different answer: the end of the next programme still on, or
+     * midnight for tomorrow's read. Today's read missing (it failed): [retryMillis] from [now].
+     */
+    fun nextChangeAt(now: Long, retryMillis: Long): Long {
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val s = stored?.takeIf { it.day == today.toString() } ?: return now + retryMillis
+        val midnight = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val nextEnd = s.items.map { it.endUtcMillis }.filter { it > now }.minOrNull() ?: midnight
+        return minOf(nextEnd, midnight) + 1_000
+    }
+
     /** [h]'s channel as the lists have it now, every quality: what its row in the channel list holds. */
     suspend fun channelsFor(h: Highlight): List<Channel> =
         runCatching { channelDao.withGroupKeys(listOf(h.channelKey)) }.getOrElse { emptyList() }
