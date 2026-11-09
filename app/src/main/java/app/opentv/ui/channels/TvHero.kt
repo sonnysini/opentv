@@ -36,6 +36,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -326,11 +328,15 @@ private fun WatchButton(
 
 /**
  * One dot per programme; this one's is a pill filling up until the next turns over.
- * [turned] is read only while drawing, so the fill moves every frame without recomposing the hero.
+ * [turned] is read only while drawing, so the fill never recomposes the carousel; and it moves in
+ * [TURN_STEPS] steps (about a pixel each), so a still page draws ~7 frames a second instead of
+ * redrawing the whole screen at the display's full rate just for this bar.
  */
 @Composable
 internal fun TurnDots(count: Int, current: Int, turned: () -> Float, modifier: Modifier = Modifier) {
     if (count < 2) return
+    val latest by rememberUpdatedState(turned)
+    val stepped = remember { derivedStateOf { (latest() * TURN_STEPS).toInt() / TURN_STEPS.toFloat() } }
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(count) { i ->
             val dim = Color.White.copy(alpha = 0.28f)
@@ -343,7 +349,7 @@ internal fun TurnDots(count: Int, current: Int, turned: () -> Float, modifier: M
                         .background(dim)
                         .drawBehind {
                             val r = CornerRadius(size.height / 2)
-                            drawRoundRect(Color.White, size = size.copy(width = size.width * turned().coerceIn(0.05f, 1f)), cornerRadius = r)
+                            drawRoundRect(Color.White, size = size.copy(width = size.width * stepped.value.coerceIn(0.05f, 1f)), cornerRadius = r)
                         },
                 )
             } else {
@@ -375,3 +381,6 @@ fun heroStillPixels(context: android.content.Context, uiScalePercent: Int): Pair
     return (height * 16 / 9) to height
 }
 private const val TURN_MILLIS = 8_000
+
+/** The fill's 28dp in about one-pixel steps. */
+private const val TURN_STEPS = 56
