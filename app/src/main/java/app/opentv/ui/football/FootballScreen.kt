@@ -22,6 +22,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
+import app.opentv.ui.channels.TurnDots
 import app.opentv.ui.CARD_GAP
 import app.opentv.ui.JustEnough
 import app.opentv.ui.wholeCardsWindow
@@ -465,7 +466,7 @@ fun FootballScreen(
                             },
                             count = ui.heroes.size,
                             at = heroAt,
-                            turned = turn.value,
+                            turned = { turn.value },
                             item = heroItem,
                             firstId = ui.hero!!.match.id,
                             viewModel = viewModel,
@@ -637,7 +638,7 @@ private fun Hero(
     /** The carousel's cards, which one this is, how far it's turned to the next. */
     count: Int,
     at: Int,
-    turned: Float,
+    turned: () -> Float,
     item: FootballViewModel.Item,
     firstId: Long,
     viewModel: FootballViewModel,
@@ -719,7 +720,7 @@ private fun Hero(
             },
             onClick = onWatch,
         )
-        Dots(count, at, turned, Modifier.padding(top = 14.dp, start = 2.dp))
+        TurnDots(count, at, turned, Modifier.padding(top = 14.dp, start = 2.dp))
     }
 }
 
@@ -826,24 +827,6 @@ private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClic
 /** "20:30", in the box's own time. */
 private fun clock(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
-
-/** One dot per card; this one's is a pill filling up until the next turns over. */
-@Composable
-private fun Dots(count: Int, current: Int, turned: Float, modifier: Modifier = Modifier) {
-    if (count < 2) return
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(count) { i ->
-            val dim = Color.White.copy(alpha = 0.28f)
-            if (i == current) {
-                Box(Modifier.width(28.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(dim)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(turned.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(3.dp)).background(Color.White))
-                }
-            } else {
-                Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(dim))
-            }
-        }
-    }
-}
 
 /**
  * One feed in the source list, on two lines: the channel and the quality it claims, big, with

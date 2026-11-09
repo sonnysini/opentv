@@ -71,7 +71,7 @@ class Converters {
         SeriesRule::class,
         Reminder::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -309,6 +309,35 @@ abstract class OpenTvDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v14 → v15: indexes only, no data change. A category read by its id alone (channels,
+         * films, shows) and the film/show name search scanned whole tables; these let SQLite go
+         * straight to the rows. Built once on the first start after the update.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_channels_categoryId` ON `channels` (`categoryId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_movies_categoryId` ON `movies` (`categoryId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_movies_name` ON `movies` (`name`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_series_categoryId` ON `series` (`categoryId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_series_name` ON `series` (`name`)")
+            }
+        }
+
+        /**
+         * Per-connection tuning, applied when Room opens the database. In WAL mode `NORMAL` skips
+         * the flush to storage on every commit (it still flushes at each checkpoint): the database
+         * can't be corrupted by a power cut, at worst the last instants of writes are lost. On a
+         * stick's slow flash that is most of the cost of a guide download's hundreds of commits.
+         */
+        private val TUNING = object : RoomDatabase.Callback() {
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                // execSQL: it runs on the primary (writing) connection, the one that commits.
+                runCatching { db.execSQL("PRAGMA synchronous = NORMAL") }
+            }
+        }
+
         fun build(context: Context): OpenTvDatabase =
             Room.databaseBuilder(context, OpenTvDatabase::class.java, "opentv.db")
                 // WAL keeps guide writes from blocking guide reads, so a background EPG
@@ -317,8 +346,9 @@ abstract class OpenTvDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                     MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-                    MIGRATION_12_14, MIGRATION_13_14,
+                    MIGRATION_12_14, MIGRATION_13_14, MIGRATION_14_15,
                 )
+                .addCallback(TUNING)
                 /*
                  * Only v1 (pre-release, no migration path) is still dropped and rebuilt.
                  * Every later schema change must ship a Migration: a missing one now fails

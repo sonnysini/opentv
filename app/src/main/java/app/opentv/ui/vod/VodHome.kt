@@ -78,6 +78,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.opentv.ui.channels.TurnDots
 import app.opentv.R
 import app.opentv.data.model.Movie
 import app.opentv.data.model.Series
@@ -208,7 +209,7 @@ internal fun VodHero(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            HeroDots(slides.size, index, turn.value)
+            TurnDots(slides.size, index, { turn.value })
         }
     }
 }
@@ -410,23 +411,6 @@ internal fun HeroButton(
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 22.dp, vertical = 10.dp),
     )
-}
-
-@Composable
-private fun HeroDots(count: Int, current: Int, turned: Float) {
-    if (count < 2) return
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(count) { i ->
-            val dim = Color.White.copy(alpha = 0.28f)
-            if (i == current) {
-                Box(Modifier.width(28.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(dim)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(turned.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(3.dp)).background(Color.White))
-                }
-            } else {
-                Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(dim))
-            }
-        }
-    }
 }
 
 /**

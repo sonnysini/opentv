@@ -41,8 +41,11 @@ class OpenTvApp : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .memoryCache {
+                // A quarter of the heap, capped: with largeHeap that would be ~96 MB of bitmaps,
+                // a lot on a 1 GB stick for a screen that shows a few dozen images at a time
+                // (~350 posters fit in 48 MB). Coil already trims it when the system asks.
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizeBytes(minOf(Runtime.getRuntime().maxMemory() / 4, IMAGE_MEMORY_CAP_BYTES).toInt())
                     .build()
             }
             .diskCache {
@@ -90,10 +93,15 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         appScope.launch {
             val tonight = runCatching { graph.tvHighlightsRepository.tonight() }.getOrNull().orEmpty()
             val loader = coil.Coil.imageLoader(this@OpenTvApp)
+            // Stills at the size the hero draws them (not the source's full resolution, often
+            // several times larger); the network logos are small already.
+            val (stillWidth, stillHeight) = app.opentv.ui.channels.heroStillPixels(this@OpenTvApp, graph.settings.uiScalePercent.value)
+            val stills = tonight.mapNotNull { it.imageUrl }.toSet()
             tonight.flatMap { listOfNotNull(it.imageUrl, it.logoUrl) }.distinct().forEach { url ->
                 loader.enqueue(
                     coil.request.ImageRequest.Builder(this@OpenTvApp).data(url).apply {
                         app.opentv.data.repo.TvHighlightsRepository.IMAGE_HEADERS.forEach { (k, v) -> addHeader(k, v) }
+                        if (url in stills) size(stillWidth, stillHeight)
                     }.build(),
                 )
             }
@@ -177,3 +185,6 @@ private const val VOD_AUTOSTART_DELAY_MILLIS = 30_000L
 
 /** How long after launch the Film and Shows homes are built in the background. */
 private const val VOD_WARM_UP_DELAY_MILLIS = 8_000L
+
+/** Most memory the decoded-image cache may hold. */
+private const val IMAGE_MEMORY_CAP_BYTES = 48L * 1024 * 1024

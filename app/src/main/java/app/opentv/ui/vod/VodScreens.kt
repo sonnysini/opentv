@@ -219,7 +219,9 @@ fun MoviesScreen(
                 }
             }
         } else {
-            val genreId = genres[tab - 1].key
+            // The list's content can be re-read with the new tab a beat before this screen swaps to
+            // the All layout (tab == allTab, past the last genre): nothing to add then.
+            val genreId = genres.getOrNull(tab - 1)?.key ?: return@LazyColumn
             val hits = genreHits[genreId]
             item(key = "load:$genreId") { LaunchedEffect(genreId) { if (hits == null) viewModel.loadMovieGenre(genreId) } }
             when {
@@ -385,7 +387,9 @@ fun SeriesScreen(
                 }
             }
         } else {
-            val genreId = genres[tab - 1].key
+            // The list's content can be re-read with the new tab a beat before this screen swaps to
+            // the All layout (tab == allTab, past the last genre): nothing to add then.
+            val genreId = genres.getOrNull(tab - 1)?.key ?: return@LazyColumn
             val hits = genreHits[genreId]
             item(key = "load:$genreId") { LaunchedEffect(genreId) { if (hits == null) viewModel.loadSeriesGenre(genreId) } }
             when {
@@ -426,8 +430,9 @@ private fun NewEpisodesRow(items: List<app.opentv.data.repo.CatalogRepository.Ne
 
 /** One category's films as a poster grid. Quality variants collapse to one card, badged. */
 @Composable
-internal fun MovieCategoryGrid(movies: List<Movie>, viewModel: VodViewModel, onOpenMovie: (Movie) -> Unit) {
-    if (movies.isEmpty()) { LoadingVod(stringResource(R.string.vod_loading_movies)); return }
+internal fun MovieCategoryGrid(movies: List<Movie>?, viewModel: VodViewModel, onOpenMovie: (Movie) -> Unit) {
+    if (movies == null) { LoadingVod(stringResource(R.string.vod_loading_movies)); return }
+    if (movies.isEmpty()) { EmptyVod(stringResource(R.string.vod_no_movies), stringResource(R.string.vod_category_empty_movies)); return }
     val groups = remember(movies) { viewModel.collapseVariants(movies) }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 140.dp),
@@ -458,8 +463,9 @@ internal fun MovieCategoryGrid(movies: List<Movie>, viewModel: VodViewModel, onO
 
 /** One category's shows as a poster grid. */
 @Composable
-private fun SeriesCategoryGrid(series: List<Series>, onOpenSeries: (Series) -> Unit) {
-    if (series.isEmpty()) { LoadingVod(stringResource(R.string.vod_loading_shows)); return }
+private fun SeriesCategoryGrid(series: List<Series>?, onOpenSeries: (Series) -> Unit) {
+    if (series == null) { LoadingVod(stringResource(R.string.vod_loading_shows)); return }
+    if (series.isEmpty()) { EmptyVod(stringResource(R.string.vod_no_shows), stringResource(R.string.vod_category_empty_shows)); return }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 140.dp),
         contentPadding = PaddingValues(16.dp),

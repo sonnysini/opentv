@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.55.0 — 9 November 2026
+
+Lighter on the box, nothing else changes: the same lists, guide, search and logos, with less work
+behind them.
+
+- **The guide stops rebuilding itself while it downloads.** A guide is written 500 programmes at a
+  time, and the live list used to re-read the whole 12-hour guide and regroup every channel after
+  each of those batches — hundreds of times per download. Now it catches up at most every 20
+  seconds while a download runs, and once more when it ends.
+- **Guide matching only when something changed.** Every start re-matched every channel to the
+  guides. It now remembers what it matched from (channels, guides, programmes left, name rules)
+  and skips the work when all of that is the same; when it does run, its changes are written in
+  one go, so the list is rebuilt once instead of once per channel. Regroup and restore still always
+  match.
+- **Indexes for categories and search.** Opening a live category, a film or show category, and
+  searching films and shows by name no longer scan the whole table. Built once, in a few seconds,
+  on the first start after the update.
+- **Fewer flushes to flash.** The database no longer forces every commit to storage (WAL
+  `synchronous=NORMAL`): the stick's slow flash was most of the cost of a guide download.
+- **Tonight's stills prefetched at their size.** The start-up prefetch decodes them at the size
+  the top of the live page draws them, not at the source's full resolution.
+- **Carousels stop redrawing every frame.** The little bar filling up under the carousels (live
+  page, Films/Shows, Football) was redrawing the whole carousel 60 times a second — on Football
+  the whole page. Now only the bar is redrawn: same look, ~a third of the CPU back on a still page.
+- **The guide downloads once a day.** The first sync of the day fetches it, then it's left alone
+  until tomorrow (was: again every 6 hours). "Refresh the guide now" is there for a late change.
+- **One guide sync at a time.** Launch, the background job and the refresh button could start two
+  downloads and two matcher runs together; the second now waits and finds nothing to do.
+- **"Refresh the guide now" keeps going after you leave the screen.** It used to stop halfway when
+  you left the guide settings; reopening them shows it still running.
+- **Empty film/show categories say so.** A category the provider leaves empty showed "Loading
+  films" forever; it now says it's empty.
+- **Tonight's carousel without polling.** It was re-read every 5 minutes; now it's read once a day
+  and woken only when a programme on it ends (or at midnight), retrying sooner only if the day's
+  read failed. Both the minute clock of the live page and this pause while the app is in the
+  background.
+- **Image memory cache capped at 48 MB** (was a quarter of the heap, ~96 MB on the stick).
+- **Fix: Films/Shows "All" tab crashed the app.** Opening the last tab could read one genre past
+  the end of the list for a frame (`Index: 8, Size: 8`) and close the app; it now waits for the
+  All layout instead. Broken since 0.42 (3 November).
+
 ## 0.54.1 — 8 November 2026
 
 - **A smaller "Ends at".** The film player's end time in the top right corner is quieter

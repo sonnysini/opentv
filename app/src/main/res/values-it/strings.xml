@@ -498,6 +498,8 @@
     <string name="vod_sync_progress">Aggiornamento catalogo… %1$s film · %2$s serie</string>
     <string name="vod_no_shows">Nessuna serie</string>
     <string name="vod_no_shows_provider">Questo fornitore non ha restituito alcuna serie.</string>
+    <string name="vod_category_empty_movies">Il fornitore non ha film in questa categoria.</string>
+    <string name="vod_category_empty_shows">Il fornitore non ha serie in questa categoria.</string>
     <string name="vod_no_shows_add">Aggiungi un fornitore per vedere qui le sue serie.</string>
     <string name="vod_loading_episodes">Caricamento episodi…</string>
     <string name="vod_all">Tutti</string>
