@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.55.1 — 9 November 2026
+
+- **Football: the next matchday of each competition, however far.** The page read a week ahead,
+  so in an international break it said it couldn't load the games. It now reads up to five weeks
+  ahead and shows one matchday each: the next Serie A, Champions League, Europa League and
+  Conference League round, in kick-off order. A tile more than a week away also says the day of
+  the month ("SAB 21 15:00").
+
 ## 0.55.0 — 9 November 2026
 
 Lighter on the box, nothing else changes: the same lists, guide, search and logos, with less work

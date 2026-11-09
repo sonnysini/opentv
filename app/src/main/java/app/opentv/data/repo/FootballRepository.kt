@@ -153,10 +153,26 @@ class FootballRepository(
     /** Today's matches, kick-off order. Empty when FotMob can't be reached and nothing is on disk. */
     suspend fun today(): List<Match> = days(listOf(LocalDate.now(zone))).first()
 
-    /** The fixtures after today, a week ahead at most and [limit] at most. */
+    /**
+     * The fixtures after today, read a week at a time until every competition's next game is
+     * there with the days after it (its whole matchday), [AHEAD_DAYS] at most: in an international
+     * break or between cup matchdays the next games are weeks away. [nextMatchdays] keeps one
+     * matchday each.
+     */
     suspend fun upcoming(limit: Int = Int.MAX_VALUE): List<Match> {
         val today = LocalDate.now(zone)
-        return days((1..7).map { today.plusDays(it.toLong()) }).flatten().take(limit)
+        val out = ArrayList<Match>()
+        var read = 0L
+        while (read < AHEAD_DAYS) {
+            val until = minOf(read + WEEK, AHEAD_DAYS)
+            out += days((read + 1..until).map { today.plusDays(it) }).flatten()
+            read = until
+            // Each competition's first game this far, with its matchday's days after it read too.
+            val horizon = today.plusDays(read - MATCHDAY_DAYS)
+            val firsts = LEAGUES.map { l -> out.firstOrNull { it.league == l && it.phase == Phase.SCHEDULED } }
+            if (firsts.all { it != null && Instant.ofEpochMilli(it.kickoffUtcMillis).atZone(zone).toLocalDate() <= horizon }) break
+        }
+        return out.take(limit)
     }
 
     /** The ids of the teams playing Serie A: a cup game with one of them goes first. */
@@ -644,15 +660,19 @@ class FootballRepository(
         )
 
         /**
-         * [upcoming] without the Serie A games of a later matchday (FotMob's round) than the one on
-         * now: next week's games wait until this week's are over. A rescheduled game is never played
-         * inside another matchday, so the first Serie A game still to play decides.
+         * [upcoming] down to one matchday per competition (FotMob's round): the one on now, else
+         * the next. Next week's games wait until this week's are over; a rescheduled game is never
+         * played inside another matchday, so the first game still to play decides. A competition
+         * without rounds keeps the games within [MATCHDAY_DAYS] of its first one.
          */
-        fun sameMatchday(today: List<Match>, upcoming: List<Match>): List<Match> {
-            val matchday = (today + upcoming).firstOrNull {
-                it.league == SERIE_A && it.round != null && (it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE)
-            }?.round ?: return upcoming
-            return upcoming.filter { it.league != SERIE_A || it.round == null || it.round == matchday }
+        fun nextMatchdays(today: List<Match>, upcoming: List<Match>): List<Match> {
+            val open = (today + upcoming).filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE }
+            val first = LEAGUES.mapNotNull { l -> open.firstOrNull { it.league == l }?.let { l to it } }.toMap()
+            return upcoming.filter { m ->
+                val f = first[m.league] ?: return@filter m.league !in LEAGUES
+                if (f.round != null) m.round == f.round
+                else m.kickoffUtcMillis - f.kickoffUtcMillis <= MATCHDAY_DAYS * DAY_MILLIS
+            }
         }
 
         /**
@@ -728,6 +748,12 @@ class FootballRepository(
         private const val LIVE_TTL_MILLIS = 50_000L
         private const val PRE_MATCH_MILLIS = 60 * MINUTE
         private const val KEEP_DAYS = 14L
+        /** How far [upcoming] reads: past an international break and a cup's gap between matchdays. */
+        private const val AHEAD_DAYS = 35L
+        private const val WEEK = 7L
+        /** The days a matchday spans at most (Friday to Monday; a cup's Tuesday to Thursday). */
+        private const val MATCHDAY_DAYS = 4L
+        private const val DAY_MILLIS = 24 * 60 * MINUTE
         /** A game's programme ends at most this long after the game: bounds the guide search. */
         private const val LONGEST_PROGRAMME_MILLIS = 6 * 60 * MINUTE
         /** Matches per guide query: a dozen arguments each, well under SQLite's 999. */

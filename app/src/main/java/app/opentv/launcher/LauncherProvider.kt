@@ -105,7 +105,7 @@ class LauncherProvider : ContentProvider() {
         fun ours(m: FootballRepository.Match) =
             m.league == FootballRepository.SERIE_A || m.home.id in italian || m.away.id in italian
         val today = repo.today().filter(::ours)
-        val upcoming = FootballRepository.sameMatchday(today, repo.upcoming()).filter(::ours).take(UPCOMING)
+        val upcoming = FootballRepository.nextMatchdays(today, repo.upcoming()).filter(::ours).take(UPCOMING)
         val todayIds = today.mapTo(HashSet()) { it.id }
         val round = if (today.any { it.phase != Phase.FINISHED }) emptyList()
         else repo.lastRound().filter { it.id !in todayIds }.take(ROUND)
