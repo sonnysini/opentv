@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.55.0 — 8 November 2026
+## 0.55.0 — 9 November 2026
 
 Lighter on the box, nothing else changes: the same lists, guide, search and logos, with less work
 behind them.
