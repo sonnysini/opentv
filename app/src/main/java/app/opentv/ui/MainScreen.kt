@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -159,6 +160,9 @@ fun MainScreen(
     // The rail stays as an icon strip beside the full-screen live list too, as on every other tab;
     // LEFT out of the list (or Back from the groups) moves focus into it, which opens it.
     var navRevealed by remember { mutableStateOf(false) }
+    // Focus is in the menu: the page opening under it leaves the focus there.
+    val menuFocused = remember { mutableStateOf(false) }
+    val menuHasFocus = remember { { menuFocused.value } }
     val navFocus = remember { FocusRequester() }
     // Into Live TV from the rail: the groups, not whatever sits nearest the menu item (the top's
     // button). Set by the full-screen list while it's on screen.
@@ -232,6 +236,7 @@ fun MainScreen(
                       enter = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
                   ),
           ) {
+           CompositionLocalProvider(LocalMenuHasFocus provides menuHasFocus) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,
@@ -266,6 +271,7 @@ fun MainScreen(
                 )
                 Tab.RECORDINGS -> RecordingsScreen(onPlay = onPlayRecording)
             }
+           }
           }
           NavRail(
               tabs = visibleTabs,
@@ -279,6 +285,7 @@ fun MainScreen(
               onEnterPage = { enterPage++ },
               currentFocus = navFocus,
               onFocusLeft = { navRevealed = false },
+              onFocusChange = { menuFocused.value = it },
               onOpenSearch = onOpenSearch,
               onOpenSettings = onOpenSettings,
               modifier = Modifier.align(Alignment.CenterStart),
@@ -362,6 +369,8 @@ private fun NavRail(
     currentFocus: FocusRequester? = null,
     // Focus has moved out of the rail (after having been in it).
     onFocusLeft: () -> Unit = {},
+    // Focus is in the rail (true) or not, at once.
+    onFocusChange: (Boolean) -> Unit = {},
 ) {
     // Open whenever focus is anywhere inside; back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
@@ -384,7 +393,11 @@ private fun NavRail(
     LaunchedEffect(expanded, activity, current) {
         if (!expanded) return@LaunchedEffect
         delay(AUTO_CLOSE_MILLIS)
-        enterPage()
+        // A page still loading has nothing to take the focus yet: keep offering it.
+        while (true) {
+            enterPage()
+            delay(AUTO_CLOSE_RETRY_MILLIS)
+        }
     }
 
     val open by animateFloatAsState(
@@ -413,7 +426,7 @@ private fun NavRail(
             .clip(shape)
             .background(Glass)
             .border(1.dp, GlassEdge, shape)
-            .onFocusChanged { expanded = it.hasFocus }
+            .onFocusChanged { expanded = it.hasFocus; onFocusChange(it.hasFocus) }
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 activity++
@@ -605,6 +618,7 @@ private const val AUTO_SELECT_MILLIS = 400
 private const val BOUNCE_MILLIS = 180
 private const val PAGE_IN_MILLIS = 220
 private const val AUTO_CLOSE_MILLIS = 3_000L
+private const val AUTO_CLOSE_RETRY_MILLIS = 2_500L
 private val Glass = Color(0xA80E1513)
 private val GlassEdge = Color.White.copy(alpha = 0.09f)
 private val Dim = Color(0xFFDEE4E1).copy(alpha = 0.6f)

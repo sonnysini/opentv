@@ -592,6 +592,8 @@ private fun FocusedList(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (startIndex - 3).coerceAtLeast(0))
     val focusRequester = remember { FocusRequester() }
     var listHasFocus by remember { mutableStateOf(false) }
+    // The page opened by resting on its menu entry: the focus stays in the menu.
+    val menuHasFocus = app.opentv.ui.LocalMenuHasFocus.current
     // The requester follows focus, so coming back into the list (RIGHT from the navigation menu)
     // returns to the row you left rather than to whichever row sits nearest the menu.
     var focusedIndex by remember { mutableIntStateOf(startIndex) }
@@ -606,6 +608,7 @@ private fun FocusedList(
         repeat(40) {
             delay(75)
             if (listHasFocus) return@LaunchedEffect
+            if (menuHasFocus()) return@repeat
             // The row may have been scrolled out of the composed window (rows arriving after the
             // first frame); bring it back so its requester is attached before asking.
             if (count > 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == focusedIndex }) {
@@ -626,6 +629,7 @@ private fun FocusedList(
         // The requester moves to the target row on the next frame; ask until it takes.
         for (attempt in 0 until 20) {
             delay(50)
+            if (menuHasFocus()) break
             if (runCatching { focusRequester.requestFocus() }.isSuccess) break
         }
         jumped()

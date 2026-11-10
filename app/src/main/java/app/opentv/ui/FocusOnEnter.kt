@@ -14,6 +14,13 @@ import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.delay
 
 /**
+ * True while focus is in the app's menu. A page opened from the menu by resting on its entry must
+ * not pull the focus out of the menu as it comes up: pages that put focus somewhere by themselves
+ * when they open check this first (the menu hands focus over when the user moves into the page).
+ */
+val LocalMenuHasFocus = androidx.compose.runtime.staticCompositionLocalOf<() -> Boolean> { { false } }
+
+/**
  * A screen opened from a menu takes the focus itself, so the remote works on it straight away:
  * if nothing inside it holds focus shortly after it opens, focus goes to its first item.
  * Screens that place focus themselves (a Play button, the selected setting) win, since this only

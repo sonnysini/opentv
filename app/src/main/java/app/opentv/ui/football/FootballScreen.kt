@@ -664,7 +664,9 @@ private fun Hero(
     val ready = remember(item, looks, progress) { viewModel.ready(item) }
     val state = watchState(m, feeds.isNotEmpty(), progress?.takeIf { it.matchId == m.id }, ready, now)
     // The buttons stay whatever card is on: focus doesn't drop off the carousel as it turns.
-    LaunchedEffect(firstId) { runCatching { watch.requestFocus() } }
+    // Not while the menu holds the focus (this page opened by resting on its entry).
+    val menuHasFocus = app.opentv.ui.LocalMenuHasFocus.current
+    LaunchedEffect(firstId) { if (!menuHasFocus()) runCatching { watch.requestFocus() } }
     LaunchedEffect(refocus) { if (refocus > 0) runCatching { watch.requestFocus() } }
 
     Column(
