@@ -229,6 +229,7 @@ fun MainScreen(
                       alpha = k
                       translationX = (1f - k) * PAGE_IN_SHIFT.toPx()
                   }
+                  .onFocusChanged { if (it.hasFocus && menuFocused.value) android.util.Log.w("MyTVFocus", "page took focus from menu", Throwable()) }
                   .focusOnEnter(
                       key = enterPage,
                       enabled = enterPage > 0,
