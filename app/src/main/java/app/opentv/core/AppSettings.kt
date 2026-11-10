@@ -59,12 +59,12 @@ class AppSettings private constructor(context: Context) {
     }
 
     /**
-     * The side menu: [MenuStyle.CAPSULE], the compact glass capsule that opens over the page and
-     * closes by itself, or [MenuStyle.BAR], the full-height bar of before that pushes the page aside
-     * and stays open until you leave it — in the same glass look; or [MenuStyle.CAPSULE_LABEL], the
-     * capsule that never opens, the focused entry's name in a small glass label beside it.
+     * The side menu, always a solid full-height bar: [MenuStyle.BAR], icons when closed, opening
+     * with the names and pushing the page aside; [MenuStyle.HIDDEN], no menu at rest (the page takes
+     * the whole width) until LEFT from the page's edge slides it in; [MenuStyle.COMPACT], icons only,
+     * never opening. Older saved shapes (the capsules) fall back to the bar.
      */
-    enum class MenuStyle { CAPSULE, BAR, CAPSULE_LABEL }
+    enum class MenuStyle { BAR, HIDDEN, COMPACT }
 
     private val _menuStyle = pref {
         runCatching { MenuStyle.valueOf(prefs.getString(KEY_MENU_STYLE, null) ?: "") }.getOrDefault(MenuStyle.BAR)

@@ -5,7 +5,6 @@
  */
 package app.opentv.ui.player
 
-import app.opentv.ui.glass
 import android.os.SystemClock
 import app.opentv.ui.focusVeil
 import android.view.ViewGroup
@@ -46,6 +45,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
@@ -1072,6 +1074,32 @@ fun PlayerScreen(
             else -> ""
         }
 
+        // The time, top right, over a light shade — as in the film player.
+        AnimatedVisibility(
+            visible = controlsVisible && !inPip,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(88.dp)
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent))),
+            ) {
+                Text(
+                    clockText(clock),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                        .padding(horizontal = 28.dp, vertical = 14.dp),
+                )
+            }
+        }
+
         AnimatedVisibility(
             visible = controlsVisible && !inPip,
             enter = fadeIn(),
@@ -1081,23 +1109,15 @@ fun PlayerScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    // A soft shade behind the text, lighter than before now that the buttons sit
-                    // on their own glass capsule; it still darkens early so the title and times
-                    // stay readable over a bright pitch.
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.3f to Color.Black.copy(alpha = 0.55f),
-                            1f to Color.Black.copy(alpha = 0.8f),
-                        ),
-                    )
+                    // The film player's shade: clear at the top, dark behind the text.
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
                     // Keep the controls clear of the phone/tablet system nav bar (and the side nav
                     // bar / display cutout in landscape). Zero on a TV, so the 10-foot layout is
                     // unchanged; the gradient above stays full-bleed to the screen edge.
                     .windowInsetsPadding(
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
                     )
-                    .padding(start = 28.dp, end = 28.dp, top = 64.dp, bottom = 20.dp),
+                    .padding(start = 28.dp, end = 28.dp, top = 45.dp, bottom = 16.dp),
             ) {
                 // The open picker sits above the transport row.
                 if (panel != Panel.NONE) {
@@ -1118,75 +1138,97 @@ fun PlayerScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                // The channel's logo, large, on the left; everything else runs from it to the right edge.
+                // The channel's logo as a block as tall as the name and the programme beside it:
+                // square logos stay square, wide ones (Sky's) widen up to a limit.
                 val logoUrl = (variants.firstOrNull { it.id == currentId }?.shownLogo() ?: listedChannel?.shownLogo())
                     ?.takeIf { it.isNotBlank() }
-                Row {
+                val now = onAir?.now
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (game?.homeCrest != null) {
-                        MatchCrests(game.homeCrest, game.awayCrest, Modifier.padding(top = 4.dp).size(LOGO_SIZE))
-                        Spacer(Modifier.width(28.dp))
+                        MatchCrests(game.homeCrest, game.awayCrest, Modifier.size(LOGO_BLOCK))
+                        Spacer(Modifier.width(15.dp))
                     } else if (logoUrl != null) {
-                        Box(
-                            Modifier
-                                .padding(top = 4.dp)
-                                .size(LOGO_SIZE)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White.copy(alpha = 0.08f))
-                                .padding(14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AsyncImage(
-                                model = logoUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                        Spacer(Modifier.width(28.dp))
+                        AsyncImage(
+                            model = logoUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            alignment = Alignment.CenterStart,
+                            modifier = Modifier
+                                .height(LOGO_BLOCK)
+                                .widthIn(max = LOGO_BLOCK_MAX_WIDTH)
+                                .clip(RoundedCornerShape(8.dp)),
+                        )
+                        Spacer(Modifier.width(15.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    channelTitle,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                )
-                                streamInfo?.badges?.takeIf { it.isNotEmpty() }?.let { badges ->
-                                    Spacer(Modifier.width(16.dp))
-                                    StreamBadges(badges)
-                                }
-                            }
-                            Spacer(Modifier.width(16.dp))
                             Text(
-                                clockText(clock),
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = Color.White.copy(alpha = 0.9f),
+                                channelTitle,
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            streamInfo?.badges?.takeIf { it.isNotEmpty() }?.let { badges ->
+                                Spacer(Modifier.width(13.dp))
+                                StreamBadges(badges)
+                            }
+                        }
+                        now?.let {
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                it.title,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Spacer(Modifier.height(12.dp))
+                    }
+                }
+                onAir?.let { OnAirLines(it) }
 
-                        onAir?.let { info ->
-                            OnAirPanel(info, clock)
-                            Spacer(Modifier.height(16.dp))
-                        }
-
-                        // Icon-only buttons; the focused one shows its name above it (BarChip), so the
-                        // spacer above leaves room for that label.
-                        Spacer(Modifier.height(20.dp))
-                        // The buttons float in a glass capsule, like the side menu.
-                        Row(
-                            Modifier.glass().padding(horizontal = 9.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                // The programme's progress, like the film's seek bar: start on the left, end on the right.
+                now?.let {
+                    val progress = if (it.durationMillis > 0) {
+                        ((clock - it.startUtcMillis).toFloat() / it.durationMillis).coerceIn(0f, 1f)
+                    } else 0f
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(clockText(it.startUtcMillis), fontSize = 13.sp, color = Color.White)
+                        Spacer(Modifier.width(13.dp))
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(alpha = 0.22f)),
                         ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(progress)
+                                    .height(4.dp)
+                                    .background(MaterialTheme.colorScheme.primary),
+                            )
+                        }
+                        Spacer(Modifier.width(13.dp))
+                        Text(clockText(it.endUtcMillis), fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                    }
+                }
+
+                // Round icon buttons without boxes, as in the film player.
+                Spacer(Modifier.height(if (now != null) 6.dp else 12.dp))
+                Row(
+                    Modifier.offset(x = (-6).dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                             if (controller.isSeekable) {
                                 BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
                                     controller.seekBackward(); watchEpoch++; interaction++
                                 }
-                                Spacer(Modifier.width(10.dp))
                             }
                             BarChip(
                                 icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
@@ -1199,14 +1241,13 @@ fun PlayerScreen(
                                 interaction++
                             }
                             if (controller.isSeekable) {
-                                Spacer(Modifier.width(10.dp))
                                 BarChip(Icons.Filled.FastForward, stringResource(R.string.player_forward), false) {
                                     controller.seekForward(); watchEpoch++; interaction++
                                 }
                             }
 
                             // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
-                            Spacer(Modifier.width(28.dp))
+                            Spacer(Modifier.width(16.dp))
                             if (variants.size > 1) {
                                 // OK steps to the next feed and a long press opens the full list — or,
                                 // with the setting off, OK opens the list straight away.
@@ -1231,26 +1272,22 @@ fun PlayerScreen(
                                     },
                                     onClick = togglePicker,
                                 )
-                                Spacer(Modifier.width(10.dp))
                             }
                             BarChip(Icons.Filled.Audiotrack, stringResource(R.string.player_audio), panel == Panel.AUDIO) {
                                 panel = if (panel == Panel.AUDIO) Panel.NONE else Panel.AUDIO; interaction++
                             }
-                            Spacer(Modifier.width(10.dp))
                             BarChip(Icons.Filled.Subtitles, stringResource(R.string.player_subtitles), panel == Panel.SUBTITLES) {
                                 panel = if (panel == Panel.SUBTITLES) Panel.NONE else Panel.SUBTITLES; interaction++
                             }
-                            Spacer(Modifier.width(10.dp))
                             BarChip(Icons.Filled.AspectRatio, stringResource(R.string.player_aspect), panel == Panel.ASPECT) {
                                 panel = if (panel == Panel.ASPECT) Panel.NONE else Panel.ASPECT; interaction++
                             }
-                            Spacer(Modifier.width(10.dp))
                             BarChip(Icons.Filled.Info, stringResource(R.string.player_info), showInfo) {
                                 showInfo = !showInfo; interaction++
                             }
 
                             // Record sits apart so it isn't hit by accident.
-                            Spacer(Modifier.width(28.dp))
+                            Spacer(Modifier.width(16.dp))
                             val recordingThis = activeRecordings.any { it.channelId == currentId }
                             BarChip(
                                 icon = Icons.Filled.FiberManualRecord,
@@ -1259,14 +1296,12 @@ fun PlayerScreen(
                                 iconTint = Color(0xFFE53935),
                             ) { toggleRecord() }
                             if (pipSupported) {
-                                Spacer(Modifier.width(10.dp))
                                 BarChip(Icons.Filled.PictureInPictureAlt, stringResource(R.string.player_pop_out), false) {
                                     (context.findActivity() as? app.opentv.MainActivity)?.enterPipNow()
                                     interaction++
                                 }
                             }
                             playingUrl?.let { url ->
-                                Spacer(Modifier.width(10.dp))
                                 val chooserTitle = stringResource(R.string.player_open_external)
                                 BarChip(Icons.Filled.OpenInNew, chooserTitle, false) {
                                     // The provider allows one stream per account: let go of ours first,
@@ -1279,8 +1314,6 @@ fun PlayerScreen(
                                     interaction++
                                 }
                             }
-                        }
-                    }
                 }
             }
         }
@@ -1579,85 +1612,30 @@ internal fun StreamInfoPanel(
     }
 }
 
-/** "What's on" block in the player bar: title, times and progress, a short synopsis, then what's next. */
+/** Under the programme's title: one line of its synopsis, then what's next (or the guide's note). */
 @Composable
-private fun OnAirPanel(info: OnAir, clock: Long) {
-    Column(Modifier.fillMaxWidth()) {
-        info.now?.let { now ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${clockText(now.startUtcMillis)}–${clockText(now.endUtcMillis)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.75f),
-                )
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    now.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            val progress = if (now.durationMillis > 0) {
-                ((clock - now.startUtcMillis).toFloat() / now.durationMillis).coerceIn(0f, 1f)
-            } else 0f
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.25f)),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(progress)
-                            .height(4.dp)
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                // Rounded up, so the last minute still reads "−1 min" rather than nothing.
-                val minutesLeft = ((now.endUtcMillis - clock + 59_999L) / 60_000L).coerceAtLeast(0L)
-                Text(
-                    stringResource(R.string.player_minutes_left, minutesLeft.toInt()),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Color.White.copy(alpha = 0.75f),
-                )
-            }
-            now.description?.takeIf { it.isNotBlank() }?.let { desc ->
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    desc,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.8f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        info.footer?.takeIf { info.next == null }?.let { footer ->
-            if (info.now != null) Spacer(Modifier.height(8.dp))
-            Text(
-                footer,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.65f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        info.next?.let { next ->
-            if (info.now != null) Spacer(Modifier.height(8.dp))
-            Text(
-                stringResource(R.string.guide_next_prefix, clockText(next.startUtcMillis), next.title),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.65f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+private fun OnAirLines(info: OnAir) {
+    info.now?.description?.takeIf { it.isNotBlank() }?.let { desc ->
+        Spacer(Modifier.height(5.dp))
+        Text(
+            desc,
+            fontSize = 12.sp,
+            color = Color.White.copy(alpha = 0.75f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    val footer = info.next?.let { stringResource(R.string.guide_next_prefix, clockText(it.startUtcMillis), it.title) }
+        ?: info.footer
+    footer?.takeIf { it.isNotBlank() }?.let {
+        Spacer(Modifier.height(3.dp))
+        Text(
+            it,
+            fontSize = 11.sp,
+            color = Color.White.copy(alpha = 0.55f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -2055,66 +2033,55 @@ private fun BarChip(
     var longPressed by remember { mutableStateOf(false) }
     val container = when {
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-        // On the glass capsule a resting button has no box of its own.
+        // No box of its own at rest, as in the film player.
         else -> Color.Transparent
     }.let { if (focused) focusVeil(it) else it }
     val content = if (focused) MaterialTheme.colorScheme.primary else Color.White
 
-    Box(contentAlignment = Alignment.TopCenter) {
-        Box(
-            modifier = Modifier
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .onFocusChanged { focused = it.isFocused }
-                .focusLift(focused)
-                .clip(RoundedCornerShape(12.dp))
-                .background(container)
-                .then(
-                    if (onLongClick == null) Modifier
-                    else Modifier.onPreviewKeyEvent { e ->
-                        if (e.key != Key.DirectionCenter && e.key != Key.Enter && e.key != Key.NumPadEnter) {
-                            return@onPreviewKeyEvent false
+    Box(
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
+            .heightIn(min = CHIP_SIZE)
+            .widthIn(min = CHIP_SIZE)
+            .clip(CircleShape)
+            .background(container)
+            .then(
+                if (onLongClick == null) Modifier
+                else Modifier.onPreviewKeyEvent { e ->
+                    if (e.key != Key.DirectionCenter && e.key != Key.Enter && e.key != Key.NumPadEnter) {
+                        return@onPreviewKeyEvent false
+                    }
+                    when (e.type) {
+                        KeyEventType.KeyDown -> when {
+                            e.nativeKeyEvent.repeatCount == 0 -> longPressed = false
+                            !longPressed -> { longPressed = true; onLongClick() }
                         }
-                        when (e.type) {
-                            KeyEventType.KeyDown -> when {
-                                e.nativeKeyEvent.repeatCount == 0 -> longPressed = false
-                                !longPressed -> { longPressed = true; onLongClick() }
-                            }
-                            KeyEventType.KeyUp -> if (!longPressed) onClick()
-                        }
-                        true
-                    },
-                )
-                .clickable(interactionSource = null, indication = null, onClick = onClick)
-                .padding(12.dp),
-        ) {
-            if (badge.isNullOrBlank()) {
-                Icon(icon, contentDescription = label, tint = if (focused) content else (iconTint ?: content))
-            } else {
-                Box(Modifier.height(24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        badge,
-                        color = content,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                }
-            }
-        }
-        // The name floats above the focused button without taking space, so the row never shifts.
-        if (focused) {
+                        KeyEventType.KeyUp -> if (!longPressed) onClick()
+                    }
+                    true
+                },
+            )
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (badge.isNullOrBlank()) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (focused) content else (iconTint ?: content),
+                modifier = Modifier.size(28.dp),
+            )
+        } else {
             Text(
-                label,
+                badge,
+                color = content,
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.layout { measurable, constraints ->
-                    val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
-                    val gap = 8.dp.roundToPx()
-                    layout(0, 0) { p.place(-p.width / 2, -p.height - gap) }
-                },
             )
         }
     }
@@ -2129,7 +2096,10 @@ private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
 private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
-private val LOGO_SIZE = 128.dp
+// The logo block: as tall as the channel name and the programme beside it.
+private val LOGO_BLOCK = 61.dp
+private val LOGO_BLOCK_MAX_WIDTH = 150.dp
+private val CHIP_SIZE = 52.dp
 
 /** A game's slot without a guide of its own: two hours from kick-off, stoppage time and all. */
 private const val MATCH_SLOT_MILLIS = 120 * 60_000L
