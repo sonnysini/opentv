@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import android.content.Context
+import app.opentv.ui.focusVeil
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -794,8 +795,7 @@ internal fun StepSlider(
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(shape)
-            .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
-            .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, shape)
+            .background(if (focused) focusVeil() else Color.Transparent)
             .onPreviewKeyEvent { event ->
                 val delta = when (event.key) {
                     Key.DirectionLeft -> -step

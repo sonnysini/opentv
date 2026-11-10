@@ -233,11 +233,10 @@ internal fun SwitchRow(
             .focusLift(focused)
             .clip(shape)
             .background(
-                if (focused) MaterialTheme.colorScheme.primaryContainer
+                if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant)
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
-            .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .toggleable(interactionSource = null, indication = null, value = checked, role = Role.Switch, onValueChange = onToggle)
+                        .toggleable(interactionSource = null, indication = null, value = checked, role = Role.Switch, onValueChange = onToggle)
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -246,7 +245,7 @@ internal fun SwitchRow(
                 label,
                 style = if (emphasised) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
                 color = when {
-                    focused -> MaterialTheme.colorScheme.onPrimaryContainer
+                    focused -> MaterialTheme.colorScheme.primary
                     checked || emphasised -> MaterialTheme.colorScheme.onSurface
                     else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 },
@@ -257,7 +256,7 @@ internal fun SwitchRow(
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
+                    color = if (focused) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,

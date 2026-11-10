@@ -303,10 +303,6 @@ private fun NumKey(label: String, onClick: () -> Unit) {
             .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
-            )
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

@@ -174,12 +174,8 @@ private fun HubRow(entry: HubEntry) {
             .focusLift(focused)
             .clip(RoundedCornerShape(14.dp))
             .background(
-                if (focused) MaterialTheme.colorScheme.primaryContainer
+                if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant)
                 else MaterialTheme.colorScheme.surfaceVariant,
-            )
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
-                else Modifier,
             )
             .clickable(interactionSource = null, indication = null, onClick = entry.onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp),
@@ -188,7 +184,7 @@ private fun HubRow(entry: HubEntry) {
         Icon(
             entry.icon,
             contentDescription = null,
-            tint = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp),
         )
         Spacer(Modifier.width(18.dp))
@@ -197,13 +193,13 @@ private fun HubRow(entry: HubEntry) {
                 entry.title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
+                color = if (focused) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 entry.subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                color = if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

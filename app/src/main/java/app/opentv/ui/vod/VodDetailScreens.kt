@@ -245,7 +245,7 @@ private fun AddonStreamRow(stream: StremioStream, onPick: (StremioStream) -> Uni
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+            .background(if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant) else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(interactionSource = null, indication = null) { onPick(stream) }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -654,10 +654,6 @@ private fun PersonChip(name: String, onClick: () -> Unit) {
             .focusLift(focused)
             .clip(RoundedCornerShape(22.dp))
             .background(container)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp))
-                else Modifier,
-            )
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     )
