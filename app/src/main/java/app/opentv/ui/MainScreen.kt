@@ -347,6 +347,7 @@ private fun StatusBar() {
  * that changes nothing. Search and Settings open only with OK. A few seconds without a key, the
  * capsule closes and focus goes back into the page; RIGHT or OK goes there at once.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun NavRail(
     tabs: List<Tab>,
