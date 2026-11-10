@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.56.4 — 10 November 2026
+
+- **The player's buttons on glass.** In the live and the film player the row of buttons now
+  floats in a glass capsule, the same frosted glass as the side menu; the buttons lose their grey
+  boxes. Channel, programme, synopsis and seek bar stay on a lighter shade over the picture.
+
 ## 0.56.3 — 10 November 2026
 
 - **A more frosted menu.** The menu's glass is denser (85% instead of 66%), so the page's text
