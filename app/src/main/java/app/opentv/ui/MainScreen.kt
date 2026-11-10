@@ -229,7 +229,6 @@ fun MainScreen(
                       alpha = k
                       translationX = (1f - k) * PAGE_IN_SHIFT.toPx()
                   }
-                  .onFocusChanged { android.util.Log.w("MyTVFocus", "page hasFocus=${it.hasFocus} menu=${menuFocused.value}", Throwable()) }
                   .focusOnEnter(
                       key = enterPage,
                       enabled = enterPage > 0,
@@ -417,6 +416,10 @@ private fun NavRail(
     }
     val openWidth = CAPSULE_CLOSED + longest + CAPSULE_OPEN_EXTRA
     val shape = RoundedCornerShape(CAPSULE_RADIUS)
+    // UP and DOWN step through the entries in order, never out of the capsule: left to the focus
+    // search, a move could land on the page under the open capsule instead (on Movies it did).
+    val requesters = remember(tabs.size) { List(tabs.size + 2) { FocusRequester() } }
+    var focusedIndex by remember { mutableIntStateOf(-1) }
     // The names fade in over the second half of the opening.
     val labelAlpha = { ((open - 0.4f) / 0.6f).coerceIn(0f, 1f) }
 
@@ -431,7 +434,16 @@ private fun NavRail(
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 activity++
-                if (e.key == Key.DirectionRight) { onEnterPage(); true } else false
+                when (e.key) {
+                    Key.DirectionRight -> { onEnterPage(); true }
+                    Key.DirectionDown, Key.DirectionUp -> {
+                        val next = focusedIndex + if (e.key == Key.DirectionDown) 1 else -1
+                        if (focusedIndex >= 0 && next in requesters.indices) runCatching { requesters[next].requestFocus() }
+                        true
+                    }
+                    Key.DirectionLeft -> true
+                    else -> false
+                }
             }
             // LEFT from the page lands on the page you're on, not on whichever item happens to
             // be level with the card you left (Recordings, from a row low on the screen).
@@ -466,7 +478,7 @@ private fun NavRail(
         }
         Hairline()
 
-        tabs.forEach { t ->
+        tabs.forEachIndexed { i, t ->
             RailItem(
                 t.icon,
                 t.iconSelected,
@@ -476,15 +488,27 @@ private fun NavRail(
                 selected = current == t,
                 autoSelect = true,
                 bounce = expanded,
-                modifier = if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier,
+                modifier = Modifier.focusRequester(requesters[i])
+                    .then(if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier),
+                onFocused = { focusedIndex = i },
                 onAutoSelect = { onAutoSelect(t); activity++ },
             ) { onSelect(t) }
         }
 
         Box(Modifier.fillMaxWidth().height(SEP_GAP), contentAlignment = Alignment.Center) { Hairline() }
 
-        RailItem(R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha, onClick = onOpenSearch)
-        RailItem(R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha, onClick = onOpenSettings)
+        RailItem(
+            R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha,
+            modifier = Modifier.focusRequester(requesters[tabs.size]),
+            onFocused = { focusedIndex = tabs.size },
+            onClick = onOpenSearch,
+        )
+        RailItem(
+            R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha,
+            modifier = Modifier.focusRequester(requesters[tabs.size + 1]),
+            onFocused = { focusedIndex = tabs.size + 1 },
+            onClick = onOpenSettings,
+        )
     }
 }
 
@@ -511,6 +535,7 @@ private fun RailItem(
     // Bounce the icon when it becomes the open page (only while the menu is open to see it).
     bounce: Boolean = false,
     modifier: Modifier = Modifier,
+    onFocused: () -> Unit = {},
     onAutoSelect: () -> Unit = {},
     onClick: () -> Unit,
 ) {
@@ -547,7 +572,10 @@ private fun RailItem(
         modifier
             .fillMaxWidth()
             .height(ITEM_PITCH)
-            .onFocusChanged { if (focused != it.isFocused) android.util.Log.w("MyTVFocus", "rail $label focused=${it.isFocused}"); focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
