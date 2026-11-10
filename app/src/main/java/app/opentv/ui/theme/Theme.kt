@@ -194,9 +194,10 @@ fun OpenTvTheme(
             // focus layer on Material buttons, switches and radios instead of the grey one.
             CompositionLocalProvider(
                 LocalOwnTvStyle provides true,
+                // The faint accent veil, no ring: the same focus as the menu and the lists.
                 LocalIndication provides OwnTvFocusIndication(
-                    ring = scheme.primary,
-                    fill = scheme.primary.copy(alpha = 0.12f),
+                    ring = androidx.compose.ui.graphics.Color.Transparent,
+                    fill = scheme.primary.copy(alpha = 0.16f),
                     press = scheme.primary.copy(alpha = 0.16f),
                 ),
                 LocalRippleConfiguration provides RippleConfiguration(
