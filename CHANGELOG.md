@@ -7,6 +7,8 @@
 - **The full-height bar is a little wider open**: more room after its longest name ("Recordings").
 - **A stronger faint focus, everywhere.** The accent veil goes from 16% to 24% — the menu, the
   lists, the tabs, the settings, the player panels and the guide alike.
+- **No more bounce when changing page**: the new page used to show for a frame in place, then
+  jump right and slide back.
 
 ## 0.56.2 — 10 November 2026
 

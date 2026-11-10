@@ -210,12 +210,14 @@ fun MainScreen(
     // never moves — or the full-height glass bar that pushes the page aside as it opens.
     val menuStyle by settings.menuStyle.collectAsStateWithLifecycle()
     val bar = menuStyle == AppSettings.MenuStyle.BAR
-    val pageIn = remember { Animatable(1f) }
+    // A new Animatable per tab, created at 0 in the very composition that switches the tab: snapping
+    // an old one to 0 from the effect let the new page show one frame in place first, then jump
+    // right and slide back — a little bounce.
     var firstTab by remember { mutableStateOf(true) }
+    val pageIn = remember(tab) { Animatable(if (firstTab) 1f else 0f) }
     LaunchedEffect(tab) {
         if (firstTab) { firstTab = false; return@LaunchedEffect }
         // The new page slides in from the right as it fades in.
-        pageIn.snapTo(0f)
         pageIn.animateTo(1f, tween(PAGE_IN_MILLIS, easing = OutCubic))
     }
     val pageModifier = Modifier
