@@ -6,6 +6,7 @@
 package app.opentv.ui.vod
 
 import android.view.ViewGroup
+import app.opentv.ui.focusVeil
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -937,10 +938,9 @@ private fun VodIconButton(
 ) {
     var focused by remember { mutableStateOf(false) }
     val container = when {
-        focused -> Color.White
         active -> Color.White.copy(alpha = 0.22f)
         else -> Color.Transparent
-    }
+    }.let { if (focused) focusVeil(it) else it }
     Box(
         modifier = Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -959,7 +959,7 @@ private fun VodIconButton(
         Icon(
             icon,
             contentDescription = label,
-            tint = if (focused) Color.Black else Color.White,
+            tint = if (focused) MaterialTheme.colorScheme.primary else Color.White,
             modifier = Modifier.size(28.dp),
         )
     }
@@ -1090,8 +1090,8 @@ private fun TrackPanel(
 @Composable
 private fun TrackRow(label: String, detail: String?, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester?) {
     var focused by remember { mutableStateOf(false) }
-    val bg = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f)
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+    val bg = if (focused) focusVeil(Color.White.copy(alpha = 0.08f)) else Color.White.copy(alpha = 0.08f)
+    val fg = if (focused) MaterialTheme.colorScheme.primary else Color.White
     Row(
         Modifier
             .padding(vertical = 2.dp)

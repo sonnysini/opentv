@@ -574,7 +574,7 @@ internal fun PosterCard(
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .then(
-                    if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(8.dp))
+                    if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                     else Modifier,
                 ),
         ) {
@@ -719,7 +719,7 @@ private fun ResumeCard(item: VodViewModel.ResumeItem, onHold: () -> Unit, onClic
                 .clip(RoundedCornerShape(6.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .then(
-                    if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(6.dp))
+                    if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
                     else Modifier,
                 ),
         ) {

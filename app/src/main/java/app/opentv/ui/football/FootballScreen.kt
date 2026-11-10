@@ -6,6 +6,7 @@
 package app.opentv.ui.football
 
 import android.content.ActivityNotFoundException
+import app.opentv.ui.focusVeil
 import android.content.Intent
 import android.net.Uri
 import android.view.ViewGroup
@@ -804,9 +805,9 @@ private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClic
         modifier
             .graphicsLayer { translationX = shake.value }
             .lift(focused, 1.06f)
-            .then(if (focused) Modifier.border(2.dp, Color.White.copy(alpha = if (fill >= 1f) 0.45f else 0.9f), shape).padding(3.dp) else Modifier.padding(3.dp))
+            .padding(3.dp)
             .clip(shape)
-            .background(if (off) WATCH_OFF else WATCH_GREY)
+            .background((if (off) WATCH_OFF else WATCH_GREY).let { if (focused) focusVeil(it) else it })
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null) {
                 if (off) scope.launch {
@@ -814,7 +815,13 @@ private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClic
                 } else onClick()
             },
     ) {
-        label(if (off) Color.White.copy(alpha = 0.55f) else Color.White)
+        label(
+            when {
+                focused -> MaterialTheme.colorScheme.primary
+                off -> Color.White.copy(alpha = 0.55f)
+                else -> Color.White
+            },
+        )
         if (fill > 0f) Box(
             Modifier.matchParentSize().drawWithContent {
                 clipRect(right = size.width * fill) { this@drawWithContent.drawContent() }
@@ -841,14 +848,14 @@ private fun SourceLine(s: FootballViewModel.Source, recommended: Boolean, onClic
     var focused by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
-    val fg = if (focused) scheme.onPrimary else scheme.onSurface
-    val faint = if (focused) scheme.onPrimary.copy(alpha = 0.6f) else scheme.onSurfaceVariant
+    val fg = if (focused) scheme.primary else scheme.onSurface
+    val faint = if (focused) scheme.primary.copy(alpha = 0.6f) else scheme.onSurfaceVariant
     Row(
         Modifier
             .fillMaxWidth()
             .alpha(if (s.usable || focused) 1f else 0.45f)
             .clip(RoundedCornerShape(7.dp))
-            .background(if (focused) scheme.primary else Color.Transparent)
+            .background(if (focused) focusVeil(Color.Transparent) else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
@@ -868,7 +875,7 @@ private fun SourceLine(s: FootballViewModel.Source, recommended: Boolean, onClic
                 )
                 if (recommended) Text(
                     stringResource(R.string.football_recommended).uppercase(),
-                    color = if (focused) scheme.onPrimary else scheme.primary,
+                    color = scheme.primary,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
@@ -891,7 +898,7 @@ private fun SourceLine(s: FootballViewModel.Source, recommended: Boolean, onClic
                 ) {
                     if (s.verdict == AutoScan.Verdict.CONFIRMED) Text(
                         "✓",
-                        color = if (focused) scheme.onPrimary else scheme.primary,
+                        color = scheme.primary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                     )
@@ -925,7 +932,7 @@ private fun badges(p: AutoScan.Probe): List<String> = listOfNotNull(
 /** A badge as the player's [StreamBadges]: thin white outline; on the focused row, the theme's dark green. */
 @Composable
 private fun QualityBadge(text: String, focused: Boolean) {
-    val colour = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White.copy(alpha = 0.9f)
+    val colour = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
     Text(
         text,
         style = MaterialTheme.typography.labelMedium,
@@ -956,14 +963,14 @@ private fun ListLabel(text: String) {
 private fun RescanLine(sub: String, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
-    val fg = if (focused) scheme.onPrimary else scheme.onSurface
-    val faint = if (focused) scheme.onPrimary.copy(alpha = 0.7f) else scheme.onSurfaceVariant
+    val fg = if (focused) scheme.primary else scheme.onSurface
+    val faint = if (focused) scheme.primary.copy(alpha = 0.7f) else scheme.onSurfaceVariant
     Row(
         Modifier
             .fillMaxWidth()
             .padding(bottom = 6.dp)
             .clip(RoundedCornerShape(7.dp))
-            .background(if (focused) scheme.primary else scheme.surfaceVariant)
+            .background(if (focused) focusVeil(scheme.surfaceVariant) else scheme.surfaceVariant)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
@@ -1317,9 +1324,9 @@ private fun feedTitle(feed: Channel): String =
 @Composable
 private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boolean, lit: Float = 0f, onGone: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    // [lit] 1: in focus, as the source picker's — the theme's green, dark text.
-    val fg = androidx.compose.ui.graphics.lerp(scheme.onSurface, scheme.onPrimary, lit)
-    val accent = androidx.compose.ui.graphics.lerp(scheme.primary, scheme.onPrimary, lit)
+    // [lit] 1: in focus, as the source picker's — the faint accent veil, accent text.
+    val fg = androidx.compose.ui.graphics.lerp(scheme.onSurface, scheme.primary, lit)
+    val accent = scheme.primary
     val parts = remember(s.feed.id, s.feed.shownName, s.feed.qualityLabel) { FeedLabel.split(s.feed.shownName, s.feed.qualityLabel) }
     val away = remember { Animatable(0f) }
     val far = with(LocalDensity.current) { 450.dp.toPx() }
@@ -1338,7 +1345,7 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
             }
             .clip(RoundedCornerShape(7.dp))
             .background(if (look == Look.CHECKING) scheme.surfaceVariant else Color.Transparent)
-            .background(scheme.primary.copy(alpha = lit))
+            .background(scheme.primary.copy(alpha = app.opentv.ui.FOCUS_VEIL_ALPHA * lit))
             .padding(horizontal = 11.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -1399,7 +1406,7 @@ private fun ScanLine(s: FootballViewModel.Source, look: Look, recommended: Boole
         if (parts.source.isNotEmpty()) Text(
             parts.source,
             Modifier.widthIn(max = 64.dp),
-            color = androidx.compose.ui.graphics.lerp(scheme.onSurfaceVariant, scheme.onPrimary.copy(alpha = 0.6f), lit),
+            color = androidx.compose.ui.graphics.lerp(scheme.onSurfaceVariant, scheme.primary.copy(alpha = 0.6f), lit),
             fontSize = 8.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.sp,
@@ -1504,7 +1511,7 @@ internal fun MatchTile(
                 .aspectRatio(16f / 9f)
                 .clip(shape)
                 .then(if (m.goals) Modifier.background(goalShowBrush(m.league)) else Modifier.split(TeamColors.of(m.home), TeamColors.of(m.away)))
-                .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier),
+                .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape) else Modifier),
         ) {
             if (m.goals) {
                 // The goal show: the competition's logo and "DIRETTA GOL" on its colour, no chip.

@@ -6,6 +6,7 @@
 package app.opentv.ui.vod
 
 import androidx.compose.animation.Crossfade
+import app.opentv.ui.focusVeil
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -378,7 +379,7 @@ private fun HeroBackdrop(slide: HeroSlide, modifier: Modifier) {
     }
 }
 
-/** The football/live page button: translucent grey, white with black text in focus. */
+/** The football/live page button: translucent grey; in focus the faint accent veil, accent text. */
 @Composable
 internal fun HeroButton(
     text: String,
@@ -393,12 +394,12 @@ internal fun HeroButton(
         text,
         fontSize = 16.sp,
         fontWeight = FontWeight.Bold,
-        color = if (focused) Color.Black else Color.White,
+        color = if (focused) MaterialTheme.colorScheme.primary else Color.White,
         maxLines = 1,
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(8.dp))
-            .background(if (focused) Color.White else Color(0x736E7672))
+            .background(if (focused) focusVeil(Color(0x736E7672)) else Color(0x736E7672))
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

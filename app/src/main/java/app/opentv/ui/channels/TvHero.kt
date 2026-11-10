@@ -6,6 +6,7 @@
 package app.opentv.ui.channels
 
 import androidx.compose.animation.Crossfade
+import app.opentv.ui.focusVeil
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -286,7 +287,7 @@ private fun meta(item: Highlight): String = listOfNotNull(
     "${clock(item.startUtcMillis)} – ${clock(item.endUtcMillis)}",
 ).joinToString(" · ")
 
-/** Streaming-app button, as on the football page: translucent grey, white with black text in focus. */
+/** Streaming-app button, as on the football page: translucent grey; in focus the faint accent veil, accent text. */
 @Composable
 private fun WatchButton(
     text: String,
@@ -303,12 +304,12 @@ private fun WatchButton(
         "▶  $text",
         fontSize = if (small) 13.sp else 17.sp,
         fontWeight = FontWeight.Bold,
-        color = if (focused) Color.Black else Color.White,
+        color = if (focused) MaterialTheme.colorScheme.primary else Color.White,
         maxLines = 1,
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(8.dp))
-            .background(if (focused) Color.White else Color(0x736E7672))
+            .background(if (focused) focusVeil(Color(0x736E7672)) else Color(0x736E7672))
             .onFocusChanged {
                 focused = it.isFocused
                 onFocus(it.isFocused)
