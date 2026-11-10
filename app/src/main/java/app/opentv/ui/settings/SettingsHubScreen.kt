@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import androidx.compose.foundation.background
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -219,12 +220,12 @@ internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Uni
         label,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Medium,
-        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.primary,
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+            .background(if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant) else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
     )

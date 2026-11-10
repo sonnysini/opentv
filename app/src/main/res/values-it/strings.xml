@@ -871,4 +871,8 @@
     <string name="panel_remove">Togli dalla lista</string>
     <string name="panel_remaining">mancano %1$s</string>
     <string name="panel_film">Film</string>
+    <string name="settings_menu_style_title">Menu laterale</string>
+    <string name="settings_menu_style_capsule">Capsula sospesa</string>
+    <string name="settings_menu_style_bar">Barra a tutta altezza</string>
+    <string name="settings_menu_style_note">Capsula: compatta, si apre sopra la pagina e si chiude da sola dopo 2 s. Barra: a tutta altezza, sposta la pagina e resta aperta finché non ne esci.</string>
 </resources>

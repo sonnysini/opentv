@@ -6,6 +6,7 @@
 package app.opentv
 
 import android.app.PictureInPictureParams
+import app.opentv.ui.focusVeil
 import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
@@ -763,11 +764,11 @@ private fun RecordingSwitchBanner() {
             Text(
                 stringResource(R.string.rec_switch_keep_watching),
                 style = MaterialTheme.typography.labelLarge,
-                color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .focusLift(focused)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .background(if (focused) focusVeil(Color.Transparent) else Color.Transparent)
                     .onFocusChanged { focused = it.isFocused }
                     .focusable()
                     .clickable(interactionSource = null, indication = null) { app.opentv.core.RecordingSignals.suppress(current.recordingId) }

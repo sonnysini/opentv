@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import androidx.compose.foundation.background
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -185,7 +186,7 @@ private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
         label,
         style = MaterialTheme.typography.titleMedium,
         color = when {
-            focused -> MaterialTheme.colorScheme.onPrimary
+            focused -> MaterialTheme.colorScheme.primary
             selected -> MaterialTheme.colorScheme.onPrimaryContainer
             else -> MaterialTheme.colorScheme.onSurfaceVariant
         },
@@ -195,7 +196,7 @@ private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(
                 when {
-                    focused -> MaterialTheme.colorScheme.primary
+                    focused -> focusVeil(MaterialTheme.colorScheme.surfaceVariant)
                     selected -> MaterialTheme.colorScheme.primaryContainer
                     else -> MaterialTheme.colorScheme.surfaceVariant
                 },

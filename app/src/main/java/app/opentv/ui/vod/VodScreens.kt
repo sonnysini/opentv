@@ -6,6 +6,7 @@
 package app.opentv.ui.vod
 
 import androidx.compose.animation.core.animateFloatAsState
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -815,12 +816,12 @@ internal fun ProviderChips(
 private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
-        focused -> MaterialTheme.colorScheme.primary
+        focused -> focusVeil(MaterialTheme.colorScheme.surfaceVariant)
         selected -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val fg = when {
-        focused -> MaterialTheme.colorScheme.onPrimary
+        focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }

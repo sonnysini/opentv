@@ -438,7 +438,11 @@ internal fun VodTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Uni
             ) {
                 Text(
                     label.uppercase(),
-                    color = if (focused || isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        focused -> MaterialTheme.colorScheme.primary
+                        isSelected -> MaterialTheme.colorScheme.onSurface
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     fontFamily = OswaldTabs,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 18.sp,
@@ -652,7 +656,8 @@ private const val TURN_MILLIS = 8_000
 private val Accent = Color(0xFF57D9C5)
 private val AccentDark = Color(0xFF062320)
 private val Gold = Color(0xFFF5C518)
-private val TabFocused = Color(0xFF2A2F2D)
+// Focus on a tab: the faint accent veil with the word in the accent, as in the menu.
+private val TabFocused = Color(0xFF52DBC8).copy(alpha = 0.16f)
 private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 private val OswaldTabs = FontFamily(
     Font(R.font.oswald_regular, FontWeight.Normal),

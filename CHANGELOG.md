@@ -1,23 +1,28 @@
 # Changelog
 
-## 0.56.0 — 10 November 2026
+## 0.56.1 — 10 November 2026
 
-A new menu, and the Live TV page picks for you as you move.
+A new menu, in two shapes, and a quieter focus everywhere there are words.
 
-- **The menu is a glass capsule.** A small dark capsule floats at the left, as tall as its entries
-  and centred down the screen: the MyTV mark, Live TV, Football, Movies, Shows, Recordings, then
-  Search and Settings. Closed it is a strip of icons and the page sits right against it (each page
-  gains room); open it spreads over the page, which no longer moves or shrinks, Live TV included.
-  The open page is its icon filled and its name in the accent — no dot.
-- **Rest on a page to open it.** In the menu, the focused entry is a faint pill that fills from the
-  left; once full (0.4 s) its page opens, sliding in from the right, and the menu stays open.
-  Moving on before that changes nothing. Search and Settings still open with OK. Three seconds
-  without a key, the menu closes itself and focus goes into the page; RIGHT or OK goes there at once.
+- **The menu is glass.** Settings › Appearance › *Side menu* picks its shape:
+  - *Floating capsule* (default): a small dark capsule at the left, as tall as its entries and
+    centred down the screen — the MyTV mark, Live TV, Football, Movies, Shows, Recordings, then
+    Search and Settings. Closed it is a strip of icons the page sits right against (each page gains
+    room); open it spreads over the page, which doesn't move, Live TV included. Two seconds without
+    a key it closes by itself, staying on the page you were on.
+  - *Full-height bar*: the bar of before — top to bottom, Search and Settings at the bottom, opening
+    pushes the page aside, stays open until you leave it — in the same glass, with rounded corners.
+- **Bigger menu.** Larger icons, names and focus pill.
+- **OK opens.** UP and DOWN in the menu only move the focus; OK opens the page and closes the menu,
+  RIGHT goes back into the page. The open page is its icon filled and its name in the accent.
 - **Profiles moved to Settings.** The profile entry left the menu: it is now *Account*, at the top
   of Settings.
-- **The same on Live TV.** A focused group fills the same way and opens when full, its channels
-  coming in from the right; the tabs above (★, Italy, Football…) grow an accent line under the word
-  and open once it spans it, the line then drawing back to the short dash.
+- **A faint focus wherever there are words.** Menu entries, the Live TV tabs and groups, the channel
+  rows, the Movies/Shows tabs, settings buttons, chips, pickers and the on-screen keyboard: focus is
+  a faint accent veil with the text in the accent, instead of a solid pill or a frame. Posters and
+  cards keep their own focus.
+- **Live TV without the entrance.** A new group's channels and a new tab's groups just appear, no
+  slide.
 
 ## 0.55.1 — 9 November 2026
 

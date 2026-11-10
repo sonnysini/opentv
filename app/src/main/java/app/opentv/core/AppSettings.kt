@@ -59,6 +59,23 @@ class AppSettings private constructor(context: Context) {
     }
 
     /**
+     * The side menu: [MenuStyle.CAPSULE], the compact glass capsule that opens over the page and
+     * closes by itself, or [MenuStyle.BAR], the full-height bar of before that pushes the page aside
+     * and stays open until you leave it — in the same glass look.
+     */
+    enum class MenuStyle { CAPSULE, BAR }
+
+    private val _menuStyle = pref {
+        runCatching { MenuStyle.valueOf(prefs.getString(KEY_MENU_STYLE, null) ?: "") }.getOrDefault(MenuStyle.CAPSULE)
+    }
+    val menuStyle: StateFlow<MenuStyle> = _menuStyle.asStateFlow()
+
+    fun setMenuStyle(style: MenuStyle) {
+        prefs.edit().putString(KEY_MENU_STYLE, style.name).apply()
+        _menuStyle.value = style
+    }
+
+    /**
      * How the live-TV channel list is laid out: the scrolling EPG time-[ChannelLayout.GRID], or a
      * compact one-channel-per-row [ChannelLayout.LIST] (logo, name, now/next) for people who find
      * the full grid busy, or [ChannelLayout.FULLSCREEN]: the same list across the whole screen with
@@ -1049,6 +1066,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_IGNORED_MERGE_PAIRS = "ignored_merge_pairs"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_APP_STYLE = "app_style"
+        private const val KEY_MENU_STYLE = "menu_style"
         private const val KEY_CHANNEL_LAYOUT = "channel_layout"
         private const val KEY_LAST_LIVE_GROUP = "last_live_group"
         private const val KEY_LAST_LIVE_TAB = "last_live_tab"

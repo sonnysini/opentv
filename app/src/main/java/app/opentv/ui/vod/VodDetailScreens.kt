@@ -6,6 +6,7 @@
 package app.opentv.ui.vod
 
 import androidx.compose.animation.core.animateFloatAsState
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.produceState
@@ -640,8 +641,8 @@ private fun GenreChip(label: String) {
 @Composable
 private fun PersonChip(name: String, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val container = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val content = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val container = if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant) else MaterialTheme.colorScheme.surfaceVariant
+    val content = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Text(
         name,
         style = MaterialTheme.typography.titleSmall,
