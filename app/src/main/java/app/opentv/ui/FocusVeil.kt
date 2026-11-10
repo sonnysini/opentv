@@ -21,4 +21,4 @@ import androidx.compose.ui.graphics.compositeOver
 fun focusVeil(ground: Color = Color.Transparent): Color =
     MaterialTheme.colorScheme.primary.copy(alpha = FOCUS_VEIL_ALPHA).compositeOver(ground)
 
-const val FOCUS_VEIL_ALPHA = 0.16f
+const val FOCUS_VEIL_ALPHA = 0.24f

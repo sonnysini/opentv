@@ -436,7 +436,7 @@ private fun NavRail(
     val longest = remember(labels, labelStyle, density) {
         with(density) { labels.maxOf { measurer.measure(it, labelStyle, maxLines = 1).size.width }.toDp() }
     }
-    val openWidth = closed + longest + CAPSULE_OPEN_EXTRA
+    val openWidth = closed + longest + if (bar) BAR_OPEN_EXTRA else CAPSULE_OPEN_EXTRA
     val shape = RoundedCornerShape(if (bar) BAR_RADIUS else CAPSULE_RADIUS)
     // UP and DOWN step through the entries in order, never out of the menu: left to the focus
     // search, a move could land on the page under the open capsule instead (on Movies it did).
@@ -583,7 +583,7 @@ private fun RailItem(
                 .fillMaxWidth()
                 .height(PILL_HEIGHT)
                 .clip(pillShape)
-                .background(if (focused) primary.copy(alpha = 0.16f) else Color.Transparent),
+                .background(if (focused) primary.copy(alpha = FOCUS_VEIL_ALPHA) else Color.Transparent),
         )
         Row(
             Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
@@ -621,6 +621,8 @@ private val CAPSULE_PAD = 10.dp
 // The full-height bar: wider closed, rounder corners, its page against it in the same way.
 private val BAR_CLOSED = 76.dp
 private val BAR_RADIUS = 18.dp
+// The bar has more room on the left of its names, so a little more after them too.
+private val BAR_OPEN_EXTRA = 44.dp
 private val BAR_PAD = 14.dp
 private val BAR_PAGE_START = CAPSULE_MARGIN + BAR_CLOSED
 private val LOGO_BLOCK = 46.dp
@@ -638,7 +640,7 @@ private const val OPEN_MILLIS = 400
 private const val PAGE_IN_MILLIS = 220
 private const val AUTO_CLOSE_MILLIS = 2_000L
 private const val AUTO_CLOSE_RETRY_MILLIS = 2_500L
-private val Glass = Color(0xA80E1513)
+private val Glass = Color(0xD90E1513)
 private val GlassEdge = Color.White.copy(alpha = 0.09f)
 private val Dim = Color(0xFFDEE4E1).copy(alpha = 0.6f)
 private val OutCubic = Easing { x -> 1f - (1f - x) * (1f - x) * (1f - x) }

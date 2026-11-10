@@ -658,7 +658,7 @@ private val Accent = Color(0xFF57D9C5)
 private val AccentDark = Color(0xFF062320)
 private val Gold = Color(0xFFF5C518)
 // Focus on a tab: the faint accent veil with the word in the accent, as in the menu.
-private val TabFocused = Color(0xFF52DBC8).copy(alpha = 0.16f)
+private val TabFocused = Color(0xFF52DBC8).copy(alpha = app.opentv.ui.FOCUS_VEIL_ALPHA)
 private val Oswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 private val OswaldTabs = FontFamily(
     Font(R.font.oswald_regular, FontWeight.Normal),

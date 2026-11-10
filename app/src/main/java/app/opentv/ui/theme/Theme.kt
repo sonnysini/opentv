@@ -197,8 +197,8 @@ fun OpenTvTheme(
                 // The faint accent veil, no ring: the same focus as the menu and the lists.
                 LocalIndication provides OwnTvFocusIndication(
                     ring = androidx.compose.ui.graphics.Color.Transparent,
-                    fill = scheme.primary.copy(alpha = 0.16f),
-                    press = scheme.primary.copy(alpha = 0.16f),
+                    fill = scheme.primary.copy(alpha = app.opentv.ui.FOCUS_VEIL_ALPHA),
+                    press = scheme.primary.copy(alpha = app.opentv.ui.FOCUS_VEIL_ALPHA),
                 ),
                 LocalRippleConfiguration provides RippleConfiguration(
                     color = scheme.primary,
