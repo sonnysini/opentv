@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.player
 
+import app.opentv.ui.glass
 import android.os.SystemClock
 import app.opentv.ui.focusVeil
 import android.view.ViewGroup
@@ -1080,14 +1081,14 @@ fun PlayerScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    // Fades in over the top inset, then stays dark behind all the text: with the
-                    // now/next synopsis the bar is tall, and a plain two-stop gradient left the
-                    // title and times over near-clear video — unreadable on a bright pitch.
+                    // A soft shade behind the text, lighter than before now that the buttons sit
+                    // on their own glass capsule; it still darkens early so the title and times
+                    // stay readable over a bright pitch.
                     .background(
                         Brush.verticalGradient(
                             0f to Color.Transparent,
-                            0.18f to Color.Black.copy(alpha = 0.72f),
-                            1f to Color.Black.copy(alpha = 0.92f),
+                            0.3f to Color.Black.copy(alpha = 0.55f),
+                            1f to Color.Black.copy(alpha = 0.8f),
                         ),
                     )
                     // Keep the controls clear of the phone/tablet system nav bar (and the side nav
@@ -1176,7 +1177,11 @@ fun PlayerScreen(
                         // Icon-only buttons; the focused one shows its name above it (BarChip), so the
                         // spacer above leaves room for that label.
                         Spacer(Modifier.height(20.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        // The buttons float in a glass capsule, like the side menu.
+                        Row(
+                            Modifier.glass().padding(horizontal = 9.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             if (controller.isSeekable) {
                                 BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
                                     controller.seekBackward(); watchEpoch++; interaction++
@@ -2050,7 +2055,8 @@ private fun BarChip(
     var longPressed by remember { mutableStateOf(false) }
     val container = when {
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-        else -> Color.White.copy(alpha = 0.14f)
+        // On the glass capsule a resting button has no box of its own.
+        else -> Color.Transparent
     }.let { if (focused) focusVeil(it) else it }
     val content = if (focused) MaterialTheme.colorScheme.primary else Color.White
 

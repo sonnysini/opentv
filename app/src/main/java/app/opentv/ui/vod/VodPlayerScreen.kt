@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.vod
 
+import app.opentv.ui.glass
 import android.view.ViewGroup
 import app.opentv.ui.focusVeil
 import android.view.WindowManager
@@ -596,14 +597,21 @@ fun VodPlayerScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
+                    // A soft shade behind title and seek bar; the buttons have their own glass.
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.35f to Color.Black.copy(alpha = 0.55f),
+                            1f to Color.Black.copy(alpha = 0.8f),
+                        ),
+                    )
                     // Keep the controls clear of the phone/tablet system nav bar (and the side nav
                     // bar / display cutout in landscape). Zero on a TV, so the 10-foot layout is
                     // unchanged; the gradient above stays full-bleed to the screen edge.
                     .windowInsetsPadding(
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
                     )
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                    .padding(start = 28.dp, end = 28.dp, top = 48.dp, bottom = 20.dp),
             ) {
                 if (vodPanel != VodPanel.NONE) {
                     TrackPanel(
@@ -680,7 +688,12 @@ fun VodPlayerScreen(
                 // (github.com/NuvioMedia/NuvioTV, GPL-3.0). Up goes back to the seek bar, down puts
                 // the bar away.
                 fun hideFromButtons() { vodPanel = VodPanel.NONE; controlsVisible = false }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(4.dp))
+                // The buttons float in a glass capsule, like the side menu.
+                Row(
+                    Modifier.glass().padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     // Kept for touch screens, where the seek bar can't be dragged; on a TV the bar
                     // itself is quicker.
                     VodIconButton(Icons.Filled.Replay10, stringResource(R.string.player_rewind), seekFocus, ::hideFromButtons) {

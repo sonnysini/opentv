@@ -700,7 +700,6 @@ private const val OPEN_MILLIS = 400
 private const val PAGE_IN_MILLIS = 220
 private const val AUTO_CLOSE_MILLIS = 2_000L
 private const val AUTO_CLOSE_RETRY_MILLIS = 2_500L
-private val Glass = Color(0xD90E1513)
 // The closed capsule's name label: nearly opaque, so the page doesn't show through the name.
 private val LabelGlass = Color(0xF50E1513)
 private val NAME_LABEL_GAP = 6.dp
@@ -709,6 +708,5 @@ private val NAME_LABEL_RADIUS = 9.dp
 private val NAME_LABEL_PAD = 14.dp
 private const val LABEL_MOVE_MILLIS = 180
 private const val LABEL_FADE_MILLIS = 150
-private val GlassEdge = Color.White.copy(alpha = 0.09f)
 private val Dim = Color(0xFFDEE4E1).copy(alpha = 0.6f)
 private val OutCubic = Easing { x -> 1f - (1f - x) * (1f - x) * (1f - x) }
