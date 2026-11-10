@@ -12,6 +12,13 @@ import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -210,6 +217,7 @@ fun MainScreen(
     // never moves — or the full-height glass bar that pushes the page aside as it opens.
     val menuStyle by settings.menuStyle.collectAsStateWithLifecycle()
     val bar = menuStyle == AppSettings.MenuStyle.BAR
+    val labelOnly = menuStyle == AppSettings.MenuStyle.CAPSULE_LABEL
     // A new Animatable per tab, created at 0 in the very composition that switches the tab: snapping
     // an old one to 0 from the effect let the new page show one frame in place first, then jump
     // right and slide back — a little bounce.
@@ -275,6 +283,7 @@ fun MainScreen(
             tabs = visibleTabs,
             current = tab,
             bar = bar,
+            labelOnly = labelOnly,
             // OK on a page's entry opens it and moves focus into it, closing the menu — the same
             // on every page (and again on the page already open).
             onSelect = { tab = it; enterPage++ },
@@ -376,6 +385,9 @@ private fun StatusBar() {
  *
  * UP and DOWN only move the focus — a faint accent pill; OK opens the entry (and closes the menu),
  * RIGHT goes back into the page. The open page is its icon filled and its name in the accent.
+ *
+ * - the closed capsule ([labelOnly]): the capsule that never opens; the focused entry's name shows
+ *   in a small glass label beside it, which follows UP and DOWN. It closes by itself like the capsule.
  */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -383,6 +395,7 @@ private fun NavRail(
     tabs: List<Tab>,
     current: Tab,
     bar: Boolean,
+    labelOnly: Boolean = false,
     onSelect: (Tab) -> Unit,
     onEnterPage: () -> Unit,
     onOpenSearch: () -> Unit,
@@ -424,7 +437,7 @@ private fun NavRail(
     }
 
     val open by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0f,
+        targetValue = if (expanded && !labelOnly) 1f else 0f,
         animationSpec = tween(OPEN_MILLIS, easing = OutCubic),
         label = "railOpen",
     )
@@ -446,9 +459,16 @@ private fun NavRail(
     var focusedIndex by remember { mutableIntStateOf(-1) }
     // The names fade in over the second half of the opening.
     val labelAlpha = { ((open - 0.4f) / 0.6f).coerceIn(0f, 1f) }
+    // The closed capsule: where each entry sits, for the label beside the focused one.
+    var railTop by remember { mutableFloatStateOf(0f) }
+    val itemTops = remember { mutableStateMapOf<Int, Float>() }
+    val track = { i: Int ->
+        if (labelOnly) Modifier.onGloballyPositioned { itemTops[i] = it.positionInRoot().y } else Modifier
+    }
 
+    Box(modifier.then(if (labelOnly) Modifier.onGloballyPositioned { railTop = it.positionInRoot().y } else Modifier)) {
     Column(
-        modifier
+        Modifier
             .padding(start = CAPSULE_MARGIN)
             .then(if (bar) Modifier.padding(vertical = CAPSULE_MARGIN).fillMaxHeight() else Modifier)
             .width(closed + (openWidth - closed) * open)
@@ -514,6 +534,7 @@ private fun NavRail(
                 closed = closed,
                 selected = current == t,
                 modifier = Modifier.focusRequester(requesters[i])
+                    .then(track(i))
                     .then(if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier),
                 onFocused = { focusedIndex = i },
             ) { onSelect(t) }
@@ -526,17 +547,54 @@ private fun NavRail(
         RailItem(
             R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha,
             closed = closed,
-            modifier = Modifier.focusRequester(requesters[tabs.size]),
+            modifier = Modifier.focusRequester(requesters[tabs.size]).then(track(tabs.size)),
             onFocused = { focusedIndex = tabs.size },
             onClick = onOpenSearch,
         )
         RailItem(
             R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha,
             closed = closed,
-            modifier = Modifier.focusRequester(requesters[tabs.size + 1]),
+            modifier = Modifier.focusRequester(requesters[tabs.size + 1]).then(track(tabs.size + 1)),
             onFocused = { focusedIndex = tabs.size + 1 },
             onClick = onOpenSettings,
         )
+    }
+    if (labelOnly) {
+        val show = expanded && focusedIndex in labels.indices && itemTops[focusedIndex] != null
+        val shown by animateFloatAsState(if (show) 1f else 0f, tween(LABEL_FADE_MILLIS), label = "railLabel")
+        val pitch = with(density) { (ITEM_PITCH - NAME_LABEL_HEIGHT).toPx() / 2f }
+        val targetY = (itemTops[focusedIndex] ?: railTop) - railTop + pitch
+        val y = remember { Animatable(targetY) }
+        // Appearing, it is already level with its entry; then it glides along with UP and DOWN.
+        LaunchedEffect(targetY, show) {
+            if (!show) return@LaunchedEffect
+            if (shown == 0f) y.snapTo(targetY) else y.animateTo(targetY, tween(LABEL_MOVE_MILLIS, easing = OutCubic))
+        }
+        var text by remember { mutableStateOf("") }
+        if (show) text = labels[focusedIndex]
+        if (shown > 0f) {
+            val labelShape = RoundedCornerShape(NAME_LABEL_RADIUS)
+            Box(
+                Modifier
+                    .offset { IntOffset((CAPSULE_MARGIN + closed + NAME_LABEL_GAP).roundToPx(), y.value.roundToInt()) }
+                    .graphicsLayer { alpha = shown }
+                    .height(NAME_LABEL_HEIGHT)
+                    .clip(labelShape)
+                    .background(LabelGlass)
+                    .border(1.dp, GlassEdge, labelShape)
+                    .padding(horizontal = NAME_LABEL_PAD),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text,
+                    style = labelStyle,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
     }
 }
 
@@ -643,6 +701,14 @@ private const val PAGE_IN_MILLIS = 220
 private const val AUTO_CLOSE_MILLIS = 2_000L
 private const val AUTO_CLOSE_RETRY_MILLIS = 2_500L
 private val Glass = Color(0xD90E1513)
+// The closed capsule's name label: nearly opaque, so the page doesn't show through the name.
+private val LabelGlass = Color(0xF50E1513)
+private val NAME_LABEL_GAP = 6.dp
+private val NAME_LABEL_HEIGHT = 32.dp
+private val NAME_LABEL_RADIUS = 9.dp
+private val NAME_LABEL_PAD = 14.dp
+private const val LABEL_MOVE_MILLIS = 180
+private const val LABEL_FADE_MILLIS = 150
 private val GlassEdge = Color.White.copy(alpha = 0.09f)
 private val Dim = Color(0xFFDEE4E1).copy(alpha = 0.6f)
 private val OutCubic = Easing { x -> 1f - (1f - x) * (1f - x) * (1f - x) }

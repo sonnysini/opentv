@@ -923,6 +923,7 @@
     <string name="panel_film">Film</string>
     <string name="settings_menu_style_title">Side menu</string>
     <string name="settings_menu_style_capsule">Floating capsule</string>
+    <string name="settings_menu_style_capsule_label">Closed capsule with name</string>
     <string name="settings_menu_style_bar">Full-height bar</string>
-    <string name="settings_menu_style_note">Capsule: compact, opens over the page and closes by itself after 2 s. Bar: full height, pushes the page aside and stays open until you leave it.</string>
+    <string name="settings_menu_style_note">Capsule: compact, opens over the page and closes by itself after 2 s. Closed capsule: never opens, the name of the entry shows beside it. Bar: full height, pushes the page aside and stays open until you leave it.</string>
 </resources>

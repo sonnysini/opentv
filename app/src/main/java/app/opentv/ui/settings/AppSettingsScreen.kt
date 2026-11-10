@@ -149,6 +149,9 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
             ThemeOption(stringResource(R.string.settings_menu_style_capsule), menuStyle == AppSettings.MenuStyle.CAPSULE) {
                 settings.setMenuStyle(AppSettings.MenuStyle.CAPSULE)
             }
+            ThemeOption(stringResource(R.string.settings_menu_style_capsule_label), menuStyle == AppSettings.MenuStyle.CAPSULE_LABEL) {
+                settings.setMenuStyle(AppSettings.MenuStyle.CAPSULE_LABEL)
+            }
             ThemeOption(stringResource(R.string.settings_menu_style_bar), menuStyle == AppSettings.MenuStyle.BAR) {
                 settings.setMenuStyle(AppSettings.MenuStyle.BAR)
             }
