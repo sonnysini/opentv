@@ -66,7 +66,7 @@ class AppSettings private constructor(context: Context) {
     enum class MenuStyle { CAPSULE, BAR }
 
     private val _menuStyle = pref {
-        runCatching { MenuStyle.valueOf(prefs.getString(KEY_MENU_STYLE, null) ?: "") }.getOrDefault(MenuStyle.CAPSULE)
+        runCatching { MenuStyle.valueOf(prefs.getString(KEY_MENU_STYLE, null) ?: "") }.getOrDefault(MenuStyle.BAR)
     }
     val menuStyle: StateFlow<MenuStyle> = _menuStyle.asStateFlow()
 
