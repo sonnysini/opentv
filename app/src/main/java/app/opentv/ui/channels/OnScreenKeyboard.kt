@@ -6,6 +6,7 @@
 package app.opentv.ui.channels
 
 import android.content.ClipboardManager
+import app.opentv.ui.focusVeil
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -99,8 +100,8 @@ private fun KeyCap(
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val bg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant) else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .height(48.dp)
@@ -110,10 +111,6 @@ private fun KeyCap(
             .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
-            )
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

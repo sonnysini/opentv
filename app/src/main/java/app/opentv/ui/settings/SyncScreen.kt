@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import androidx.compose.foundation.background
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -256,14 +257,14 @@ private fun Field(label: String, value: String) {
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
-        focused -> MaterialTheme.colorScheme.primary
+        focused -> focusVeil(MaterialTheme.colorScheme.surfaceVariant)
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     Text(
         label,
         style = MaterialTheme.typography.titleMedium,
-        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
@@ -293,8 +294,8 @@ private fun NumPad(onKey: (String) -> Unit, onBackspace: () -> Unit) {
 @Composable
 private fun NumKey(label: String, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val bg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant) else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .size(54.dp)
@@ -302,10 +303,6 @@ private fun NumKey(label: String, onClick: () -> Unit) {
             .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
-            )
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

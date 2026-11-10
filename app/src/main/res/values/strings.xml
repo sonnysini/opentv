@@ -870,6 +870,8 @@
     <string name="pp_sent_body">You can put your phone down — the rest happens on the telly.</string>
 
     <string name="pp_html_lang">en</string>
+    <string name="settings_account_title">Account</string>
+    <string name="settings_account_subtitle">%1$s · switch or manage profiles</string>
     <string name="settings_hub_sources">Sources</string>
     <string name="settings_hub_channels">Channels</string>
     <string name="settings_hub_watching">Watching</string>
@@ -919,4 +921,8 @@
     <string name="panel_remove">Remove from the list</string>
     <string name="panel_remaining">%1$s to go</string>
     <string name="panel_film">Film</string>
+    <string name="settings_menu_style_title">Side menu</string>
+    <string name="settings_menu_style_capsule">Floating capsule</string>
+    <string name="settings_menu_style_bar">Full-height bar</string>
+    <string name="settings_menu_style_note">Capsule: compact, opens over the page and closes by itself after 2 s. Bar: full height, pushes the page aside and stays open until you leave it.</string>
 </resources>

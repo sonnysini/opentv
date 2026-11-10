@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import androidx.compose.foundation.background
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
@@ -63,6 +65,9 @@ import app.opentv.ui.theme.focusLift
  */
 @Composable
 fun SettingsHubScreen(
+    // The profile in use, and the profiles screen: the account sits at the top of the settings.
+    accountName: String,
+    onOpenAccount: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenAddons: () -> Unit,
     onOpenGuide: () -> Unit,
@@ -80,9 +85,13 @@ fun SettingsHubScreen(
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
 ) {
-    // Four sections: where content comes from, how channels are organised, how watching
+    // The account, then four sections: where content comes from, how channels are organised, how watching
     // behaves, and the rest.
     val sections = listOf(
+        // The account first, on its own, without a heading.
+        null to listOf(
+            HubEntry(Icons.Filled.AccountCircle, stringResource(R.string.settings_account_title), stringResource(R.string.settings_account_subtitle, accountName), onOpenAccount),
+        ),
         stringResource(R.string.settings_hub_sources) to listOf(
             HubEntry(Icons.Filled.Dns, stringResource(R.string.settings_providers_title), stringResource(R.string.settings_providers_subtitle), onOpenProviders),
             HubEntry(Icons.Filled.Extension, stringResource(R.string.settings_addons_title), stringResource(R.string.settings_addons_subtitle), onOpenAddons),
@@ -131,7 +140,7 @@ fun SettingsHubScreen(
                 // The header rides with the first row so every list item can take focus.
                 items(entries.size) { i ->
                     Column {
-                        if (i == 0) {
+                        if (i == 0 && title != null) {
                             Text(
                                 title.uppercase(),
                                 style = MaterialTheme.typography.labelLarge,
@@ -165,12 +174,8 @@ private fun HubRow(entry: HubEntry) {
             .focusLift(focused)
             .clip(RoundedCornerShape(14.dp))
             .background(
-                if (focused) MaterialTheme.colorScheme.primaryContainer
+                if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant)
                 else MaterialTheme.colorScheme.surfaceVariant,
-            )
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
-                else Modifier,
             )
             .clickable(interactionSource = null, indication = null, onClick = entry.onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp),
@@ -179,7 +184,7 @@ private fun HubRow(entry: HubEntry) {
         Icon(
             entry.icon,
             contentDescription = null,
-            tint = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp),
         )
         Spacer(Modifier.width(18.dp))
@@ -188,13 +193,13 @@ private fun HubRow(entry: HubEntry) {
                 entry.title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
+                color = if (focused) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 entry.subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                color = if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -211,12 +216,12 @@ internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Uni
         label,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Medium,
-        color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.primary,
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+            .background(if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant) else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
     )

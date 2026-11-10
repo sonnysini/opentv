@@ -6,6 +6,7 @@
 package app.opentv
 
 import android.app.PictureInPictureParams
+import app.opentv.ui.focusVeil
 import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
@@ -508,13 +509,11 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onRefresh = sourcesViewModel::refreshAll,
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS_HUB) },
-                    onOpenProfiles = { navController.navigate(Routes.PROFILES) },
                     onPlayRecording = playRecording,
                     onPlayCatchup = { key, url, title, ua ->
                         // Catch-up is a seekable archive stream — plays through the VOD player.
                         navController.navigate(Routes.vodPlayer(key, url, title, ua))
                     },
-                    activeProfileName = activeProfileName,
                 )
             }
 
@@ -546,6 +545,8 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
             screen(Routes.SETTINGS_HUB) {
                 SettingsHubScreen(
+                    accountName = activeProfileName,
+                    onOpenAccount = { navController.navigate(Routes.PROFILES) },
                     onOpenProviders = { navController.navigate(Routes.PROVIDERS) },
                     onOpenAddons = { navController.navigate(Routes.ADDONS) },
                     onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },
@@ -763,11 +764,11 @@ private fun RecordingSwitchBanner() {
             Text(
                 stringResource(R.string.rec_switch_keep_watching),
                 style = MaterialTheme.typography.labelLarge,
-                color = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .focusLift(focused)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .background(if (focused) focusVeil(Color.Transparent) else Color.Transparent)
                     .onFocusChanged { focused = it.isFocused }
                     .focusable()
                     .clickable(interactionSource = null, indication = null) { app.opentv.core.RecordingSignals.suppress(current.recordingId) }

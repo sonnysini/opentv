@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.56.1 — 10 November 2026
+
+A new menu, in two shapes, and a quieter focus everywhere there are words.
+
+- **The menu is glass.** Settings › Appearance › *Side menu* picks its shape:
+  - *Full-height bar* (default): the bar of before — top to bottom, Search and Settings at the bottom, opening
+    pushes the page aside, stays open until you leave it — in the same glass, with rounded corners.
+  - *Floating capsule*: a small dark capsule at the left, as tall as its entries and
+    centred down the screen — the MyTV mark, Live TV, Football, Movies, Shows, Recordings, then
+    Search and Settings. Closed it is a strip of icons the page sits right against (each page gains
+    room); open it spreads over the page, which doesn't move, Live TV included. Two seconds without
+    a key it closes by itself, staying on the page you were on.
+- **Bigger menu.** Larger icons, names and focus pill.
+- **OK opens.** UP and DOWN in the menu only move the focus; OK opens the page and closes the menu,
+  RIGHT goes back into the page. The open page is its icon filled and its name in the accent.
+- **Profiles moved to Settings.** The profile entry left the menu: it is now *Account*, at the top
+  of Settings.
+- **A faint focus wherever there are words.** Menu entries, the Live TV tabs and groups, the channel
+  rows, the Movies/Shows tabs, settings buttons, chips, pickers and the on-screen keyboard: focus is
+  a faint accent veil with the text in the accent, instead of a solid pill or a frame. Posters and
+  cards keep their own focus.
+- **Live TV without the entrance.** A new group's channels and a new tab's groups just appear, no
+  slide.
+
 ## 0.55.1 — 9 November 2026
 
 - **Football: the next matchday of each competition, however far.** The page read a week ahead,

@@ -6,6 +6,7 @@
 package app.opentv.ui.channels
 
 import androidx.activity.compose.BackHandler
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -299,12 +300,12 @@ private fun RailEntry(
 ) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
-        focused -> MaterialTheme.colorScheme.primary
+        focused -> focusVeil(MaterialTheme.colorScheme.surface)
         selected -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surface
     }
     val fg = when {
-        focused -> MaterialTheme.colorScheme.onPrimary
+        focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }

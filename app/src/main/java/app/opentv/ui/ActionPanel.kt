@@ -234,13 +234,13 @@ fun ActionRow(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
-    val fg = if (focused) scheme.onPrimary else scheme.onSurface
-    val faint = if (focused) scheme.onPrimary else scheme.onSurfaceVariant
+    val fg = if (focused) scheme.primary else scheme.onSurface
+    val faint = if (focused) scheme.primary else scheme.onSurfaceVariant
     Row(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(if (focused) scheme.primary else Color.Transparent)
+            .background(if (focused) focusVeil(Color.Transparent) else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 9.dp),
@@ -259,7 +259,7 @@ fun ActionRow(
             icon != null -> Icon(
                 painterResource(icon),
                 contentDescription = null,
-                tint = if (focused) scheme.onPrimary else iconTint ?: scheme.onSurfaceVariant,
+                tint = if (focused) scheme.primary else iconTint ?: scheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -291,7 +291,7 @@ fun ActionChip(label: String, selected: Boolean, modifier: Modifier = Modifier, 
     var focused by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     val (bg, fg, edge) = when {
-        focused -> Triple(scheme.primary, scheme.onPrimary, scheme.primary)
+        focused -> Triple(focusVeil(), scheme.primary, scheme.primary)
         selected -> Triple(scheme.onSurface, scheme.surface, scheme.onSurface)
         else -> Triple(Color.Transparent, Color.White.copy(alpha = 0.9f), Color.White.copy(alpha = 0.45f))
     }

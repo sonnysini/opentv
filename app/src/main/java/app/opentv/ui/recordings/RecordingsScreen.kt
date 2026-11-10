@@ -6,6 +6,7 @@
 package app.opentv.ui.recordings
 
 import android.app.Application
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -425,8 +426,8 @@ private fun RecordingRow(
 @Composable
 private fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val bg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (focused) focusVeil(MaterialTheme.colorScheme.surface) else MaterialTheme.colorScheme.surface
+    val fg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .focusLift(focused)

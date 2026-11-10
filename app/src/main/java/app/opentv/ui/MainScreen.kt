@@ -7,7 +7,18 @@ package app.opentv.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +26,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,7 +35,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -36,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -79,7 +91,6 @@ import app.opentv.data.model.Recording
 import app.opentv.data.model.Series
 import app.opentv.ui.channels.HomeScreen
 import app.opentv.ui.recordings.RecordingsScreen
-import app.opentv.ui.theme.focusLift
 import app.opentv.ui.vod.MoviesScreen
 import app.opentv.ui.vod.SeriesScreen
 import kotlinx.coroutines.delay
@@ -98,8 +109,6 @@ enum class Tab(val labelRes: Int, val icon: Int, val iconSelected: Int) {
     RECORDINGS(R.string.nav_recordings, R.drawable.ic_nav_recordings, R.drawable.ic_nav_recordings_fill),
 }
 
-private val RAIL_COLLAPSED = 76.dp
-private val RAIL_EXPANDED = 236.dp
 
 @Composable
 fun MainScreen(
@@ -114,10 +123,8 @@ fun MainScreen(
     onRefresh: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenProfiles: () -> Unit,
     onPlayRecording: (Recording) -> Unit,
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit,
-    activeProfileName: String,
 ) {
     // Content-type toggles: a switched-off type has its tab hidden here (and its sync skipped in
     // CatalogRepository). Recordings is never a content type, so it always stays — which also means
@@ -152,9 +159,12 @@ fun MainScreen(
     // The rail stays as an icon strip beside the full-screen live list too, as on every other tab;
     // LEFT out of the list (or Back from the groups) moves focus into it, which opens it.
     var navRevealed by remember { mutableStateOf(false) }
+    // Focus is in the menu: the page opening under it leaves the focus there.
+    val menuFocused = remember { mutableStateOf(false) }
+    val menuHasFocus = remember { { menuFocused.value } }
     val navFocus = remember { FocusRequester() }
-    // RIGHT out of the rail on Live TV: back into the groups, not onto whatever sits nearest the
-    // menu item (the top's button). Set by the full-screen list while it's on screen.
+    // Into Live TV from the rail: the groups, not whatever sits nearest the menu item (the top's
+    // button). Set by the full-screen list while it's on screen.
     var liveNavExit by remember { mutableStateOf<(() -> Boolean)?>(null) }
     // Bumped by OK on a rail entry: the page then takes focus (see focusOnEnter below).
     var enterPage by remember { mutableIntStateOf(0) }
@@ -195,45 +205,33 @@ fun MainScreen(
         )
     }
 
-    // The rail sits beside the content and pushes it, rather than floating over it. The Live TV
-    // screen has its own category rail down its left edge, and an overlaying menu would land on top
-    // of it and leave a sliver poking out — so they live side by side and never collide.
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-    val screenWidth = maxWidth
-    Column(Modifier.fillMaxSize()) {
-      Row(Modifier.weight(1f).fillMaxWidth()) {
-        NavRail(
-            tabs = visibleTabs,
-            current = tab,
-            // OK on a page's entry opens it and moves focus into it, closing the rail — the same
-            // on every page (and again on the page already open).
-            onSelect = { tab = it; enterPage++ },
-            currentFocus = navFocus,
-            onFocusLeft = { navRevealed = false },
-            onRight = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
-            onOpenSearch = onOpenSearch,
-            onOpenSettings = onOpenSettings,
-            onOpenProfiles = onOpenProfiles,
-            activeProfileName = activeProfileName,
+    // The menu's shape (Settings › Appearance): the glass capsule floating over the page's left
+    // edge — closed a strip of icons the page sits right against, open spread over the page, which
+    // never moves — or the full-height glass bar that pushes the page aside as it opens.
+    val menuStyle by settings.menuStyle.collectAsStateWithLifecycle()
+    val bar = menuStyle == AppSettings.MenuStyle.BAR
+    val pageIn = remember { Animatable(1f) }
+    var firstTab by remember { mutableStateOf(true) }
+    LaunchedEffect(tab) {
+        if (firstTab) { firstTab = false; return@LaunchedEffect }
+        // The new page slides in from the right as it fades in.
+        pageIn.snapTo(0f)
+        pageIn.animateTo(1f, tween(PAGE_IN_MILLIS, easing = OutCubic))
+    }
+    val pageModifier = Modifier
+        .graphicsLayer {
+            val k = pageIn.value
+            alpha = k
+            translationX = (1f - k) * PAGE_IN_SHIFT.toPx()
+        }
+        .focusOnEnter(
+            key = enterPage,
+            enabled = enterPage > 0,
+            // Live TV: into the groups, as RIGHT out of the rail does.
+            enter = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
         )
-
-        // The pages of cards keep the width they have with the rail closed: opening it slides
-        // them right, partly off screen, instead of squeezing them (their cards are sized from the
-        // page's width, so they shrank and grew back with every open and close). Live TV's lists
-        // reflow, so it still takes the space that's left.
-        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
-            val page = if (tab == Tab.LIVE) Modifier.fillMaxSize() else Modifier
-                .wrapContentWidth(Alignment.Start, unbounded = true)
-                .requiredWidth(screenWidth - RAIL_COLLAPSED)
-                .fillMaxHeight()
-          Box(
-              page.focusOnEnter(
-                  key = enterPage,
-                  enabled = enterPage > 0,
-                  // Live TV: into the groups, as RIGHT out of the rail does.
-                  enter = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
-              ),
-          ) {
+    val page: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalMenuHasFocus provides menuHasFocus) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,
@@ -268,11 +266,51 @@ fun MainScreen(
                 )
                 Tab.RECORDINGS -> RecordingsScreen(onPlay = onPlayRecording)
             }
+        }
+    }
+    val rail: @Composable (Modifier) -> Unit = { railModifier ->
+        NavRail(
+            tabs = visibleTabs,
+            current = tab,
+            bar = bar,
+            // OK on a page's entry opens it and moves focus into it, closing the menu — the same
+            // on every page (and again on the page already open).
+            onSelect = { tab = it; enterPage++ },
+            // RIGHT (or, for the capsule, a while without a key): back into the page.
+            onEnterPage = { enterPage++ },
+            currentFocus = navFocus,
+            onFocusLeft = { navRevealed = false },
+            onFocusChange = { menuFocused.value = it },
+            onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings,
+            modifier = railModifier,
+        )
+    }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+      if (bar) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+          val screenWidth = maxWidth
+          Row(Modifier.fillMaxSize()) {
+              rail(Modifier)
+              // The pages of cards keep the width they have with the bar closed: opening it slides
+              // them right, partly off screen, instead of squeezing them (their cards are sized from
+              // the page's width). Live TV's lists reflow, so it takes the space that's left.
+              Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+                  val width = if (tab == Tab.LIVE) Modifier.fillMaxSize() else Modifier
+                      .wrapContentWidth(Alignment.Start, unbounded = true)
+                      .requiredWidth(screenWidth - BAR_PAGE_START)
+                      .fillMaxHeight()
+                  Box(width.then(pageModifier)) { page() }
+              }
           }
+        }
+      } else {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.padding(start = PAGE_START).fillMaxSize().clipToBounds().then(pageModifier)) { page() }
+            rail(Modifier.align(Alignment.CenterStart))
         }
       }
       StatusBar()
-    }
     }
 }
 
@@ -325,25 +363,37 @@ private fun StatusBar() {
     }
 }
 
+/**
+ * The menu, in one of two shapes ([AppSettings.MenuStyle]), both dark glass with the logo on top:
+ *
+ * - the capsule: as tall as its entries and centred down the screen; focus landing in it opens it
+ *   over the page, which doesn't move. [AUTO_CLOSE_MILLIS] without a key, it closes and focus goes
+ *   back into the page.
+ * - the bar ([bar]): the full height of the screen with rounded corners, Search and Settings at the
+ *   bottom; opening it pushes the page aside, and it stays open until focus leaves it.
+ *
+ * UP and DOWN only move the focus — a faint accent pill; OK opens the entry (and closes the menu),
+ * RIGHT goes back into the page. The open page is its icon filled and its name in the accent.
+ */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun NavRail(
     tabs: List<Tab>,
     current: Tab,
+    bar: Boolean,
     onSelect: (Tab) -> Unit,
+    onEnterPage: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenProfiles: () -> Unit,
-    activeProfileName: String,
     modifier: Modifier = Modifier,
     // Put on the current tab's item, so the shell can drop focus into the rail when it reveals it.
     currentFocus: FocusRequester? = null,
     // Focus has moved out of the rail (after having been in it).
     onFocusLeft: () -> Unit = {},
-    // RIGHT out of the rail: true if the page took focus itself.
-    onRight: () -> Boolean = { false },
+    // Focus is in the rail (true) or not, at once.
+    onFocusChange: (Boolean) -> Unit = {},
 ) {
-    // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
+    // Open whenever focus is anywhere inside; back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
     // Report "focus left" only once it has really gone: moving between two items can flicker the
     // group's focus state for a frame, and acting on that hid the rail mid-move (DOWN from Live TV
@@ -358,118 +408,237 @@ private fun NavRail(
             onFocusLeft()
         }
     }
-    val width by animateDpAsState(
-        targetValue = if (expanded) RAIL_EXPANDED else RAIL_COLLAPSED,
-        label = "railWidth",
+    // The capsule closes by itself; any key restarts the wait.
+    var activity by remember { mutableIntStateOf(0) }
+    val enterPage by rememberUpdatedState(onEnterPage)
+    LaunchedEffect(expanded, activity, bar) {
+        if (!expanded || bar) return@LaunchedEffect
+        delay(AUTO_CLOSE_MILLIS)
+        // A page still loading has nothing to take the focus yet: keep offering it.
+        while (true) {
+            enterPage()
+            delay(AUTO_CLOSE_RETRY_MILLIS)
+        }
+    }
+
+    val open by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(OPEN_MILLIS, easing = OutCubic),
+        label = "railOpen",
     )
+    val closed = if (bar) BAR_CLOSED else CAPSULE_CLOSED
+    // Open, it is as wide as its longest name and a little more.
+    val labels = tabs.map { stringResource(it.labelRes) } +
+        listOf(stringResource(R.string.nav_search), stringResource(R.string.nav_settings))
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val labelStyle = MaterialTheme.typography.titleMedium.copy(fontSize = LABEL_SIZE, fontWeight = FontWeight.SemiBold)
+    val longest = remember(labels, labelStyle, density) {
+        with(density) { labels.maxOf { measurer.measure(it, labelStyle, maxLines = 1).size.width }.toDp() }
+    }
+    val openWidth = closed + longest + CAPSULE_OPEN_EXTRA
+    val shape = RoundedCornerShape(if (bar) BAR_RADIUS else CAPSULE_RADIUS)
+    // UP and DOWN step through the entries in order, never out of the menu: left to the focus
+    // search, a move could land on the page under the open capsule instead (on Movies it did).
+    val requesters = remember(tabs.size) { List(tabs.size + 2) { FocusRequester() } }
+    var focusedIndex by remember { mutableIntStateOf(-1) }
+    // The names fade in over the second half of the opening.
+    val labelAlpha = { ((open - 0.4f) / 0.6f).coerceIn(0f, 1f) }
 
     Column(
         modifier
-            .width(width)
-            .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surface)
-            .onFocusChanged { expanded = it.hasFocus }
-            .onPreviewKeyEvent { e -> e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight && onRight() }
+            .padding(start = CAPSULE_MARGIN)
+            .then(if (bar) Modifier.padding(vertical = CAPSULE_MARGIN).fillMaxHeight() else Modifier)
+            .width(closed + (openWidth - closed) * open)
+            .clip(shape)
+            .background(Glass)
+            .border(1.dp, GlassEdge, shape)
+            .onFocusChanged { expanded = it.hasFocus; onFocusChange(it.hasFocus) }
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                activity++
+                when (e.key) {
+                    Key.DirectionRight -> { onEnterPage(); true }
+                    Key.DirectionDown, Key.DirectionUp -> {
+                        val next = focusedIndex + if (e.key == Key.DirectionDown) 1 else -1
+                        if (focusedIndex >= 0 && next in requesters.indices) runCatching { requesters[next].requestFocus() }
+                        true
+                    }
+                    Key.DirectionLeft -> true
+                    else -> false
+                }
+            }
             // LEFT from the page lands on the page you're on, not on whichever item happens to
             // be level with the card you left (Recordings, from a row low on the screen).
             .focusProperties { enter = { if (it == FocusDirection.Left && currentFocus != null) currentFocus else FocusRequester.Default } }
             .focusGroup()
-            .padding(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(vertical = if (bar) BAR_PAD else CAPSULE_PAD),
     ) {
-        // Brand: the logo mark alone when collapsed, the mark + two-tone "MyTV" wordmark when open,
-        // as in the banner.
+        // Brand: the logo mark alone when closed, the mark + two-tone "MyTV" wordmark when open,
+        // as in the banner; a hairline under it.
         Row(
-            Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+            Modifier.height(LOGO_BLOCK).wrapContentWidth(Alignment.Start, unbounded = true),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_opentv_logo),
-                contentDescription = "MyTV",
-                modifier = Modifier.size(34.dp),
-            )
-            if (expanded) {
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) { append("My") }
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("TV") }
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Box(Modifier.width(closed), contentAlignment = Alignment.Center) {
+                Image(
+                    painter = painterResource(R.drawable.ic_opentv_logo),
+                    contentDescription = "MyTV",
+                    modifier = Modifier.size(LOGO_SIZE),
                 )
             }
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = Color.White)) { append("My") }
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("TV") }
+                },
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = WORDMARK_SIZE),
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.graphicsLayer { alpha = labelAlpha() },
+            )
         }
-        Spacer(Modifier.height(8.dp))
+        Hairline()
+        if (bar) Spacer(Modifier.height(BAR_PAD))
 
-        tabs.forEach { t ->
+        tabs.forEachIndexed { i, t ->
             RailItem(
-                if (current == t) t.iconSelected else t.icon, stringResource(t.labelRes), expanded, current == t,
-                modifier = if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier,
+                t.icon,
+                t.iconSelected,
+                stringResource(t.labelRes),
+                labelStyle = labelStyle,
+                labelAlpha = labelAlpha,
+                closed = closed,
+                selected = current == t,
+                modifier = Modifier.focusRequester(requesters[i])
+                    .then(if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier),
+                onFocused = { focusedIndex = i },
             ) { onSelect(t) }
         }
 
-        Spacer(Modifier.height(1.dp).fillMaxWidth())
-        Spacer(Modifier.weight(1f))
+        // The bar keeps Search and Settings at the bottom, as before.
+        if (bar) Spacer(Modifier.weight(1f))
+        Box(Modifier.fillMaxWidth().height(SEP_GAP), contentAlignment = Alignment.Center) { Hairline() }
 
-        RailItem(R.drawable.ic_nav_search, stringResource(R.string.nav_search), expanded, false, onClick = onOpenSearch)
-        RailItem(R.drawable.ic_nav_profile, activeProfileName, expanded, false, onClick = onOpenProfiles)
-        RailItem(R.drawable.ic_nav_settings, stringResource(R.string.nav_settings), expanded, false, onClick = onOpenSettings)
+        RailItem(
+            R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha,
+            closed = closed,
+            modifier = Modifier.focusRequester(requesters[tabs.size]),
+            onFocused = { focusedIndex = tabs.size },
+            onClick = onOpenSearch,
+        )
+        RailItem(
+            R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha,
+            closed = closed,
+            modifier = Modifier.focusRequester(requesters[tabs.size + 1]),
+            onFocused = { focusedIndex = tabs.size + 1 },
+            onClick = onOpenSettings,
+        )
     }
 }
 
+@Composable
+private fun Hairline() {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+}
+
 /**
- * One rail entry. Phosphor line icons; the open page shows its icon filled, in the accent colour,
- * on a faint accent wash. Focus is the solid accent pill used across the app.
+ * One menu entry: the icon centred in the closed menu's width, the name beside it. Focused, a faint
+ * accent pill with icon (filled) and name in the accent; the open page has the same accent, no pill.
  */
 @Composable
 private fun RailItem(
     @DrawableRes icon: Int,
+    @DrawableRes iconFocused: Int,
     label: String,
-    expanded: Boolean,
-    selected: Boolean,
+    labelStyle: TextStyle,
+    labelAlpha: () -> Float,
+    closed: androidx.compose.ui.unit.Dp,
+    selected: Boolean = false,
     modifier: Modifier = Modifier,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val primary = MaterialTheme.colorScheme.primary
-    val shape = RoundedCornerShape(10.dp)
-    val bg = when {
-        focused -> primary
-        selected -> primary.copy(alpha = 0.16f)
-        else -> MaterialTheme.colorScheme.surface
-    }
-    val tint = when {
-        focused -> MaterialTheme.colorScheme.onPrimary
-        selected -> primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val lit = focused || selected
+    val tint = if (lit) primary else Dim
+    val pillShape = RoundedCornerShape(PILL_RADIUS)
 
-    Row(
+    Box(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .focusLift(focused)
-            .clip(shape)
-            .background(bg)
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .height(ITEM_PITCH)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
+            .clickable(interactionSource = null, indication = null, onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Icon(ImageVector.vectorResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(26.dp))
-        if (expanded) {
-            Spacer(Modifier.width(14.dp))
+        Spacer(
+            Modifier
+                .padding(horizontal = PILL_INSET)
+                .fillMaxWidth()
+                .height(PILL_HEIGHT)
+                .clip(pillShape)
+                .background(if (focused) primary.copy(alpha = 0.16f) else Color.Transparent),
+        )
+        Row(
+            Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(closed), contentAlignment = Alignment.Center) {
+                Icon(
+                    ImageVector.vectorResource(if (lit) iconFocused else icon),
+                    contentDescription = label,
+                    tint = tint,
+                    modifier = Modifier.size(ICON_SIZE),
+                )
+            }
             Text(
                 label,
-                style = MaterialTheme.typography.titleMedium,
+                style = labelStyle,
                 color = tint,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                modifier = Modifier.graphicsLayer { alpha = labelAlpha() },
             )
         }
     }
 }
+
+// Sizes from the approved mocks (1920×1080 px at 2 px per dp).
+private val CAPSULE_MARGIN = 7.dp
+private val CAPSULE_CLOSED = 52.dp
+// The page sits right against the closed capsule.
+private val PAGE_START = CAPSULE_MARGIN + CAPSULE_CLOSED
+private val CAPSULE_OPEN_EXTRA = 26.dp
+private val CAPSULE_RADIUS = 19.dp
+private val CAPSULE_PAD = 10.dp
+// The full-height bar: wider closed, rounder corners, its page against it in the same way.
+private val BAR_CLOSED = 76.dp
+private val BAR_RADIUS = 18.dp
+private val BAR_PAD = 14.dp
+private val BAR_PAGE_START = CAPSULE_MARGIN + BAR_CLOSED
+private val LOGO_BLOCK = 46.dp
+private val LOGO_SIZE = 27.dp
+private val WORDMARK_SIZE = 17.sp
+private val ITEM_PITCH = 44.dp
+private val PILL_HEIGHT = 36.dp
+private val PILL_INSET = 4.dp
+private val PILL_RADIUS = 10.dp
+private val ICON_SIZE = 23.dp
+private val LABEL_SIZE = 15.sp
+private val SEP_GAP = 13.dp
+private val PAGE_IN_SHIFT = 30.dp
+private const val OPEN_MILLIS = 400
+private const val PAGE_IN_MILLIS = 220
+private const val AUTO_CLOSE_MILLIS = 2_000L
+private const val AUTO_CLOSE_RETRY_MILLIS = 2_500L
+private val Glass = Color(0xA80E1513)
+private val GlassEdge = Color.White.copy(alpha = 0.09f)
+private val Dim = Color(0xFFDEE4E1).copy(alpha = 0.6f)
+private val OutCubic = Easing { x -> 1f - (1f - x) * (1f - x) * (1f - x) }

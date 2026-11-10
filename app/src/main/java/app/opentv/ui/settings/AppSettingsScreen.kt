@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import android.content.Context
+import app.opentv.ui.focusVeil
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -86,6 +87,7 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
     val settings = remember { AppSettings.get(context) }
     val themeMode by settings.themeMode.collectAsStateWithLifecycle()
     val appStyle by settings.appStyle.collectAsStateWithLifecycle()
+    val menuStyle by settings.menuStyle.collectAsStateWithLifecycle()
     val uiScale by settings.uiScalePercent.collectAsStateWithLifecycle()
     val channelLayout by settings.channelLayout.collectAsStateWithLifecycle()
     val previewVideo by settings.guidePreviewVideo.collectAsStateWithLifecycle()
@@ -141,6 +143,22 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
             )
         }
 
+        Spacer(Modifier.height(16.dp))
+
+        SettingsSection(stringResource(R.string.settings_menu_style_title)) {
+            ThemeOption(stringResource(R.string.settings_menu_style_capsule), menuStyle == AppSettings.MenuStyle.CAPSULE) {
+                settings.setMenuStyle(AppSettings.MenuStyle.CAPSULE)
+            }
+            ThemeOption(stringResource(R.string.settings_menu_style_bar), menuStyle == AppSettings.MenuStyle.BAR) {
+                settings.setMenuStyle(AppSettings.MenuStyle.BAR)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.settings_menu_style_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(Modifier.height(16.dp))
 
         SettingsSection(stringResource(R.string.settings_section_language)) {
@@ -777,8 +795,7 @@ internal fun StepSlider(
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(shape)
-            .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
-            .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, shape)
+            .background(if (focused) focusVeil() else Color.Transparent)
             .onPreviewKeyEvent { event ->
                 val delta = when (event.key) {
                     Key.DirectionLeft -> -step

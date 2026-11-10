@@ -6,6 +6,7 @@
 package app.opentv.ui.settings
 
 import android.content.Intent
+import app.opentv.ui.focusVeil
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -404,11 +405,11 @@ private fun StepperRow(
 private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
-        focused -> MaterialTheme.colorScheme.primary
+        focused -> focusVeil(MaterialTheme.colorScheme.surface)
         enabled -> MaterialTheme.colorScheme.surface
         else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
     }
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val fg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .size(40.dp)
