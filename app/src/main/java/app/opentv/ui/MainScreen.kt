@@ -229,7 +229,7 @@ fun MainScreen(
                       alpha = k
                       translationX = (1f - k) * PAGE_IN_SHIFT.toPx()
                   }
-                  .onFocusChanged { if (it.hasFocus && menuFocused.value) android.util.Log.w("MyTVFocus", "page took focus from menu", Throwable()) }
+                  .onFocusChanged { android.util.Log.w("MyTVFocus", "page hasFocus=${it.hasFocus} menu=${menuFocused.value}", Throwable()) }
                   .focusOnEnter(
                       key = enterPage,
                       enabled = enterPage > 0,
@@ -547,7 +547,7 @@ private fun RailItem(
         modifier
             .fillMaxWidth()
             .height(ITEM_PITCH)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { if (focused != it.isFocused) android.util.Log.w("MyTVFocus", "rail $label focused=${it.isFocused}"); focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
