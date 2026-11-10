@@ -870,6 +870,8 @@
     <string name="pp_sent_body">You can put your phone down — the rest happens on the telly.</string>
 
     <string name="pp_html_lang">en</string>
+    <string name="settings_account_title">Account</string>
+    <string name="settings_account_subtitle">%1$s · switch or manage profiles</string>
     <string name="settings_hub_sources">Sources</string>
     <string name="settings_hub_channels">Channels</string>
     <string name="settings_hub_watching">Watching</string>

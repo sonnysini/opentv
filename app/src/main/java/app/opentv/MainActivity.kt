@@ -508,13 +508,11 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onRefresh = sourcesViewModel::refreshAll,
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS_HUB) },
-                    onOpenProfiles = { navController.navigate(Routes.PROFILES) },
                     onPlayRecording = playRecording,
                     onPlayCatchup = { key, url, title, ua ->
                         // Catch-up is a seekable archive stream — plays through the VOD player.
                         navController.navigate(Routes.vodPlayer(key, url, title, ua))
                     },
-                    activeProfileName = activeProfileName,
                 )
             }
 
@@ -546,6 +544,8 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
             screen(Routes.SETTINGS_HUB) {
                 SettingsHubScreen(
+                    accountName = activeProfileName,
+                    onOpenAccount = { navController.navigate(Routes.PROFILES) },
                     onOpenProviders = { navController.navigate(Routes.PROVIDERS) },
                     onOpenAddons = { navController.navigate(Routes.ADDONS) },
                     onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },

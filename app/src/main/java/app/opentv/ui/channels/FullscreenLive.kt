@@ -12,18 +12,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Easing
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.core.tween
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
@@ -313,10 +308,44 @@ fun FullscreenLive(
         }
         Spacer(Modifier.height(12.dp))
 
+        // A new tab's groups come up into place as they fade in; a new group's channels come in
+        // from the right.
+        val groupsIn = remember { Animatable(1f) }
+        var shownTab by remember { mutableStateOf(selectedTab) }
+        LaunchedEffect(selectedTab) {
+            if (selectedTab == shownTab) return@LaunchedEffect
+            shownTab = selectedTab
+            groupsIn.snapTo(0f)
+            groupsIn.animateTo(1f, tween(CONTENT_IN_MILLIS, easing = OutCubic))
+        }
+        val channelsIn = remember { Animatable(1f) }
+        var shownGroup by remember { mutableStateOf<Pair<Boolean, String?>?>(null) }
+        val waitingRows = awaitingRows != null
+        LaunchedEffect(favouritesOnly, selectedCategory, waitingRows) {
+            if (waitingRows) return@LaunchedEffect
+            val group = favouritesOnly to selectedCategory
+            val before = shownGroup
+            shownGroup = group
+            if (before == null || before == group) return@LaunchedEffect
+            channelsIn.snapTo(0f)
+            channelsIn.animateTo(1f, tween(CONTENT_IN_MILLIS, easing = OutCubic))
+        }
+
         // Whatever the lists leave cut off at the bottom fades into the page.
         Row(Modifier.weight(1f).fillMaxWidth().bottomFade()) {
             val groupsWidth = 320.dp
-            Box(Modifier.width(groupsWidth).fillMaxHeight().focusRequester(groupsFocus).focusGroup()) {
+            Box(
+                Modifier
+                    .width(groupsWidth)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        val k = groupsIn.value
+                        alpha = k
+                        translationY = (1f - k) * 15.dp.toPx()
+                    }
+                    .focusRequester(groupsFocus)
+                    .focusGroup(),
+            ) {
                 // A new tab, a new list: it opens on the tab's current group, or picks the first.
                 androidx.compose.runtime.key(selectedTab, tabs.isEmpty()) {
                     GroupsList(
@@ -331,7 +360,16 @@ fun FullscreenLive(
                 }
             }
             Spacer(Modifier.width(20.dp))
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        val k = channelsIn.value
+                        alpha = k
+                        translationX = (1f - k) * 25.dp.toPx()
+                    },
+            ) {
                 ChannelsPane(
                     rows = rows,
                     active = !groupsOpen,
@@ -366,8 +404,8 @@ fun FullscreenLive(
 /**
  * The groups column: the open tab's groups, or (★ and All) Favourites, the groups last watched
  * from and every group. Open, it is a list of names and channel counts that you move through — the channels beside it follow
- * the focused group after a short pause, so holding a direction doesn't rebuild every group on
- * the way. Closed, the same list can't take focus, the current group marked.
+ * the focused group once its pill has filled ([FOLLOW_MILLIS]), so holding a direction doesn't
+ * rebuild every group on the way. Closed, the same list can't take focus, the current group marked.
  */
 @Composable
 private fun GroupsList(
@@ -382,8 +420,6 @@ private fun GroupsList(
     // UP from the first group.
     above: FocusRequester,
 ) {
-    // The pick behind the focused group, run after a pause unless focus moves on first.
-    var focusedKey by remember { mutableStateOf<String?>(null) }
     // At start-up the categories arrive after the list is drawn: until the remembered group is
     // among the entries, focus sits on the first one (Favourites) only because nothing else is
     // there yet, so following it would throw the remembered group away.
@@ -391,41 +427,14 @@ private fun GroupsList(
     // Once focus has moved on from where it first landed, it is the user moving: follow it even
     // when the current group isn't in this list (picked under another tab).
     var firstFocused by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(focusedKey, open, hasSelection) {
-        val entry = entries.firstOrNull { it.key == focusedKey } ?: return@LaunchedEffect
-        if (firstFocused == null) firstFocused = entry.key
-        if (!open || entry.selected || (!hasSelection && entry.key == firstFocused)) return@LaunchedEffect
-        delay(GROUP_FOLLOW_DELAY_MILLIS)
-        entry.pick()
-    }
     LaunchedEffect(pickFirst, hasSelection, entries.isEmpty()) {
         if (!pickFirst || hasSelection || entries.isEmpty()) return@LaunchedEffect
-        delay(GROUP_FOLLOW_DELAY_MILLIS)
+        delay(PICK_FIRST_DELAY_MILLIS)
         entries.first().pick()
     }
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     // Once the remembered group shows up, move focus onto it (once — later picks follow focus).
     var landed by remember { mutableStateOf(false) }
-    val glide = remember { Glide() }
-    LaunchedEffect(glide.key, glide.listFocused) { glide.follow() }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .onGloballyPositioned { glide.origin = it.positionInRoot().y }
-            .onFocusChanged { glide.listFocused = it.hasFocus },
-    ) {
-    // The focus box: a solid pill drawn once under the list, so it can slide from group to group
-    // and show through the rows' see-through grounds.
-    Spacer(
-        Modifier.fillMaxSize().drawBehind {
-            if (!glide.visible || glide.key == null) return@drawBehind
-            val top = glide.top - glide.origin
-            val height = glide.height
-            val radius = CornerRadius(10.dp.toPx())
-            drawRoundRect(GlideFill, Offset(0f, top), Size(size.width, height), radius)
-        },
-    )
     FocusedList(
         count = entries.size,
         startIndex = selectedIndex,
@@ -446,8 +455,11 @@ private fun GroupsList(
                 count = entry.count,
                 open = open,
                 modifier = if (index == 0) requester.focusProperties { up = above } else requester,
-                onFocused = { focusedKey = entry.key },
-                onPlaced = { top, height -> glide.place(entry.key, top, height) },
+                onFocused = { if (firstFocused == null) firstFocused = entry.key },
+                // Resting on a group opens it — once the user is moving, not where focus first
+                // landed before the remembered group turned up.
+                follows = open && (hasSelection || entry.key != firstFocused),
+                onPick = { entry.pick() },
                 onLeft = onLeft,
                 onEnter = {
                     if (!entry.selected) entry.pick()
@@ -455,57 +467,6 @@ private fun GroupsList(
                 },
             )
         }
-    }
-    }
-}
-
-/**
- * Where the groups' focus box is and where it is heading. A move to another group slides there in
- * [GLIDE_MILLIS] — about as long as the channels take to follow, so the wait reads as the box
- * travelling. The target is read live, so the list scrolling under the box doesn't restart it.
- */
-private class Glide {
-    var origin by mutableFloatStateOf(0f)
-    var listFocused by mutableStateOf(false)
-    var key by mutableStateOf<String?>(null)
-    private var targetTop by mutableFloatStateOf(0f)
-    private var targetHeight by mutableFloatStateOf(0f)
-    private var progress by mutableFloatStateOf(1f)
-    private var fromTop = 0f
-    private var fromHeight = 0f
-    // Moving from one group to the next, the list is out of focus for a frame: only a real exit
-    // (the channels, the tabs) hides the box and makes the next entry land without a slide.
-    var visible by mutableStateOf(false)
-
-    val top: Float get() = fromTop + (targetTop - fromTop) * FastOutSlowInEasing.transform(progress)
-    val height: Float get() = fromHeight + (targetHeight - fromHeight) * FastOutSlowInEasing.transform(progress)
-
-    fun place(key: String, top: Float, height: Float) {
-        // Start from where the box is drawn now, before the target moves on.
-        if (key != this.key && visible) {
-            fromTop = this.top
-            fromHeight = this.height
-            progress = 0f
-        }
-        this.key = key
-        targetTop = top
-        targetHeight = height
-    }
-
-    suspend fun follow() {
-        if (!listFocused || key == null) {
-            delay(GLIDE_EXIT_MILLIS)
-            visible = false
-            return
-        }
-        if (!visible) {
-            visible = true
-            progress = 1f
-            return
-        }
-        if (progress >= 1f) return
-        val left = ((1f - progress) * GLIDE_MILLIS).toInt().coerceAtLeast(1)
-        animate(progress, 1f, animationSpec = tween(left, easing = LinearEasing)) { value, _ -> progress = value }
     }
 }
 
@@ -694,8 +655,9 @@ private fun FocusedList(
 
 /**
  * One group: the broadcaster (or country code) before the name, in tall capitals, the count on
- * the right. Focused = the solid accent pill sliding under the list; the open group = a veil of
- * the accent with accent text, as the open page in the menu.
+ * the right. Focused = a faint accent pill that fills from the left to a stronger accent; once
+ * full the group opens ([onPick]), as the pages in the menu do. The open group = the faint veil,
+ * with accent text.
  */
 @Composable
 private fun CategoryEntry(
@@ -707,15 +669,38 @@ private fun CategoryEntry(
     open: Boolean,
     modifier: Modifier,
     onFocused: () -> Unit,
-    // Where the row sits on screen while focused, for the sliding focus box.
-    onPlaced: (top: Float, height: Float) -> Unit,
+    // Resting on this group opens it.
+    follows: Boolean,
+    onPick: () -> Unit,
     onLeft: () -> Unit,
     onEnter: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    val report = { c: LayoutCoordinates -> onPlaced(c.positionInRoot().y, c.size.height.toFloat()) }
     val shape = RoundedCornerShape(10.dp)
+    val fill = remember { Animatable(0f) }
+    val pick by rememberUpdatedState(onPick)
+    LaunchedEffect(focused, selected, follows) {
+        when {
+            !focused -> fill.snapTo(0f)
+            selected || !follows -> fill.snapTo(1f)
+            else -> {
+                fill.snapTo(0f)
+                fill.animateTo(1f, tween(FOLLOW_MILLIS, easing = SmoothStep))
+                pick()
+            }
+        }
+    }
+    // A small pop as the group opens under the focus.
+    val pop = remember { Animatable(0f) }
+    var wasSelected by remember { mutableStateOf(selected) }
+    LaunchedEffect(selected) {
+        if (selected && !wasSelected && focused) {
+            pop.snapTo(0f)
+            pop.animateTo(1f, tween(POP_MILLIS, easing = LinearEasing))
+            pop.snapTo(0f)
+        }
+        wasSelected = selected
+    }
     Row(
         modifier
             // Closing keeps the focused group focusable until the channels have taken the focus:
@@ -726,22 +711,20 @@ private fun CategoryEntry(
                 if (focused && e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) { onEnter(); true } else false
             }
             .fillMaxWidth()
-            .onGloballyPositioned { placed[0] = it; if (focused) report(it) }
+            .graphicsLayer {
+                val s = 1f + 0.03f * kotlin.math.sin(pop.value * Math.PI.toFloat())
+                scaleX = s
+                scaleY = s
+            }
             .clip(shape)
-            // The focus itself is the pill sliding under the list (see [Glide]).
-            .background(
-                when {
-                    focused -> Color.Transparent
-                    selected -> GroupOpenVeil
-                    else -> GroupGround
-                },
-            )
+            .background(if (focused || selected) GroupOpenVeil else GroupGround)
+            .drawBehind {
+                val f = fill.value
+                if (focused && f > 0f) drawRect(GroupFill, size = Size(size.width * f, size.height))
+            }
             .onFocusChanged {
                 focused = it.isFocused
-                if (it.isFocused) {
-                    onFocused()
-                    placed[0]?.takeIf { c -> c.isAttached }?.let(report)
-                }
+                if (it.isFocused) onFocused()
             }
             .clickable(interactionSource = null, indication = null, onClick = onEnter)
             .heightIn(min = 44.dp)
@@ -749,17 +732,8 @@ private fun CategoryEntry(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The broadcaster, then the name, on one line and in one colour: "SKY INTRATTENIMENTO".
-        // Dark on the focus pill, the accent on the open group, white otherwise; the colour
-        // follows the pill over its slide instead of jumping ahead of it.
-        val ink by animateColorAsState(
-            when {
-                focused -> MaterialTheme.colorScheme.onPrimary
-                selected -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-            tween(GLIDE_MILLIS.toInt()),
-            label = "groupInk",
-        )
+        // The accent on the focused and the open group, white otherwise.
+        val ink = if (focused || selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
         Text(
             if (kicker != null) "${kicker.uppercase()} ${label.uppercase()}" else label.uppercase(),
             color = ink,
@@ -775,7 +749,7 @@ private fun CategoryEntry(
             Spacer(Modifier.width(10.dp))
             Text(
                 "%,d".format(Locale.ITALIAN, count),
-                color = if (focused || selected) ink else MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.outline,
                 fontFamily = Oswald,
                 fontWeight = FontWeight.Light,
                 fontSize = 17.sp,
@@ -786,9 +760,11 @@ private fun CategoryEntry(
 }
 
 /**
- * The tabs across the top of the groups: ★, the kinds of channel the list has, All. Moving onto a
- * tab opens it after a short pause (holding a direction doesn't open every tab on the way); LEFT
- * from the first one reveals the app's menu.
+ * The tabs across the top of the groups: ★, the kinds of channel the list has, All. Focus on a
+ * tab is a faint accent chip with an accent line growing under the word; once it spans the word
+ * ([FOLLOW_MILLIS]) the tab opens and the line draws back to the short dash under the open tab.
+ * Moving on before that opens nothing (holding a direction doesn't open every tab on the way).
+ * LEFT from the first one reveals the app's menu.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -808,14 +784,9 @@ private fun LiveTabs(
         LiveMacros.TABS.filter { it in tabs }.forEach { add(it.name) }
         add(LAST_GROUP_ALL)
     }
-    var focusedKey by remember { mutableStateOf<String?>(null) }
     val select by rememberUpdatedState(onSelect)
-    LaunchedEffect(focusedKey) {
-        val key = focusedKey ?: return@LaunchedEffect
-        if (key == selected) return@LaunchedEffect
-        delay(TAB_FOLLOW_DELAY_MILLIS)
-        select(key)
-    }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dashPx = with(density) { TAB_DASH.toPx() }
     val requesters = remember(keys) { keys.associateWith { FocusRequester() } }
     Row(
         modifier
@@ -830,6 +801,37 @@ private fun LiveTabs(
         keys.forEachIndexed { index, key ->
             var focused by remember { mutableStateOf(false) }
             val isSelected = key == selected
+            // The word's width, and the line under it: grows from the left across the word while
+            // focus rests, then (open) draws back to the centred dash.
+            var wordPx by remember { mutableIntStateOf(0) }
+            val line = remember { Animatable(if (isSelected) dashPx else 0f) }
+            var growing by remember { mutableStateOf(false) }
+            LaunchedEffect(focused, isSelected, wordPx) {
+                when {
+                    isSelected -> {
+                        growing = false
+                        if (line.value > dashPx + 1f) line.animateTo(dashPx, tween(TAB_SHRINK_MILLIS, easing = OutCubic))
+                        else line.snapTo(dashPx)
+                    }
+                    focused && wordPx > 0 -> {
+                        growing = true
+                        line.snapTo(0f)
+                        line.animateTo(wordPx.toFloat(), tween(FOLLOW_MILLIS, easing = SmoothStep))
+                        select(key)
+                    }
+                    else -> { growing = false; line.snapTo(0f) }
+                }
+            }
+            val pop = remember { Animatable(0f) }
+            var wasSelected by remember { mutableStateOf(isSelected) }
+            LaunchedEffect(isSelected) {
+                if (isSelected && !wasSelected && focused) {
+                    pop.snapTo(0f)
+                    pop.animateTo(1f, tween(POP_MILLIS, easing = LinearEasing))
+                    pop.snapTo(0f)
+                }
+                wasSelected = isSelected
+            }
             Column(
                 Modifier
                     .focusRequester(requesters.getValue(key))
@@ -842,12 +844,14 @@ private fun LiveTabs(
                             onExitLeft(); true
                         } else false
                     }
-                    .onFocusChanged {
-                        focused = it.isFocused
-                        if (it.isFocused) focusedKey = key
+                    .onFocusChanged { focused = it.isFocused }
+                    .graphicsLayer {
+                        val s = 1f + 0.06f * kotlin.math.sin(pop.value * Math.PI.toFloat())
+                        scaleX = s
+                        scaleY = s
                     }
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (focused) GroupSelected else Color.Transparent)
+                    .background(if (focused) GroupOpenVeil else Color.Transparent)
                     .clickable(interactionSource = null, indication = null) { select(key) }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -855,7 +859,8 @@ private fun LiveTabs(
                 Text(
                     tabLabel(key).uppercase(),
                     color = when {
-                        focused || isSelected -> MaterialTheme.colorScheme.onSurface
+                        focused -> MaterialTheme.colorScheme.primary
+                        isSelected -> MaterialTheme.colorScheme.onSurface
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     fontFamily = Oswald,
@@ -863,13 +868,20 @@ private fun LiveTabs(
                     fontSize = 18.sp,
                     letterSpacing = 1.5.sp,
                     maxLines = 1,
+                    modifier = Modifier.onSizeChanged { wordPx = it.width },
                 )
                 Spacer(Modifier.height(4.dp))
-                Box(
+                Spacer(
                     Modifier
-                        .width(28.dp)
+                        .width(with(density) { maxOf(wordPx.toFloat(), dashPx).toDp() })
                         .height(2.dp)
-                        .background(if (isSelected) Accent else Color.Transparent),
+                        .drawBehind {
+                            val w = line.value.coerceAtMost(size.width)
+                            if (w <= 0f) return@drawBehind
+                            // Growing: from the left edge; open: centred.
+                            val x = if (growing) 0f else (size.width - w) / 2f
+                            drawRect(Accent, Offset(x, 0f), Size(w, size.height))
+                        },
                 )
             }
         }
@@ -1034,21 +1046,25 @@ private fun Modifier.leftReveals(isRowFocused: () -> Boolean, onLeft: () -> Unit
 
 private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
 
-// How long the focus rests on a group before the channels beside it switch to that group.
-private const val GROUP_FOLLOW_DELAY_MILLIS = 120L
-// The groups' focus box slides for as long as the channels wait to follow.
-private const val GLIDE_MILLIS = GROUP_FOLLOW_DELAY_MILLIS
-private const val GLIDE_EXIT_MILLIS = 150L
-// The focus pill: the theme's accent, as every other focused row and button in the app.
-private val GlideFill = Color(0xFF52DBC8)
-// The open group, out of focus: a veil of the accent, as the open page in the menu.
+// How long the focus rests on a group or a tab, its pill (or line) filling, before it opens.
+private const val FOLLOW_MILLIS = 400
+// A tab whose groups are all elsewhere picks its first group after this.
+private const val PICK_FIRST_DELAY_MILLIS = 120L
+// The pop of a group or tab as it opens, and the way the next channels or groups come in.
+private const val POP_MILLIS = 180
+private const val CONTENT_IN_MILLIS = 220
+private const val TAB_SHRINK_MILLIS = 250
+private val TAB_DASH = 28.dp
+// The focused group's fill, over the faint veil it starts from.
+private val GroupFill = Color(0xFF52DBC8).copy(alpha = 0.42f)
+// The open (or focused) group: a veil of the accent, as the open page in the menu.
 private val GroupOpenVeil = Color(0xFF52DBC8).copy(alpha = 0.16f)
-// The other groups: see-through, so the focus pill shows under them as it slides by.
+// The other groups: a faint ground each.
 private val GroupGround = Color.White.copy(alpha = 0.035f)
-private const val TAB_FOLLOW_DELAY_MILLIS = 300L
+private val SmoothStep = Easing { x -> x * x * (3f - 2f * x) }
+private val OutCubic = Easing { x -> 1f - (1f - x) * (1f - x) * (1f - x) }
 
 private val Accent = Color(0xFF57D9C5)
-private val GroupSelected = Color(0xFF2A2F2D)
 private val Oswald = FontFamily(
     Font(R.font.oswald_light, FontWeight.Light),
     Font(R.font.oswald_regular, FontWeight.Normal),

@@ -820,6 +820,8 @@
     <string name="pp_sent_body">Puoi mettere giù il telefono: il resto succede sulla TV.</string>
 
     <string name="pp_html_lang">it</string>
+    <string name="settings_account_title">Account</string>
+    <string name="settings_account_subtitle">%1$s · cambia o gestisci i profili</string>
     <string name="settings_hub_sources">Sorgenti</string>
     <string name="settings_hub_channels">Canali</string>
     <string name="settings_hub_watching">Visione</string>

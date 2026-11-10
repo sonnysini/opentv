@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.56.0 — 10 November 2026
+
+A new menu, and the Live TV page picks for you as you move.
+
+- **The menu is a glass capsule.** A small dark capsule floats at the left, as tall as its entries
+  and centred down the screen: the MyTV mark, Live TV, Football, Movies, Shows, Recordings, then
+  Search and Settings. Closed it is a strip of icons and the page sits right against it (each page
+  gains room); open it spreads over the page, which no longer moves or shrinks, Live TV included.
+  The open page is its icon filled and its name in the accent — no dot.
+- **Rest on a page to open it.** In the menu, the focused entry is a faint pill that fills from the
+  left; once full (0.4 s) its page opens, sliding in from the right, and the menu stays open.
+  Moving on before that changes nothing. Search and Settings still open with OK. Three seconds
+  without a key, the menu closes itself and focus goes into the page; RIGHT or OK goes there at once.
+- **Profiles moved to Settings.** The profile entry left the menu: it is now *Account*, at the top
+  of Settings.
+- **The same on Live TV.** A focused group fills the same way and opens when full, its channels
+  coming in from the right; the tabs above (★, Italy, Football…) grow an accent line under the word
+  and open once it spans it, the line then drawing back to the short dash.
+
 ## 0.55.1 — 9 November 2026
 
 - **Football: the next matchday of each competition, however far.** The page read a week ahead,
