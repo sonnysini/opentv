@@ -6,6 +6,7 @@
 package app.opentv.ui.player
 
 import android.os.SystemClock
+import app.opentv.ui.focusVeil
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -1681,11 +1682,11 @@ private fun ChannelListRow(
 ) {
     var focused by remember { mutableStateOf(false) }
     val bg = when {
-        focused -> MaterialTheme.colorScheme.primary
-        playing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+        focused -> focusVeil(Color.Transparent)
         else -> Color.Transparent
     }
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+    // The channel playing: the accent on its name, as the open page in the menu.
+    val fg = if (focused || playing) MaterialTheme.colorScheme.primary else Color.White
     Row(
         Modifier
             .fillMaxWidth()
@@ -1791,7 +1792,7 @@ private fun SideGroups(
                         )
                     }
                     var focused by remember { mutableStateOf(false) }
-                    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+                    val fg = if (focused || entry.selected) MaterialTheme.colorScheme.primary else Color.White
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -1803,8 +1804,7 @@ private fun SideGroups(
                             .focusLift(focused)
                             .background(
                                 when {
-                                    focused -> MaterialTheme.colorScheme.primary
-                                    entry.selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                    focused -> focusVeil(Color.Transparent)
                                     else -> Color.Transparent
                                 },
                             )
@@ -1999,8 +1999,8 @@ private fun OptionRow(
     focusRequester: FocusRequester?,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val bg = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f)
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+    val bg = if (focused) focusVeil(Color.White.copy(alpha = 0.08f)) else Color.White.copy(alpha = 0.08f)
+    val fg = if (focused) MaterialTheme.colorScheme.primary else Color.White
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2049,11 +2049,10 @@ private fun BarChip(
     // Holding OK: the remote repeats the key-down, and the first repeat is the long press.
     var longPressed by remember { mutableStateOf(false) }
     val container = when {
-        focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
         else -> Color.White.copy(alpha = 0.14f)
-    }
-    val content = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+    }.let { if (focused) focusVeil(it) else it }
+    val content = if (focused) MaterialTheme.colorScheme.primary else Color.White
 
     Box(contentAlignment = Alignment.TopCenter) {
         Box(
@@ -2063,10 +2062,6 @@ private fun BarChip(
                 .focusLift(focused)
                 .clip(RoundedCornerShape(12.dp))
                 .background(container)
-                .then(
-                    if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                    else Modifier,
-                )
                 .then(
                     if (onLongClick == null) Modifier
                     else Modifier.onPreviewKeyEvent { e ->

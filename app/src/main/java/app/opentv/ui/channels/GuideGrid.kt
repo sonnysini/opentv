@@ -6,6 +6,7 @@
 package app.opentv.ui.channels
 
 import androidx.compose.foundation.background
+import app.opentv.ui.focusVeil
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -178,12 +179,8 @@ private fun ChannelListRow(
             .focusLift(focused)
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
-            )
-            .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
+                (if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surface).let { if (focused) focusVeil(it) else it },
             )
             // LEFT from a row reopens the collapsed rail, exactly like the grid's channel column.
             .onPreviewKeyEvent { e ->
@@ -336,13 +333,8 @@ private fun GuideRow(
                 .focusLift(focused)
                 .clip(RoundedCornerShape(8.dp))
                 .background(
-                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surface,
-                )
-                .then(
-                    if (focused) Modifier.border(
-                        2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp),
-                    ) else Modifier,
+                    (if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surface).let { if (focused) focusVeil(it) else it },
                 )
                 // LEFT from this leftmost column asks the host to reopen the collapsed category
                 // rail; onExitLeft consumes the key only when it handled it (rail was hidden), so
@@ -480,17 +472,14 @@ private fun ProgrammeBlock(title: String, width: Dp, isNow: Boolean, progress: F
             .clip(RoundedCornerShape(6.dp))
             .background(
                 when {
-                    focused -> MaterialTheme.colorScheme.primary
+                    focused -> focusVeil(MaterialTheme.colorScheme.surfaceVariant)
                     isNow -> MaterialTheme.colorScheme.primaryContainer
                     else -> MaterialTheme.colorScheme.surfaceVariant
                 },
             )
             .then(
-                if (focused || isNow) Modifier.border(
-                    if (focused) 2.dp else 1.dp,
-                    MaterialTheme.colorScheme.primary,
-                    RoundedCornerShape(6.dp),
-                ) else Modifier,
+                if (isNow && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
+                else Modifier,
             )
             .onFocusChanged { focused = it.isFocused }
             .focusable()
@@ -500,7 +489,7 @@ private fun ProgrammeBlock(title: String, width: Dp, isNow: Boolean, progress: F
             title,
             style = MaterialTheme.typography.bodyMedium,
             color = when {
-                focused -> MaterialTheme.colorScheme.onPrimary
+                focused -> MaterialTheme.colorScheme.primary
                 isNow -> MaterialTheme.colorScheme.onPrimaryContainer
                 else -> MaterialTheme.colorScheme.onSurface
             },

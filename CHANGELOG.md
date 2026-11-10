@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.56.2 — 10 November 2026
+
+- **The faint focus everywhere.** The last places with a solid focus follow the rest of the app —
+  a faint accent veil with the text in the accent, no frame:
+  - the player: the side panels (quality, audio, subtitles), the channel list and the buttons along
+    the bottom, in the live and the film player; the channel playing just has its name in the accent;
+  - the TV guide grid: the focused programme and channel (the one on now keeps its thin line);
+  - Football: the "From 20:30" / "Watch" button, the source list and the scan; a game tile's focus
+    frame turns from white to the accent;
+  - the Live TV and Movies/Shows top: "Watch" and "Details" are no longer white in focus.
+
 ## 0.56.1 — 10 November 2026
 
 A new menu, in two shapes, and a quieter focus everywhere there are words.
