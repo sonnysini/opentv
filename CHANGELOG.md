@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.57.0 — 10 November 2026
+
+- **No more glass.** The side menu and the player lose the frosted glass: the menu is solid, the
+  app's own dark surface, with no edge.
+- **Three menu styles** (Settings › Appearance › Side menu):
+  - **Bar** (default): full height, set slightly apart from the screen's edges with rounder
+    corners; icons when closed, LEFT opens it with the names and pushes the page aside.
+  - **Full screen**: no menu at rest, the page uses the whole width with whole cards; LEFT from
+    the page's edge slides the menu in, pushing the page aside; OK or RIGHT and it's gone again.
+  - **Compact only**: icons only, it never opens.
+  The floating capsule and the closed capsule with names are gone (they fall back to the bar).
+- **The live player in the film player's style**: the film's shade at the bottom, round buttons
+  without boxes, just the time at the top right. The channel's logo is a block as tall as the name
+  and the programme beside it (wide logos widen up to a limit), then one line of synopsis and
+  what's next, and the programme's progress as a bar with its start and end times.
+- **The film player** goes back to its round buttons without the capsule, as in 0.56.2.
+- The menu entry "Series" is now **"TV Shows"** ("Serie TV").
+
 ## 0.56.4 — 10 November 2026
 
 - **The player's buttons on glass.** In the live and the film player the row of buttons now

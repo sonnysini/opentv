@@ -68,7 +68,7 @@
     <string name="football_no_channels">No channel found for this match</string>
     <string name="football_no_youtube">YouTube isn\'t installed</string>
     <string name="nav_movies">Movies</string>
-    <string name="nav_shows">Shows</string>
+    <string name="nav_shows">TV Shows</string>
     <string name="nav_recordings">Recordings</string>
     <string name="nav_search">Search</string>
     <string name="nav_settings">Settings</string>
@@ -922,8 +922,8 @@
     <string name="panel_remaining">%1$s to go</string>
     <string name="panel_film">Film</string>
     <string name="settings_menu_style_title">Side menu</string>
-    <string name="settings_menu_style_capsule">Floating capsule</string>
-    <string name="settings_menu_style_capsule_label">Closed capsule with name</string>
-    <string name="settings_menu_style_bar">Full-height bar</string>
-    <string name="settings_menu_style_note">Capsule: compact, opens over the page and closes by itself after 2 s. Closed capsule: never opens, the name of the entry shows beside it. Bar: full height, pushes the page aside and stays open until you leave it.</string>
+    <string name="settings_menu_style_bar">Bar</string>
+    <string name="settings_menu_style_hidden">Full screen</string>
+    <string name="settings_menu_style_compact">Compact only</string>
+    <string name="settings_menu_style_note">Bar: icons when closed; LEFT opens it with the names and pushes the page aside. Full screen: no menu at rest, the page takes the whole width; LEFT from the page\'s edge brings it in. Compact only: icons only, it never opens.</string>
 </resources>

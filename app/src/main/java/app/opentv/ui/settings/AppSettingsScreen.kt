@@ -146,14 +146,14 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
 
         SettingsSection(stringResource(R.string.settings_menu_style_title)) {
-            ThemeOption(stringResource(R.string.settings_menu_style_capsule), menuStyle == AppSettings.MenuStyle.CAPSULE) {
-                settings.setMenuStyle(AppSettings.MenuStyle.CAPSULE)
-            }
-            ThemeOption(stringResource(R.string.settings_menu_style_capsule_label), menuStyle == AppSettings.MenuStyle.CAPSULE_LABEL) {
-                settings.setMenuStyle(AppSettings.MenuStyle.CAPSULE_LABEL)
-            }
             ThemeOption(stringResource(R.string.settings_menu_style_bar), menuStyle == AppSettings.MenuStyle.BAR) {
                 settings.setMenuStyle(AppSettings.MenuStyle.BAR)
+            }
+            ThemeOption(stringResource(R.string.settings_menu_style_hidden), menuStyle == AppSettings.MenuStyle.HIDDEN) {
+                settings.setMenuStyle(AppSettings.MenuStyle.HIDDEN)
+            }
+            ThemeOption(stringResource(R.string.settings_menu_style_compact), menuStyle == AppSettings.MenuStyle.COMPACT) {
+                settings.setMenuStyle(AppSettings.MenuStyle.COMPACT)
             }
             Spacer(Modifier.height(4.dp))
             Text(
