@@ -938,7 +938,7 @@ private const val PICK_FIRST_DELAY_MILLIS = 120L
 private const val TAB_FOLLOW_DELAY_MILLIS = 300L
 private val TAB_DASH = 28.dp
 // The open (or focused) group: a veil of the accent, as the open page in the menu.
-private val GroupOpenVeil = Color(0xFF52DBC8).copy(alpha = 0.16f)
+private val GroupOpenVeil = Color(0xFF52DBC8).copy(alpha = app.opentv.ui.FOCUS_VEIL_ALPHA)
 // The other groups: a faint ground each.
 private val GroupGround = Color.White.copy(alpha = 0.035f)
 

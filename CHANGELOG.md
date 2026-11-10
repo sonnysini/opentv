@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.56.3 — 10 November 2026
+
+- **A more frosted menu.** The menu's glass is denser (85% instead of 66%), so the page's text
+  no longer shows through the open capsule.
+- **The full-height bar is a little wider open**: more room after its longest name ("Recordings").
+- **A stronger faint focus, everywhere.** The accent veil goes from 16% to 24% — the menu, the
+  lists, the tabs, the settings, the player panels and the guide alike.
+- **No more bounce when changing page**: the new page used to show for a frame in place, then
+  jump right and slide back.
+- **A third menu shape: the closed capsule with names** (Settings › Appearance › Side menu). The
+  capsule never opens: the name of the focused entry shows in a small glass label beside it, which
+  follows UP and DOWN and goes away with OK or when you leave the menu. The page is never covered.
+
 ## 0.56.2 — 10 November 2026
 
 - **The faint focus everywhere.** The last places with a solid focus follow the rest of the app —

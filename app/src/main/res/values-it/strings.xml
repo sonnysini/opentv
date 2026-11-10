@@ -873,6 +873,7 @@
     <string name="panel_film">Film</string>
     <string name="settings_menu_style_title">Menu laterale</string>
     <string name="settings_menu_style_capsule">Capsula sospesa</string>
+    <string name="settings_menu_style_capsule_label">Capsula chiusa con nome</string>
     <string name="settings_menu_style_bar">Barra a tutta altezza</string>
-    <string name="settings_menu_style_note">Capsula: compatta, si apre sopra la pagina e si chiude da sola dopo 2 s. Barra: a tutta altezza, sposta la pagina e resta aperta finché non ne esci.</string>
+    <string name="settings_menu_style_note">Capsula: compatta, si apre sopra la pagina e si chiude da sola dopo 2 s. Capsula chiusa: non si apre mai, il nome della voce compare a fianco. Barra: a tutta altezza, sposta la pagina e resta aperta finché non ne esci.</string>
 </resources>
