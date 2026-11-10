@@ -466,7 +466,7 @@ private fun EpisodeCard(ep: Episode, fallbackArt: String?, position: PlaybackPos
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .then(
-                    if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(8.dp))
+                    if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                     else Modifier,
                 ),
         ) {

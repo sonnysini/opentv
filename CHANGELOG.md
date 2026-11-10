@@ -9,7 +9,9 @@
   - the TV guide grid: the focused programme and channel (the one on now keeps its thin line);
   - Football: the "From 20:30" / "Watch" button, the source list and the scan; a game tile's focus
     frame turns from white to the accent;
-  - the Live TV and Movies/Shows top: "Watch" and "Details" are no longer white in focus.
+  - the Live TV and Movies/Shows top: "Watch" and "Details" are no longer white in focus;
+  - posters and cards (Movies, Shows, episodes, search results and the search field): the focus
+    frame turns from white to the accent.
 
 ## 0.56.1 — 10 November 2026
 

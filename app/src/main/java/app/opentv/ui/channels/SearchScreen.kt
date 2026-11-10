@@ -351,7 +351,7 @@ private fun SearchBar(
                     .fillMaxWidth()
                     .clip(shape)
                     .background(Color.White.copy(alpha = if (focused) 0.10f else 0.05f))
-                    .border(2.dp, if (focused) Color.White else Color.White.copy(alpha = 0.14f), shape)
+                    .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.14f), shape)
                     .padding(horizontal = 22.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -516,7 +516,7 @@ private fun Card(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .clip(shape)
-                .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier),
+                .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape) else Modifier),
             content = art,
         )
         Text(
