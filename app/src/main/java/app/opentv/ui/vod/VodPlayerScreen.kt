@@ -575,18 +575,6 @@ fun VodPlayerScreen(
             }
         }
 
-        if (showStats) {
-            StreamInfoPanel(
-                statsInfo,
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
-                    .padding(32.dp),
-                extraRows = statsExtra,
-                title = stringResource(R.string.stream_info_nerd_title),
-            )
-        }
-
         AnimatedVisibility(
             visible = controlsVisible,
             enter = fadeIn(),
@@ -731,6 +719,16 @@ fun VodPlayerScreen(
                     ) { showStats = !showStats; interaction++ }
                 }
             }
+        }
+
+        // Over the controls' shade, down the right like the live player's.
+        if (showStats) {
+            StreamInfoPanel(
+                statsInfo,
+                Modifier.align(Alignment.CenterEnd),
+                extraRows = statsExtra,
+                title = stringResource(R.string.stream_info_nerd_title),
+            )
         }
     }
 }
@@ -923,8 +921,8 @@ private fun SeekBar(
 }
 
 /**
- * A round, icon-only transport button: see-through at rest, a white disc with a black icon when
- * focused (after NuvioTV's ControlButton). [active] marks the button whose picker is open.
+ * An icon-only transport button: see-through at rest, a rounded square (10dp, like every other
+ * focused thing in the app) when focused. [active] marks the button whose picker is open.
  */
 @Composable
 private fun VodIconButton(
@@ -951,7 +949,7 @@ private fun VodIconButton(
             .onFocusChanged { focused = it.isFocused }
             .focusLift(focused)
             .size(52.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(10.dp))
             .background(container)
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,

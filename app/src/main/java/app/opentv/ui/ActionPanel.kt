@@ -69,7 +69,7 @@ val ACTION_PANEL_WIDTH = 440.dp
 /** Red of the "record" dot, as on the recordings' badges. */
 val RecordRed = Color(0xFFFF5A4E)
 
-private val PanelOswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
+internal val PanelOswald = FontFamily(Font(R.font.oswald_bold, FontWeight.Bold))
 
 /**
  * Hold OK on something: what you can do with it, in a panel down the right; the page darkens

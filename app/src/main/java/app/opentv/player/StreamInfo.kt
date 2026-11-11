@@ -90,6 +90,8 @@ object StreamInfo {
 
     private val STANDARD_RATES = floatArrayOf(23.976f, 24f, 25f, 29.97f, 30f, 48f, 50f, 59.94f, 60f)
 
+    private val STANDARD_LABELS = STANDARD_RATES.map { frameRateLabel(it) }.filterNotNull().toSet()
+
     /** A measured frame rate snapped to the broadcast rate it is close to (within 3%), or as is. */
     fun snapFrameRate(fps: Float): Float {
         if (fps <= 0f) return fps
@@ -160,15 +162,15 @@ object StreamInfo {
         val bufferedSeconds: Float,
         val liveDelaySeconds: Float?,
     ) {
-        /** The short Kodi-style row for the bar: `1080p` `HEVC` `50fps` `7.8 Mb/s` `HDR10` `AC3 5.1`. */
+        /**
+         * The two tags by the channel name: `1080p` `50 fps`. The frame rate only once it is a
+         * broadcast one, so a measurement still climbing (`17.45`) never shows; the rest is in the
+         * info panel.
+         */
         val badges: List<String>
             get() = listOfNotNull(
                 resolution,
-                videoCodec,
-                frameRate?.let { "${it}fps" },
-                download,
-                hdr,
-                listOfNotNull(audioCodec, channels).joinToString(" ").ifEmpty { null },
+                frameRate?.takeIf { it in STANDARD_LABELS }?.let { "$it fps" },
             )
     }
 

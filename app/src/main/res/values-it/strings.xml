@@ -664,6 +664,15 @@
     <string name="stream_info_nerd_title">Statistiche per nerd</string>
     <string name="stream_info_file">File</string>
     <string name="stream_info_screen">Schermo</string>
+    <string name="stream_info_resolution">Risoluzione</string>
+    <string name="stream_info_codec">Codec</string>
+    <string name="stream_info_frame_rate">Fotogrammi al secondo</string>
+    <string name="stream_info_range">Gamma</string>
+    <string name="stream_info_bitrate">Bitrate</string>
+    <string name="stream_info_sample_rate">Campionamento</string>
+    <string name="stream_info_language">Lingua</string>
+    <string name="stream_info_playback">Riproduzione</string>
+    <string name="stream_info_net_section">Rete</string>
     <string name="player_channel_unavailable">Canale non disponibile</string>
     <string name="player_channel_unavailable_hint">OK per riprovare · ↑/↓ per cambiare canale</string>
     <string name="settings_grouping_title">Raggruppamento canali</string>
