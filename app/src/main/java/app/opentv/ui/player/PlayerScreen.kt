@@ -1071,7 +1071,8 @@ fun PlayerScreen(
             is PlayerController.State.Buffering -> s.title
             is PlayerController.State.Playing -> s.title
             is PlayerController.State.Error -> s.title
-            else -> ""
+            // Not playing (channel unavailable): still say which channel this is.
+            else -> listedChannel?.shownName.orEmpty()
         }
 
         // The time, top right, over a light shade — as in the film player.
