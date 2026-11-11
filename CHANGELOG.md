@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.58.0 — 11 November 2026
+
+- **A live player you can read.** Everything starts at the left edge: the channel's logo is small,
+  on the channel name's line (a wide logo no longer pushes the guide aside), then the programme,
+  two lines of synopsis and "Next 23:30" in bold, all bigger. The shade starts higher and darker.
+- **Two tags only**: quality and frame rate (`1080p` `50 fps`). The frame rate shows once it is a
+  broadcast one, so a measurement still climbing never flickers by the name.
+- **Stream info down the right**, like the app's other panels: a big title, then Video, Audio,
+  Playback and Network. It shades the picture like the bottom bar instead of covering it, and the
+  synopsis stops short of it. The film player's stats use the same panel.
+- **Player buttons are rounded squares** (live and film), like every other focused thing in the app.
+
 ## 0.57.0 — 10 November 2026
 
 - **No more glass.** The side menu and the player lose the frosted glass: the menu is solid, the

@@ -731,6 +731,15 @@
     <string name="stream_info_nerd_title">Stats for nerds</string>
     <string name="stream_info_file">File</string>
     <string name="stream_info_screen">Screen</string>
+    <string name="stream_info_resolution">Resolution</string>
+    <string name="stream_info_codec">Codec</string>
+    <string name="stream_info_frame_rate">Frame rate</string>
+    <string name="stream_info_range">Dynamic range</string>
+    <string name="stream_info_bitrate">Bitrate</string>
+    <string name="stream_info_sample_rate">Sample rate</string>
+    <string name="stream_info_language">Language</string>
+    <string name="stream_info_playback">Playback</string>
+    <string name="stream_info_net_section">Network</string>
     <string name="player_channel_unavailable">Channel not available</string>
     <string name="player_channel_unavailable_hint">OK to try again · ↑/↓ to change channel</string>
     <string name="settings_grouping_title">Channel grouping</string>

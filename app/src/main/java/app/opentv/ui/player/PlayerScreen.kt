@@ -7,6 +7,7 @@ package app.opentv.ui.player
 
 import android.os.SystemClock
 import app.opentv.ui.focusVeil
+import app.opentv.ui.PanelOswald
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -46,7 +47,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -102,6 +102,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -979,10 +983,6 @@ fun PlayerScreen(
             }
         }
 
-        if (showInfo && !inPip) {
-            StreamInfoPanel(streamInfo, Modifier.align(Alignment.TopEnd).padding(32.dp))
-        }
-
         // The channel number as you type it, top-right, until it resolves.
         if (numberEntry.isNotEmpty() && !inPip) {
             Box(
@@ -1109,15 +1109,21 @@ fun PlayerScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    // The film player's shade: clear at the top, dark behind the text.
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
+                    // Clear at the top, dark well before the text starts so the guide reads over any picture.
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.22f to Color.Black.copy(alpha = 0.72f),
+                            0.55f to Color.Black.copy(alpha = 0.92f),
+                        ),
+                    )
                     // Keep the controls clear of the phone/tablet system nav bar (and the side nav
                     // bar / display cutout in landscape). Zero on a TV, so the 10-foot layout is
                     // unchanged; the gradient above stays full-bleed to the screen edge.
                     .windowInsetsPadding(
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
                     )
-                    .padding(start = 28.dp, end = 28.dp, top = 45.dp, bottom = 16.dp),
+                    .padding(start = 28.dp, end = 28.dp, top = 94.dp, bottom = 16.dp),
             ) {
                 // The open picker sits above the transport row.
                 if (panel != Panel.NONE) {
@@ -1138,15 +1144,15 @@ fun PlayerScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                // The channel's logo as a block as tall as the name and the programme beside it:
-                // square logos stay square, wide ones (Sky's) widen up to a limit.
+                // Everything starts at the left edge: the logo is small, on the channel name's line, so
+                // a wide logo (Sky's) only pushes that line and the guide never moves.
                 val logoUrl = (variants.firstOrNull { it.id == currentId }?.shownLogo() ?: listedChannel?.shownLogo())
                     ?.takeIf { it.isNotBlank() }
                 val now = onAir?.now
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (game?.homeCrest != null) {
-                        MatchCrests(game.homeCrest, game.awayCrest, Modifier.size(LOGO_BLOCK))
-                        Spacer(Modifier.width(15.dp))
+                        MatchCrests(game.homeCrest, game.awayCrest, Modifier.size(LOGO_INLINE))
+                        Spacer(Modifier.width(14.dp))
                     } else if (logoUrl != null) {
                         AsyncImage(
                             model = logoUrl,
@@ -1154,51 +1160,48 @@ fun PlayerScreen(
                             contentScale = ContentScale.Fit,
                             alignment = Alignment.CenterStart,
                             modifier = Modifier
-                                .height(LOGO_BLOCK)
-                                .widthIn(max = LOGO_BLOCK_MAX_WIDTH)
-                                .clip(RoundedCornerShape(8.dp)),
+                                .height(LOGO_INLINE)
+                                .widthIn(max = LOGO_INLINE_MAX_WIDTH)
+                                .clip(RoundedCornerShape(5.dp)),
                         )
-                        Spacer(Modifier.width(15.dp))
+                        Spacer(Modifier.width(14.dp))
                     }
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                channelTitle,
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            streamInfo?.badges?.takeIf { it.isNotEmpty() }?.let { badges ->
-                                Spacer(Modifier.width(13.dp))
-                                StreamBadges(badges)
-                            }
-                        }
-                        now?.let {
-                            Spacer(Modifier.height(5.dp))
-                            Text(
-                                it.title,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                    Text(
+                        channelTitle,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    streamInfo?.badges?.takeIf { it.isNotEmpty() }?.let { badges ->
+                        Spacer(Modifier.width(14.dp))
+                        StreamBadges(badges)
                     }
                 }
-                onAir?.let { OnAirLines(it) }
+                now?.let {
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        it.title,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // With the info panel open on the right, the guide stops short of it.
+                onAir?.let { OnAirLines(it, Modifier.widthIn(max = if (showInfo) EPG_WIDTH_WITH_INFO else Dp.Unspecified)) }
 
                 // The programme's progress, like the film's seek bar: start on the left, end on the right.
                 now?.let {
                     val progress = if (it.durationMillis > 0) {
                         ((clock - it.startUtcMillis).toFloat() / it.durationMillis).coerceIn(0f, 1f)
                     } else 0f
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(clockText(it.startUtcMillis), fontSize = 13.sp, color = Color.White)
+                        Text(clockText(it.startUtcMillis), fontSize = 15.sp, color = Color.White)
                         Spacer(Modifier.width(13.dp))
                         Box(
                             Modifier
@@ -1215,12 +1218,12 @@ fun PlayerScreen(
                             )
                         }
                         Spacer(Modifier.width(13.dp))
-                        Text(clockText(it.endUtcMillis), fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                        Text(clockText(it.endUtcMillis), fontSize = 15.sp, color = Color.White.copy(alpha = 0.6f))
                     }
                 }
 
-                // Round icon buttons without boxes, as in the film player.
-                Spacer(Modifier.height(if (now != null) 6.dp else 12.dp))
+                // Icon buttons without boxes, as in the film player.
+                Spacer(Modifier.height(if (now != null) 11.dp else 16.dp))
                 Row(
                     Modifier.offset(x = (-6).dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1316,6 +1319,17 @@ fun PlayerScreen(
                             }
                 }
             }
+        }
+
+        // The info panel down the right, over the bottom bar's shade.
+        if (showInfo && !inPip) {
+            StreamInfoPanel(
+                streamInfo,
+                Modifier.align(Alignment.CenterEnd),
+                kicker = listOfNotNull(channelTitle.takeIf { it.isNotBlank() })
+                    .plus(streamInfo?.badges.orEmpty())
+                    .joinToString(" · "),
+            )
         }
 
         // Left-side transparent menu — d-pad Left opens the current group's channels with what's
@@ -1532,7 +1546,7 @@ private fun StreamBadges(badges: List<String>) {
         badges.forEach { badge ->
             Text(
                 badge,
-                style = MaterialTheme.typography.labelMedium,
+                fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.9f),
                 maxLines = 1,
                 softWrap = false,
@@ -1544,7 +1558,11 @@ private fun StreamBadges(badges: List<String>) {
     }
 }
 
-/** The full technical read-out, like Kodi's codec info: what the stream is and how it's playing. */
+/**
+ * The full technical read-out, like Kodi's codec info, as a panel down the right like the app's
+ * others (the hold-OK one): a small kicker, a big Oswald title, then the facts in sections. It
+ * shades the picture like the bar at the bottom instead of covering it.
+ */
 @Composable
 internal fun StreamInfoPanel(
     info: StreamInfo.Snapshot?,
@@ -1552,89 +1570,174 @@ internal fun StreamInfoPanel(
     /** Rows only some players know (the film player's file and screen), shown after the format. */
     extraRows: List<Pair<String, String>> = emptyList(),
     title: String? = null,
+    /** Small capitals over the title: what is playing (`RAI 2 · 1080P · 25 FPS`). */
+    kicker: String? = null,
 ) {
     val hardware = stringResource(R.string.stream_info_hardware)
     val software = stringResource(R.string.stream_info_software)
-    val rows = buildList {
+    val sections = buildList {
         if (info != null) {
-            listOfNotNull(info.size, info.videoCodec, info.frameRate?.let { "$it fps" }, info.hdr ?: "SDR".takeIf { info.videoCodec != null }, info.videoBitrate)
-                .takeIf { it.isNotEmpty() }
-                ?.let { add(stringResource(R.string.stream_info_video) to it.joinToString(" · ")) }
-            listOfNotNull(info.audioCodec, info.channels, info.sampleRate, info.audioBitrate, info.audioLanguage)
-                .takeIf { it.isNotEmpty() }
-                ?.let { add(stringResource(R.string.stream_info_audio) to it.joinToString(" · ")) }
-            info.videoDecoder?.let { name ->
-                add(stringResource(R.string.stream_info_decoder) to "${if (info.videoDecoderSoftware) software else hardware} · $name")
+            val video = listOfNotNull(
+                info.size?.let { stringResource(R.string.stream_info_resolution) to it },
+                info.videoCodec?.let { stringResource(R.string.stream_info_codec) to it },
+                info.frameRate?.let { stringResource(R.string.stream_info_frame_rate) to "$it fps" },
+                (info.hdr ?: "SDR".takeIf { info.videoCodec != null })?.let { stringResource(R.string.stream_info_range) to it },
+                info.videoBitrate?.let { stringResource(R.string.stream_info_bitrate) to it },
+            )
+            if (video.isNotEmpty()) add(stringResource(R.string.stream_info_video) to video)
+            val audio = listOfNotNull(
+                listOfNotNull(info.audioCodec, info.channels).takeIf { it.isNotEmpty() }
+                    ?.let { stringResource(R.string.stream_info_codec) to it.joinToString(" · ") },
+                listOfNotNull(info.sampleRate, info.audioBitrate).takeIf { it.isNotEmpty() }
+                    ?.let { stringResource(R.string.stream_info_sample_rate) to it.joinToString(" · ") },
+                info.audioLanguage?.let { stringResource(R.string.stream_info_language) to it },
+            )
+            if (audio.isNotEmpty()) add(stringResource(R.string.stream_info_audio) to audio)
+            val playback = buildList {
+                info.videoDecoder?.let { name ->
+                    add(stringResource(R.string.stream_info_decoder) to "${if (info.videoDecoderSoftware) software else hardware} · $name")
+                    add(
+                        stringResource(R.string.stream_info_frames) to
+                            stringResource(R.string.stream_info_frames_value, info.renderedFrames, info.droppedFrames),
+                    )
+                }
+                info.container?.let { add(stringResource(R.string.stream_info_format) to it) }
+                addAll(extraRows)
             }
-            if (info.videoDecoder != null) {
-                add(
-                    stringResource(R.string.stream_info_frames) to
-                        stringResource(R.string.stream_info_frames_value, info.renderedFrames, info.droppedFrames),
-                )
+            if (playback.isNotEmpty()) add(stringResource(R.string.stream_info_playback) to playback)
+            val network = buildList {
+                listOfNotNull(info.download, info.downloaded).takeIf { it.isNotEmpty() }
+                    ?.let { add(stringResource(R.string.stream_info_network) to it.joinToString(" · ")) }
+                add(stringResource(R.string.stream_info_buffer) to String.format(Locale.getDefault(), "%.1f s", info.bufferedSeconds))
+                info.liveDelaySeconds?.let {
+                    add(stringResource(R.string.stream_info_live_delay) to String.format(Locale.getDefault(), "%.1f s", it))
+                }
             }
-            info.container?.let { add(stringResource(R.string.stream_info_format) to it) }
-            addAll(extraRows)
-            listOfNotNull(info.download, info.downloaded).takeIf { it.isNotEmpty() }
-                ?.let { add(stringResource(R.string.stream_info_network) to it.joinToString(" · ")) }
-            add(stringResource(R.string.stream_info_buffer) to String.format(Locale.getDefault(), "%.1f s", info.bufferedSeconds))
-            info.liveDelaySeconds?.let {
-                add(stringResource(R.string.stream_info_live_delay) to String.format(Locale.getDefault(), "%.1f s", it))
-            }
+            add(stringResource(R.string.stream_info_net_section) to network)
         }
     }
-    Column(
-        modifier
-            .widthIn(max = 560.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.82f))
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-    ) {
-        Text(
-            title ?: stringResource(R.string.stream_info_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White.copy(alpha = 0.7f),
+    val faint = Color(0xFFBFC9C4)
+    Row(modifier.fillMaxHeight()) {
+        // The edge melts into the picture, like the bottom bar's shade.
+        Box(
+            Modifier
+                .width(INFO_PANEL_EDGE)
+                .fillMaxHeight()
+                .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)))),
         )
-        Spacer(Modifier.height(10.dp))
-        if (info == null || (info.videoCodec == null && info.audioCodec == null)) {
-            Text(stringResource(R.string.stream_info_waiting), style = MaterialTheme.typography.bodyMedium, color = Color.White)
-        }
-        rows.forEach { (label, value) ->
-            Row(Modifier.padding(vertical = 2.dp)) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.width(150.dp),
+        Column(
+            Modifier
+                .width(INFO_PANEL_WIDTH)
+                .fillMaxHeight()
+                .background(
+                    Brush.horizontalGradient(
+                        0f to Color.Black.copy(alpha = 0.72f),
+                        0.4f to Color.Black.copy(alpha = 0.92f),
+                    ),
                 )
-                Text(value, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Top))
+                .padding(start = 24.dp, end = 38.dp, top = 35.dp),
+        ) {
+            if (!kicker.isNullOrBlank()) Text(
+                kicker.uppercase(),
+                color = faint,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 2.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                (title ?: stringResource(R.string.stream_info_title)).uppercase(),
+                Modifier.padding(top = 4.dp, bottom = 4.dp),
+                fontFamily = PanelOswald,
+                fontWeight = FontWeight.Bold,
+                fontSize = 35.sp,
+                lineHeight = 40.sp,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (info == null || (info.videoCodec == null && info.audioCodec == null)) {
+                Text(
+                    stringResource(R.string.stream_info_waiting),
+                    Modifier.padding(start = 14.dp, top = 12.dp),
+                    fontSize = 16.sp,
+                    color = Color.White,
+                )
+            }
+            sections.forEach { (section, rows) ->
+                Text(
+                    section.uppercase(),
+                    Modifier.padding(start = 14.dp, top = 12.dp, bottom = 2.dp),
+                    color = faint.copy(alpha = 0.8f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 2.sp,
+                )
+                rows.forEach { (label, value) ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, fontSize = 16.sp, color = faint, maxLines = 1, softWrap = false)
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            value,
+                            Modifier.weight(1f),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            textAlign = TextAlign.End,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-/** Under the programme's title: one line of its synopsis, then what's next (or the guide's note). */
+/** Under the programme's title: two lines of its synopsis, then what's next (or the guide's note). */
 @Composable
-private fun OnAirLines(info: OnAir) {
+private fun OnAirLines(info: OnAir, modifier: Modifier = Modifier) {
     info.now?.description?.takeIf { it.isNotBlank() }?.let { desc ->
-        Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(11.dp))
         Text(
             desc,
-            fontSize = 12.sp,
-            color = Color.White.copy(alpha = 0.75f),
-            maxLines = 1,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
+            color = Color.White.copy(alpha = 0.88f),
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
         )
     }
-    val footer = info.next?.let { stringResource(R.string.guide_next_prefix, clockText(it.startUtcMillis), it.title) }
+    val next = info.next
+    val footer = next?.let { stringResource(R.string.guide_next_prefix, clockText(it.startUtcMillis), it.title) }
         ?: info.footer
-    footer?.takeIf { it.isNotBlank() }?.let {
-        Spacer(Modifier.height(3.dp))
+    footer?.takeIf { it.isNotBlank() }?.let { line ->
+        // "Poi 23:30" in bold, the title after it plain.
+        val split = next?.title?.takeIf { it.isNotBlank() }?.let { line.lastIndexOf(it) }?.takeIf { it > 0 }
+        val text = buildAnnotatedString {
+            if (split != null) {
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.9f))) {
+                    append(line.substring(0, split))
+                }
+                append(line.substring(split))
+            } else {
+                append(line)
+            }
+        }
+        Spacer(Modifier.height(9.dp))
         Text(
-            it,
-            fontSize = 11.sp,
-            color = Color.White.copy(alpha = 0.55f),
+            text,
+            fontSize = 14.sp,
+            color = Color.White.copy(alpha = 0.7f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = modifier,
         )
     }
 }
@@ -2045,7 +2148,7 @@ private fun BarChip(
             .focusLift(focused)
             .heightIn(min = CHIP_SIZE)
             .widthIn(min = CHIP_SIZE)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(CHIP_RADIUS))
             .background(container)
             .then(
                 if (onLongClick == null) Modifier
@@ -2096,10 +2199,17 @@ private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
 private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
-// The logo block: as tall as the channel name and the programme beside it.
-private val LOGO_BLOCK = 61.dp
-private val LOGO_BLOCK_MAX_WIDTH = 150.dp
+// The logo on the channel name's line: about as tall as the name and its tags.
+private val LOGO_INLINE = 36.dp
+private val LOGO_INLINE_MAX_WIDTH = 120.dp
+// The guide's width while the info panel takes the right of the screen.
+private val EPG_WIDTH_WITH_INFO = 650.dp
 private val CHIP_SIZE = 52.dp
+// The info panel: a shaded edge, then the read-out.
+private val INFO_PANEL_EDGE = 144.dp
+private val INFO_PANEL_WIDTH = 450.dp
+// Square-ish like every other focused thing in the app (theme/Focus.kt draws 10dp).
+internal val CHIP_RADIUS = 10.dp
 
 /** A game's slot without a guide of its own: two hours from kick-off, stoppage time and all. */
 private const val MATCH_SLOT_MILLIS = 120 * 60_000L

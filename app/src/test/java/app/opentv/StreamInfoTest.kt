@@ -56,13 +56,23 @@ class StreamInfoTest {
 
         val first = meter.sample(0, stats(video, audio, frames = 0, bytes = 0))
         assertThat(first.frameRate).isNull()
-        assertThat(first.badges).containsExactly("1080p", "HEVC", "AC3 5.1").inOrder()
+        assertThat(first.badges).containsExactly("1080p")
         assertThat(first.container).isEqualTo("MPEG-TS")
 
         val second = meter.sample(1_000, stats(video, audio, frames = 50, bytes = 1_000_000))
         assertThat(second.frameRate).isEqualTo("50")
         assertThat(second.download).isEqualTo("8.0 Mb/s")
-        assertThat(second.badges).containsExactly("1080p", "HEVC", "50fps", "8.0 Mb/s", "AC3 5.1").inOrder()
+        assertThat(second.badges).containsExactly("1080p", "50 fps").inOrder()
+    }
+
+    @Test
+    fun `a frame rate still being measured stays off the tags`() {
+        val meter = StreamInfo.Meter()
+        val video = Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H264).setWidth(1920).setHeight(1080).build()
+        meter.sample(0, stats(video, null, frames = 0, bytes = 0))
+        val climbing = meter.sample(1_000, stats(video, null, frames = 17, bytes = 0))
+        assertThat(climbing.frameRate).isEqualTo("17")
+        assertThat(climbing.badges).containsExactly("1080p")
     }
 
     @Test
@@ -100,7 +110,8 @@ class StreamInfoTest {
             )
             .build()
         val snap = StreamInfo.Meter().sample(0, stats(hdr, null, frames = 0, bytes = 0))
-        assertThat(snap.badges).containsExactly("4K", "HEVC", "HDR10").inOrder()
+        assertThat(snap.badges).containsExactly("4K")
+        assertThat(snap.hdr).isEqualTo("HDR10")
     }
 
     private fun stats(video: Format?, audio: Format?, frames: Long, bytes: Long) = PlayerController.Stats(
