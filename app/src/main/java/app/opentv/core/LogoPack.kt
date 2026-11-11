@@ -60,14 +60,14 @@ class LogoPack(
     /** The pack's logo for this channel, if the pack names it: a team's crest first. */
     fun packFor(groupKey: String): String? {
         if (groupKey.isEmpty() || (byKey.isEmpty() && crests.isEmpty())) return null
-        val base = groupKey.substringBefore('+')
+        val base = app.opentv.data.parser.ChannelCountry.bare(groupKey).substringBefore('+')
         return crestFor(groupKey) ?: byKey[base] ?: ChannelNameNormalizer.teamOf(base)?.let(byKey::get)
     }
 
     /** The team's crest for a team channel ("Milan", "DAZN SERIE A 3 MILAN"), if it is one. */
     fun crestFor(groupKey: String): String? {
         if (groupKey.isEmpty() || crests.isEmpty()) return null
-        val base = groupKey.substringBefore('+')
+        val base = app.opentv.data.parser.ChannelCountry.bare(groupKey).substringBefore('+')
         return crests[base] ?: ChannelNameNormalizer.teamOf(base)?.let(crests::get)
     }
 

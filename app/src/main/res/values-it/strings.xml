@@ -677,6 +677,9 @@
     <string name="player_channel_unavailable_hint">OK per riprovare · ↑/↓ per cambiare canale</string>
     <string name="settings_grouping_title">Raggruppamento canali</string>
     <string name="settings_grouping_subtitle">Unisci i doppioni, annulla le unioni</string>
+    <string name="grouping_home_country">Paese di casa</string>
+    <string name="grouping_home_country_desc">I suoi canali restano nelle loro righe, con nome ufficiale e guida; i canali di altri paesi hanno righe a parte.</string>
+    <string name="grouping_home_country_auto">Automatico (%1$s)</string>
     <string name="grouping_desc">Righe che sembrano lo stesso canale con due nomi. Unisci le mette in una sola riga, con tutti i flussi nel pannello Qualità. Le scelte restano a ogni sincronizzazione.</string>
     <string name="grouping_suggestions_header">Possibili doppioni (%1$d)</string>
     <string name="grouping_suggestions_loading">Cerco i doppioni…</string>

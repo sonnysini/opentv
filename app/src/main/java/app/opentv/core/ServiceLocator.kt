@@ -100,7 +100,13 @@ object ServiceLocator {
                 stalkerApi = stalkerApi,
                 http = httpClient,
                 settings = settings,
+                channelNames = channelNamesRepository,
             )
+        }
+
+        /** The home country's channel names (public channel database + free guides), weekly. */
+        val channelNamesRepository: app.opentv.data.repo.ChannelNamesRepository by lazy {
+            app.opentv.data.repo.ChannelNamesRepository(appContext, httpClient, database.epgAliases(), settings)
         }
 
         val epgRepository: EpgRepository by lazy {
@@ -116,6 +122,7 @@ object ServiceLocator {
                 programmeChanges = database.tableChanges("programmes"),
                 database = database,
                 matcherMemo = appContext.getSharedPreferences("epg_matcher", Context.MODE_PRIVATE),
+                homeCountry = { settings.effectiveHomeCountry() },
             )
         }
 

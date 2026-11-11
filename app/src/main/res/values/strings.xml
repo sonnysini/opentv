@@ -744,6 +744,9 @@
     <string name="player_channel_unavailable_hint">OK to try again · ↑/↓ to change channel</string>
     <string name="settings_grouping_title">Channel grouping</string>
     <string name="settings_grouping_subtitle">Merge duplicate channels, undo merges</string>
+    <string name="grouping_home_country">Home country</string>
+    <string name="grouping_home_country_desc">Its channels keep their rows, get their official names and their guide; other countries\' channels get rows of their own.</string>
+    <string name="grouping_home_country_auto">Automatic (%1$s)</string>
     <string name="grouping_desc">Rows that look like one channel under two names. Merge puts them in one row, every feed in the Quality panel. Your choices survive every sync.</string>
     <string name="grouping_suggestions_header">Possible duplicates (%1$d)</string>
     <string name="grouping_suggestions_loading">Looking for duplicates…</string>

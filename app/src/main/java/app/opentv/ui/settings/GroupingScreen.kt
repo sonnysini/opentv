@@ -38,7 +38,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
+import app.opentv.data.parser.ChannelCountry
 import app.opentv.data.parser.MergeSuggester
+import app.opentv.ui.focusVeil
+import app.opentv.ui.theme.focusLift
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.onFocusChanged
 import app.opentv.ui.GroupingViewModel
 
 /**
@@ -54,6 +59,7 @@ fun GroupingScreen(
     val mergeSources by viewModel.mergeSources.collectAsStateWithLifecycle()
     val stripSources by viewModel.stripSources.collectAsStateWithLifecycle()
     val showRecentGroups by viewModel.showRecentGroups.collectAsStateWithLifecycle()
+    val homeCountry by viewModel.homeCountry.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val merges by viewModel.merges.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
@@ -98,6 +104,20 @@ fun GroupingScreen(
         Spacer(Modifier.height(16.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            item(key = "home_country") {
+                val auto = homeCountry.isBlank()
+                val code = if (auto) ChannelCountry.deviceDefault() else homeCountry
+                val country = countryName(code)
+                ValueRow(
+                    stringResource(R.string.grouping_home_country),
+                    stringResource(R.string.grouping_home_country_desc),
+                    value = if (auto) stringResource(R.string.grouping_home_country_auto, country) else country,
+                ) {
+                    // Automatic, then the countries one by one, then back to automatic.
+                    val i = HOME_COUNTRIES.indexOf(homeCountry)
+                    viewModel.setHomeCountry(HOME_COUNTRIES[(i + 1) % HOME_COUNTRIES.size])
+                }
+            }
             item(key = "merge_sources") {
                 SwitchRow(
                     stringResource(R.string.categories_merge_sources),
@@ -228,5 +248,56 @@ private fun PairRow(title: String, subtitle: String?, buttons: @Composable () ->
         }
         Spacer(Modifier.width(12.dp))
         buttons()
+    }
+}
+
+/** Automatic first, then the countries the app knows how to read a list for. */
+private val HOME_COUNTRIES = listOf(
+    "", "IT", "GB", "DE", "AT", "CH", "FR", "BE", "NL", "ES", "PT", "PL", "RO", "GR", "AL", "TR", "US", "CA",
+)
+
+private fun countryName(code: String): String =
+    java.util.Locale("", code).getDisplayCountry(java.util.Locale.getDefault()).ifBlank { code }
+
+@Composable
+private fun ValueRow(label: String, subtitle: String, value: String, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .focusLift(focused)
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant)
+                else MaterialTheme.colorScheme.surfaceVariant,
+            )
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleLarge,
+                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }

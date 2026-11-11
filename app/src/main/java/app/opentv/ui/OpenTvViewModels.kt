@@ -1901,6 +1901,9 @@ class CategoriesViewModel(app: Application) : AndroidViewModel(app) {
  * merge or ignore, and the merges already made (each undoable). A merge or undo regroups the
  * stored channels on the spot — no sync needed — and re-runs the guide matcher for the new rows.
  */
+/** How long the home-country setting waits for the user to stop stepping before it regroups. */
+private const val HOME_SETTLE_MILLIS = 1_500L
+
 class GroupingViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = ServiceLocator.get(app)
 
@@ -1930,6 +1933,23 @@ class GroupingViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setShowRecentGroups(on: Boolean) = graph.settings.setShowRecentGroups(on)
 
+    /** Blank = automatic (the device's region). */
+    val homeCountry: StateFlow<String> = graph.settings.homeCountry
+
+    /** Another home country: its channel names (downloaded once if new), then the list regrouped. */
+    fun setHomeCountry(code: String) {
+        graph.settings.setHomeCountry(code)
+        // Stepping through the countries: only the one the user stops on is fetched and applied.
+        homeJob?.cancel()
+        homeJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(HOME_SETTLE_MILLIS)
+            // Once started it finishes: a half-renormalised list is worse than a late one.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { regroupNow(fetchNames = true) }
+        }
+    }
+
+    private var homeJob: kotlinx.coroutines.Job? = null
+
     fun merge(s: app.opentv.data.parser.MergeSuggester.Suggestion) {
         graph.settings.addGroupMerge(app.opentv.data.model.GroupMerge(s.from.key, s.into.key, s.from.name, s.into.name))
         // Off the list at once; the rescan after regrouping drops the pairs it made moot.
@@ -1948,14 +1968,20 @@ class GroupingViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun regroup() {
-        viewModelScope.launch {
-            regroupLock.withLock {
-                _busy.value = true
+        viewModelScope.launch { regroupNow() }
+    }
+
+    private suspend fun regroupNow(fetchNames: Boolean = false) {
+        regroupLock.withLock {
+            _busy.value = true
+            try {
                 runCatching {
+                    if (fetchNames) graph.channelNamesRepository.refreshIfStale(System.currentTimeMillis())
                     graph.catalogRepository.renormalizeAll()
                     graph.epgRepository.runMatcher()
                 }
                 rescan()
+            } finally {
                 _busy.value = false
             }
         }

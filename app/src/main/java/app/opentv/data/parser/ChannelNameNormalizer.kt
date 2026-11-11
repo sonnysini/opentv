@@ -125,7 +125,7 @@ object ChannelNameNormalizer {
      * lose its BBC.
      */
     private val COUNTRY_PREFIX = Regex(
-        """^\s*(?:[\[(]([A-Z]{2,3})[\])]\s*[|:\-–—]?|([A-Z]{2,3})\s*[|:\-–—])\s*"""
+        """^\s*(?:[\[(]([A-Z]{2,3})[\])]\s*[|:\-–—•·]?|([A-Z]{2,3})\s*[|:\-–—•·])\s*"""
     )
 
     /**
