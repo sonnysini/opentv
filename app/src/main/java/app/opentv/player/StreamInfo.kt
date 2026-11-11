@@ -90,7 +90,7 @@ object StreamInfo {
 
     private val STANDARD_RATES = floatArrayOf(23.976f, 24f, 25f, 29.97f, 30f, 48f, 50f, 59.94f, 60f)
 
-    private val STANDARD_LABELS = STANDARD_RATES.mapNotNull { frameRateLabel(it) }.toSet()
+    private val STANDARD_LABELS = STANDARD_RATES.map { frameRateLabel(it) }.filterNotNull().toSet()
 
     /** A measured frame rate snapped to the broadcast rate it is close to (within 3%), or as is. */
     fun snapFrameRate(fps: Float): Float {
