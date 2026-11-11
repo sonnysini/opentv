@@ -19,6 +19,9 @@
 - **Typos join carefully**: one letter off on a long real word only (`Fisching`, `Suspence`), never
   `Serie A`/`Serie B`; timeshift copies (`+1`) never join their channel.
 - **Settings › Channel grouping › Home country**: automatic (the device's region) or any country.
+- **No more duplicate groups.** A group whose name is part of another group's `&` name
+  (`Entertainment` and `Culture` next to `Entertainment & Culture`) folds into it, so the same
+  channels no longer show up three times. Only `&` names: `Sport` never folds into `Sky Sport`.
 
 ## 0.58.0 — 11 November 2026
 

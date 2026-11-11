@@ -72,6 +72,23 @@ class CategoryFamilyTest {
     }
 
     @Test
+    fun `a shelf named in an ampersand name folds into it`() {
+        val names = listOf(
+            "🎭 Intrattenimento & Cultura", "🎭 Intrattenimento (RAW)", "🎭 Cultura (RAW)",
+            "⚽ Sport", "⚽ Sky Sport (Alpha)",
+        )
+        val umbrellas = CategoryFamily.umbrellas(names, sources)
+        val umbrella = of("🎭 Intrattenimento & Cultura").key
+        for (shelf in listOf("🎭 Intrattenimento (RAW)", "🎭 Cultura (RAW)")) {
+            val own = of(shelf).key
+            assertWithMessage(shelf).that(umbrellas[own] ?: own).isEqualTo(umbrella)
+        }
+        assertThat(umbrellas).doesNotContainKey(of("⚽ Sport").key)
+        assertThat(umbrellas).doesNotContainKey(of("⚽ Sky Sport (Alpha)").key)
+        assertThat(umbrellas.values.toSet()).containsExactly(umbrella)
+    }
+
+    @Test
     fun `source label and clean name`() {
         assertThat(of("⚽ Sky Sport (Alpha)").source).isEqualTo("Alpha")
         assertThat(of("⚽ Sky Sport (Alpha)").name).isEqualTo("⚽ Sky Sport")

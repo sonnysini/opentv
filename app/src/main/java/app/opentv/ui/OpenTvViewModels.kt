@@ -948,15 +948,19 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             // picks (last group, hidden groups) still find it. A folded family keys on its first
             // member, and [CategoryGroup.memberKeys] remembers the rest.
             val families = LinkedHashMap<String, MutableList<Folded>>()
+            // 'Intrattenimento' and 'Cultura' shelves fold into 'Intrattenimento & Cultura'.
+            val umbrellas = if (mergeSources) CategoryFamily.umbrellas(folded.values.map { it.rawName }) else emptyMap()
             for (f in folded.values) {
-                val family = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
+                val own = (if (mergeSources) CategoryFamily.of(f.rawName).key else "").ifEmpty { "#" + f.key }
+                val family = umbrellas[own] ?: own
                 families.getOrPut(family) { mutableListOf() } += f
             }
             // With source merging off, 'Sky Sport (A)' and '(B)' stay apart and keep their tag.
             val lonePerFamily = families.values.filter { it.size == 1 }
                 .groupingBy { CategoryFamily.of(it.first().rawName).key }.eachCount()
-            val groups = families.values.map { members ->
-                val first = members.first()
+            val groups = families.entries.map { (familyKey, members) ->
+                // A folded shelf is named after the shelf it folded into, not whichever came first.
+                val first = members.firstOrNull { CategoryFamily.of(it.rawName).key == familyKey } ?: members.first()
                 if (members.size == 1) {
                     // A lone 'Bambini (A)' still reads "Bambini"; the key stays, so saved picks hold.
                     val unique = lonePerFamily[CategoryFamily.of(first.rawName).key] == 1
