@@ -21,6 +21,7 @@ import app.opentv.data.model.EpgFeed
 import app.opentv.data.model.Programme
 import app.opentv.data.model.Source
 import app.opentv.data.model.TimeShift
+import app.opentv.data.parser.ChannelCountry
 import app.opentv.data.parser.ChannelNameNormalizer
 import app.opentv.data.parser.XmltvParser
 import app.opentv.data.remote.XtreamApi
@@ -95,6 +96,8 @@ class EpgRepository(
     private val programmeChanges: Flow<Unit>? = null,
     /** Runs the matcher's writes as one transaction: one list rebuild instead of one per channel. */
     private val database: RoomDatabase? = null,
+    /** The home country ([AppSettings.effectiveHomeCountry]): its channels take its guides, others theirs. */
+    private val homeCountry: () -> String = { "IT" },
     /** Where the matcher remembers what it last matched from (see [runMatcherIfChanged]). */
     private val matcherMemo: SharedPreferences? = null,
 ) {
@@ -437,7 +440,7 @@ class EpgRepository(
         val rows = channelDao.matchInputs()
         var hash = 17L
         for (row in rows) hash = hash * 31 + row.hashCode()
-        return "m$MATCHER_INPUTS_VERSION|n${CatalogRepository.NORMALIZER_VERSION}|$feeds|a$aliases|" +
+        return "m$MATCHER_INPUTS_VERSION|n${CatalogRepository.NORMALIZER_VERSION}|h${homeCountry()}|$feeds|a$aliases|" +
             "${populated.size}:${populated.hashCode()}|${rows.size}:$hash"
     }
 
@@ -501,16 +504,35 @@ class EpgRepository(
         fun rawKey(channel: Channel) =
             rawKeys.getOrPut(channel.id) { ChannelNameNormalizer.normalize(channel.name).groupKey }
 
+        // A channel only takes a guide of its own country (an id with no country suffix fits any):
+        // `de:skynature` never gets `SkyNature.it`, Italian Sky Sport never a `….at`.
+        val home = homeCountry()
+        val anyGuide: (String) -> Boolean = { true }
+        val homeGuide: (String) -> Boolean = { id -> ChannelCountry.ofGuideId(id)?.let { ChannelCountry.isHome(it, home) } ?: true }
+        val countryGuides = HashMap<String, (String) -> Boolean>()
+        fun accepts(channel: Channel): (String) -> Boolean = when (val cc = ChannelCountry.ofKey(channel.groupKey)) {
+            null -> homeGuide
+            ChannelCountry.WORLD -> anyGuide
+            else -> countryGuides.getOrPut(cc) { { id -> ChannelCountry.ofGuideId(id)?.let { it == cc } ?: true } }
+        }
+        /** The key without its country, as guides know it. */
+        fun bareKey(channel: Channel) = ChannelCountry.bare(channel.groupKey)
+        /** The country part of the key (`de:`), to keep raw-name lookups apart per country. */
+        fun prefixOf(channel: Channel) = channel.groupKey.substring(0, channel.groupKey.length - bareKey(channel).length)
+
         /**
          * The channel's guide by name. Its stored key first; then, exact only, the key before
          * [ChannelNameNormalizer.keyAliases] folded it (`Sky Nature` filed as `nature` because the
          * list also has a `Nature`): guides spell the full name.
          */
-        fun byName(channel: Channel): EpgMatcher.Match? =
-            index.find(channel.groupKey) ?: rawKey(channel)
-                .takeIf { it != channel.groupKey }
-                ?.let(index::exact)
+        fun byName(channel: Channel): EpgMatcher.Match? {
+            val accept = accepts(channel)
+            val key = bareKey(channel)
+            return index.find(key, accept) ?: rawKey(channel)
+                .takeIf { it != key }
+                ?.let { index.exact(it, accept) }
                 ?.let { EpgMatcher.Match(it, EpgMatcher.Tier.EXACT) }
+        }
 
         /**
          * Whether the provider's own guide id can be believed. Providers copy ids between
@@ -519,7 +541,7 @@ class EpgRepository(
          */
         fun providerAgrees(channel: Channel, id: String, exactByName: String?): Boolean {
             if (exactByName == null || exactByName == id) return true
-            val keys = listOf(channel.groupKey, rawKey(channel))
+            val keys = listOf(bareKey(channel), rawKey(channel))
             return index.keysOf(id).any { guideKey -> keys.any { EpgMatcher.similar(guideKey, it) } }
         }
 
@@ -538,17 +560,19 @@ class EpgRepository(
             }
             val named = byName(channel)
             val exactByName = named?.takeIf { it.tier == EpgMatcher.Tier.EXACT }?.epgId
-            val provider = channel.epgChannelId?.takeIf { populated(it) && providerAgrees(channel, it, exactByName) }
+            val provider = channel.epgChannelId?.takeIf {
+                populated(it) && accepts(channel)(it) && providerAgrees(channel, it, exactByName)
+            }
             val newMatch = provider ?: named?.epgId
             if (newMatch != channel.matchedEpgId) writes += { channelDao.setMatchedEpgId(channel.id, newMatch) }
             val working = (listOfNotNull(channel.epgOverrideId, newMatch)).firstOrNull(::populated)
             if (working != null) {
                 matched++
                 baseGuide.putIfAbsent(channel.groupKey, working)
-                baseGuide.putIfAbsent(rawKey(channel), working)
+                baseGuide.putIfAbsent(prefixOf(channel) + rawKey(channel), working)
             }
             channel.logoUrl?.takeIf { it.isNotBlank() }?.let { baseLogo.putIfAbsent(channel.groupKey, it) }
-            val guideLogo = guideLogoOf(channel.groupKey, working)
+            val guideLogo = guideLogoOf(bareKey(channel), working)
             guideLogo?.let { baseGuideLogo.putIfAbsent(channel.groupKey, it) }
             if (guideLogo != null) guideLogos++
             if (guideLogo != channel.guideLogoUrl) writes += { channelDao.setGuideLogo(channel.id, guideLogo) }
@@ -561,11 +585,12 @@ class EpgRepository(
         // a typo-tolerant or prefix one may well be another channel's `+1`.
         for ((channel, split) in shifted) {
             val (baseKey, hours) = split
-            val base = baseGuide[baseKey] ?: TimeShift.splitKey(rawKey(channel))?.first?.let(baseGuide::get)
+            val base = baseGuide[baseKey] ?: TimeShift.splitKey(rawKey(channel))?.first?.let { baseGuide[prefixOf(channel) + it] }
             val own = byName(channel)?.takeIf { it.epgId != base && (it.tier == EpgMatcher.Tier.EXACT || base == null) }
             val shift = EpgMatcher.splitShift(channel.groupKey).second
             val providerOwn = channel.epgChannelId?.takeIf { id ->
-                populated(id) && id != base && index.keysOf(id).any { EpgMatcher.splitShift(it).second == shift }
+                populated(id) && id != base && accepts(channel)(id) &&
+                    index.keysOf(id).any { EpgMatcher.splitShift(it).second == shift }
             }
             // A free guide's own `+1` first, then the base's guide moved later, and only then the
             // provider's `+1`: providers often ship copies that mix shifted and unshifted times
@@ -582,7 +607,7 @@ class EpgRepository(
             // The base channel's logo first: a `+1` is the same channel, and guides often give
             // the copies a poorer icon or a mismatched one.
             val ownGuide = listOfNotNull(channel.epgOverrideId, providerOwn, own?.epgId).firstOrNull(::populated)
-            val guideLogo = baseGuideLogo[baseKey] ?: ownGuide?.let { guideLogoOf(channel.groupKey, it) }
+            val guideLogo = baseGuideLogo[baseKey] ?: ownGuide?.let { guideLogoOf(bareKey(channel), it) }
             if (guideLogo != null) guideLogos++
             if (guideLogo != channel.guideLogoUrl) writes += { channelDao.setGuideLogo(channel.id, guideLogo) }
         }

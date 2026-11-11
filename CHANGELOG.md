@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.59.0 — 11 November 2026
+
+- **Channel names that read like channels.** Every row now has one tidy name: `EUROSPORT 1` reads
+  `Eurosport 1`, `rete oro` reads `Rete Oro`, `Dmax` reads `DMAX`, `Warner Tv` reads `Warner TV`.
+  Acronyms stay capitals, little words stay small (`Il Trono di Spade`), names in other scripts are
+  left alone.
+- **Rows per country.** A German or British copy of a channel no longer sits in the Italian row (so
+  the fallback can't land on another language): copies from abroad get rows of their own, by the
+  country written in the name, then the group's flag, then the guide id. Their guide is their
+  country's too.
+- **A channel dictionary.** The app downloads the home country's channel names from the public
+  channel database once a week (no server of ours; a copy for Italy ships with the app) and adds the
+  names of the free guides you have on. Rows naming one channel join (`History Channel` + `History`,
+  `Sky Series` + `Sky Serie`, `Nicklodeon` + `Nickelodeon`), official spellings win (`Sky Sport
+  MotoGP`, `Sky TG24`), and a brand is only dropped when the dictionary doesn't know the branded
+  channel (`Sky Sport 1` stays apart from `Sport1`).
+- **Typos join carefully**: one letter off on a long real word only (`Fisching`, `Suspence`), never
+  `Serie A`/`Serie B`; timeshift copies (`+1`) never join their channel.
+- **Settings › Channel grouping › Home country**: automatic (the device's region) or any country.
+- **No more duplicate groups.** A group whose name is part of another group's `&` name
+  (`Entertainment` and `Culture` next to `Entertainment & Culture`) folds into it, so the same
+  channels no longer show up three times. Only `&` names: `Sport` never folds into `Sky Sport`.
+
 ## 0.58.0 — 11 November 2026
 
 - **A live player you can read.** Everything starts at the left edge: the channel's logo is small,

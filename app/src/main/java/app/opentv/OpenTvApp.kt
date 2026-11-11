@@ -167,7 +167,10 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         appScope.launch {
             val prefs = getSharedPreferences("opentv", MODE_PRIVATE)
             val seen = prefs.getInt("normalizer_version", 0)
-            if (seen < CatalogRepository.NORMALIZER_VERSION) {
+            // The home country's channel names, weekly: new names regroup the list on the spot.
+            val newNames = runCatching { graph.channelNamesRepository.refreshIfStale(System.currentTimeMillis()) }
+                .getOrDefault(false)
+            if (seen < CatalogRepository.NORMALIZER_VERSION || newNames) {
                 graph.catalogRepository.renormalizeAll()
                 prefs.edit().putInt("normalizer_version", CatalogRepository.NORMALIZER_VERSION).apply()
             }

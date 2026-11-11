@@ -72,17 +72,22 @@ object EpgMatcher {
         /** Returns the epg id for a provider channel's group key, or null. */
         fun match(groupKey: String): String? = find(groupKey)?.epgId
 
-        /** Only an exact name: no prefix, no typo tolerance. */
-        fun exact(groupKey: String): String? =
-            if (groupKey.length < MIN_KEY_LENGTH) null else byKey[groupKey]?.let(::pickPerGuide)
+        /** Only an exact name: no prefix, no typo tolerance. [accept] filters guide ids (by country). */
+        fun exact(groupKey: String, accept: (String) -> Boolean = ANY): String? =
+            if (groupKey.length < MIN_KEY_LENGTH) null
+            else byKey[groupKey]?.filter { accept(it.epgId) }?.let(::pickPerGuide)
 
         /** The normalised keys a guide id is known by (`skyuno`, `skyunoit`). */
         fun keysOf(epgId: String): Set<String> = keysById[epgId].orEmpty()
 
-        fun find(groupKey: String): Match? {
+        /**
+         * The guide for a channel's key. [accept] says which guide ids may answer: a German channel
+         * takes no `.it` guide, an Italian one no `.de`.
+         */
+        fun find(groupKey: String, accept: (String) -> Boolean = ANY): Match? {
             if (groupKey.length < MIN_KEY_LENGTH) return null
 
-            exact(groupKey)?.let { return Match(it, Tier.EXACT) }
+            exact(groupKey, accept)?.let { return Match(it, Tier.EXACT) }
 
             // Prefix tier: the provider name extends the guide name or vice versa
             // ("skysportsmainevent" vs "skysportsmainevt"; "bbcone" vs "bbconelondon").
@@ -92,7 +97,7 @@ object EpgMatcher {
             val (base, shift) = splitShift(groupKey)
             val hits = sortedKeys.filter { alias ->
                 alias.key.length >= MIN_KEY_LENGTH && alias.shift == shift &&
-                    (alias.base.startsWith(base) || base.startsWith(alias.base))
+                    (alias.base.startsWith(base) || base.startsWith(alias.base)) && accept(alias.epgId)
             }
             pickStrict(hits)?.let { return Match(it, Tier.PREFIX) }
 
@@ -100,7 +105,7 @@ object EpgMatcher {
             // never across numbers, and only when every candidate is the same name.
             if (base.length >= MIN_FUZZY_LENGTH) {
                 val near = byFirstLetter[base[0]].orEmpty().filter { alias ->
-                    alias.shift == shift && alias.base != base && closeSpelling(alias.base, base)
+                    alias.shift == shift && alias.base != base && closeSpelling(alias.base, base) && accept(alias.epgId)
                 }
                 if (near.map { it.key }.distinct().size == 1) {
                     pickPerGuide(near)?.let { return Match(it, Tier.FUZZY) }
@@ -185,6 +190,7 @@ object EpgMatcher {
     }
 
     private val SHIFT = Regex("""(.+)\+(\d{1,2})""")
+    private val ANY: (String) -> Boolean = { true }
     private val DIGITS = Regex("""\d+""")
 
     /**

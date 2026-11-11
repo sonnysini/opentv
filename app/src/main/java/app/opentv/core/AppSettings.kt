@@ -259,6 +259,23 @@ class AppSettings private constructor(context: Context) {
         _mergeCategorySources.value = on
     }
 
+    /**
+     * The country whose channels are "ours": they keep their rows, meet the channel dictionary and
+     * get their names tidied; any other country's channels form rows of their own. Blank = the
+     * device's region ([app.opentv.data.parser.ChannelCountry.deviceDefault]).
+     */
+    private val _homeCountry = pref { prefs.getString(KEY_HOME_COUNTRY, "").orEmpty() }
+    val homeCountry: StateFlow<String> = _homeCountry.asStateFlow()
+
+    fun setHomeCountry(code: String) {
+        prefs.edit().putString(KEY_HOME_COUNTRY, code).apply()
+        _homeCountry.value = code
+    }
+
+    /** [homeCountry], or the device's when the user left it on automatic. */
+    fun effectiveHomeCountry(): String =
+        _homeCountry.value.ifBlank { app.opentv.data.parser.ChannelCountry.deviceDefault() }
+
     /** Drop the restream source from a lone group's name: 'Bambini (A)' reads "Bambini". */
     private val _stripCategorySources = pref { prefs.getBoolean(KEY_STRIP_CATEGORY_SOURCES, true) }
     val stripCategorySources: StateFlow<Boolean> = _stripCategorySources.asStateFlow()
@@ -1084,6 +1101,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_FORCED_ON_CATS = "forced_on_categories"
         private const val KEY_ITALIAN_ONLY = "italian_only"
         private const val KEY_MERGE_CATEGORY_SOURCES = "merge_category_sources"
+        private const val KEY_HOME_COUNTRY = "home_country"
         private const val KEY_STRIP_CATEGORY_SOURCES = "strip_category_sources"
         private const val KEY_GROUP_BADGES = "group_badges"
         private const val KEY_GROUP_LOGOS_EXTERNAL = "group_logos_external"
@@ -1175,7 +1193,7 @@ class AppSettings private constructor(context: Context) {
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
                 KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_SCAN_SERVER_URL, KEY_LOGO_SOURCE,
                 KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE, KEY_PREFERRED_SOURCES, KEY_PICKED_VARIANTS,
-                KEY_VOD_AUDIO_LANG, KEY_VOD_SUBTITLE_LANG,
+                KEY_VOD_AUDIO_LANG, KEY_VOD_SUBTITLE_LANG, KEY_HOME_COUNTRY,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
             listOf(KEY_HIDDEN_CATS, KEY_DISABLED_CATS, KEY_FORCED_ON_CATS).forEach { put(it, SettingsBackup.Kind.SET) }
         }

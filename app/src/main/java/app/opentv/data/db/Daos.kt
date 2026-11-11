@@ -402,6 +402,9 @@ data class CategoryName(val id: String, val name: String)
 
 data class CategoryChannelKey(val categoryId: String, val groupKey: String)
 
+/** Projection for [EpgChannelAliasDao.freeGuideNames]. */
+data class GuideName(val epgId: String, val displayName: String)
+
 /** Projection for [ChannelDao.channelCountsByCategory]. */
 data class CategoryChannelCount(val sourceId: Long, val categoryId: String, val count: Int)
 
@@ -442,6 +445,13 @@ interface EpgFeedDao {
 interface EpgChannelAliasDao {
     @Query("SELECT * FROM epg_channels")
     suspend fun all(): List<EpgChannelAlias>
+
+    /** The channels of the enabled guides the user added or the app ships (not a source's own guide). */
+    @Query(
+        "SELECT a.epgId AS epgId, a.displayName AS displayName FROM epg_channels a " +
+            "JOIN epg_feeds f ON f.id = a.feedId WHERE f.enabled = 1 AND f.providerSourceId IS NULL"
+    )
+    suspend fun freeGuideNames(): List<GuideName>
 
     @Query("SELECT COUNT(*) FROM epg_channels")
     suspend fun count(): Int

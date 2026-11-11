@@ -26,7 +26,10 @@ import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StreamKind
 import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.CategoryLanguage
+import app.opentv.data.parser.ChannelCountry
+import app.opentv.data.parser.ChannelDictionary
 import app.opentv.data.parser.ChannelNameNormalizer
+import app.opentv.data.parser.ChannelTidy
 import app.opentv.data.parser.M3uParser
 import app.opentv.data.parser.MergeSuggester
 import app.opentv.data.parser.VodTitleCleaner
@@ -145,6 +148,8 @@ class CatalogRepository(
     private val stalkerApi: StalkerApi,
     private val http: OkHttpClient,
     private val settings: AppSettings,
+    /** The home country's channel dictionary; null (tests) = names and keys from the list alone. */
+    private val channelNames: ChannelNamesRepository? = null,
 ) {
 
     /** TMDB back-fill for VOD detail pages, gated on a user-supplied key. See [TmdbClient]. */
@@ -679,7 +684,7 @@ class CatalogRepository(
      * Change logo picker can borrow a sibling's (the red Sky Calcio for the green HEVC feed).
      */
     suspend fun similarLogos(groupKey: String): List<String> {
-        val stem = groupKey.substringBefore('+').trimEnd { it.isDigit() }
+        val stem = ChannelCountry.bare(groupKey).substringBefore('+').trimEnd { it.isDigit() }
         if (stem.length < 3) return emptyList()
         return channelDao.logosLike(stem, SIMILAR_LOGOS_LIMIT)
     }
@@ -939,7 +944,8 @@ class CatalogRepository(
             channelDao.deleteStale(sourceId, nowUtcMillis)
         } else {
             val categoryNames = categories.associate { it.id to it.name }
-            channelDao.replaceCatalogue(sourceId, normalized(kept, categoryNames), nowUtcMillis)
+            val home = settings.effectiveHomeCountry()
+            channelDao.replaceCatalogue(sourceId, normalized(kept, categoryNames, home, dictionary(home)), nowUtcMillis)
         }
         return kept.size
     }
@@ -1087,13 +1093,23 @@ class CatalogRepository(
      * variants of a channel into a single row and is the join key for EPG matching, and
      * [Channel.displayName] is the cleaned name the UI shows instead of `UK| BBC ONE FHD`.
      */
+    private suspend fun dictionary(home: String): ChannelDictionary =
+        channelNames?.let { runCatching { it.dictionary(home) }.getOrNull() } ?: ChannelDictionary.EMPTY
+
     private fun normalized(
         channels: List<Channel>,
         categoryNames: Map<String, String>,
+        home: String = "IT",
+        dictionary: ChannelDictionary = ChannelDictionary.EMPTY,
     ): List<Channel> {
         val sourceTags = CategoryFamily.learnSourceTags(categoryNames.values)
+        val items = ArrayList<ChannelTidy.Item>(channels.size)
         val stamped = channels.map { channel ->
-            val n = ChannelNameNormalizer.normalize(channel.name, sourceTags)
+            val categoryName = channel.categoryId?.let { categoryNames[it] }
+            // A tag in front that isn't a country (`Abc: Sky Uno`) is a source, like `[Abc]`.
+            val (clean, tag) = ChannelTidy.preClean(channel.name)
+            val n = ChannelNameNormalizer.normalize(clean, sourceTags)
+            val source = n.source ?: tag?.let(CategoryFamily::sourceLabel)
             var rank = n.qualityRank
             var label = n.qualityLabel
             if (label.isEmpty() || rank == 0) {
@@ -1101,7 +1117,6 @@ class CatalogRepository(
                 // 'UK| GENERAL HD/RAW' and 'UK| GENERAL hevc' holding identically named
                 // channels. Without this, the player's switch is four buttons all
                 // reading 'Standard' — grouped correctly, labelled uselessly.
-                val categoryName = channel.categoryId?.let { categoryNames[it] }
                 if (categoryName != null) {
                     val c = ChannelNameNormalizer.normalize(categoryName)
                     if (label.isEmpty()) label = c.qualityLabel
@@ -1109,9 +1124,16 @@ class CatalogRepository(
                 }
             }
             // A source written into the name ('… FHD SRC') reads like a category's: 'FHD · Src'.
-            if (n.source != null && !label.contains(n.source, ignoreCase = true)) {
-                label = listOf(label, n.source).filter { it.isNotEmpty() }.joinToString(" · ")
+            if (source != null && !label.contains(source, ignoreCase = true)) {
+                label = listOf(label, source).filter { it.isNotEmpty() }.joinToString(" · ")
             }
+            val separator = isSeparatorRow(channel.name)
+            items += ChannelTidy.Item(
+                key = n.groupKey,
+                baseName = n.baseName,
+                country = ChannelCountry.of(channel.name, categoryName, channel.epgChannelId, home),
+                separator = separator,
+            )
             channel.copy(
                 displayName = n.baseName,
                 groupKey = n.groupKey,
@@ -1119,18 +1141,17 @@ class CatalogRepository(
                 qualityLabel = label,
                 // Providers ship decorative separator rows ('#### UK GENERAL ####') as
                 // channels. They are headings, not channels — hide them on import.
-                hidden = channel.hidden || isSeparatorRow(channel.name),
+                hidden = channel.hidden || separator,
             )
         }
 
+        // One row per channel and country: aliases, the dictionary and typos (see [ChannelTidy]).
         // Separator rows are headings: '---- Basket Serie A2 ----' must not pass for a bare channel.
-        val aliases = ChannelNameNormalizer.keyAliases(
-            stamped.filterNot { isSeparatorRow(it.name) }.mapTo(HashSet()) { it.groupKey },
-        )
-        val folded = if (aliases.isEmpty()) stamped
-        else stamped.map { c -> aliases[c.groupKey]?.let { c.copy(groupKey = it) } ?: c }
+        val keys = ChannelTidy.keys(items, home, dictionary)
+        val folded = stamped.mapIndexed { i, c -> if (keys[i] == c.groupKey) c else c.copy(groupKey = keys[i]) }
         val (merged, moved) = withUserMerges(folded)
-        return withTidiestNames(merged, moved)
+        val names = ChannelTidy.displayNames(items, merged.map { it.groupKey }, moved, home, dictionary)
+        return merged.mapIndexed { i, c -> if (names[i] == c.displayName) c else c.copy(displayName = names[i]) }
     }
 
     /** The merges the user confirmed in Settings › Channel grouping, chains followed (a → b → c). */
@@ -1179,26 +1200,6 @@ class CatalogRepository(
     }
 
     /**
-     * One display name per channel: the variants of a group can be spelled `Sky Uno`, `SKY UNO`
-     * and `Sky UNO` by different lists, and whichever plays first used to name the row. Prefer
-     * the most common spelling that isn't all capitals. Channels a user merge [moved] in don't
-     * vote while the row has channels of its own: `Transformers Channel` merged into
-     * `Trasformers Channel` reads as the row the user picked.
-     */
-    private fun withTidiestNames(channels: List<Channel>, moved: BooleanArray): List<Channel> {
-        val names = channels.indices.groupBy { channels[it].groupKey }.mapValues { (_, idx) ->
-            val spellings = idx.filterNot { moved[it] }.ifEmpty { idx }.map { channels[it].displayName }
-            spellings.filter { n -> n.any { it.isLowerCase() } }.ifEmpty { spellings }
-                .groupingBy { it }.eachCount()
-                .maxByOrNull { it.value }!!.key
-        }
-        return channels.map { c ->
-            val name = names[c.groupKey] ?: return@map c
-            if (c.groupKey.isEmpty() || name == c.displayName) c else c.copy(displayName = name)
-        }
-    }
-
-    /**
      * Decorative list headings: starts AND ends with a run of banner characters (`#### UK ####`,
      * `--Sky Sport (Src)--`, `== DAZN AMICHEVOLI ==`), or is wrapped in a single ornament
      * (`◈ DAZN SRC ◈`).
@@ -1225,9 +1226,11 @@ class CatalogRepository(
 
         val bySource = existing.groupBy { it.sourceId }
         var changed = 0
+        val home = settings.effectiveHomeCountry()
+        val dictionary = dictionary(home)
         for ((_, channels) in bySource) {
             val names = channelCategoryNames(channels)
-            val renamed = normalized(channels, names)
+            val renamed = normalized(channels, names, home, dictionary)
             // Only write rows that actually changed, to keep the write small.
             val diff = renamed.filterIndexed { i, c ->
                 val old = channels[i]
@@ -1404,7 +1407,7 @@ class CatalogRepository(
          * already-imported channels. The app compares it against a stored value on launch
          * and runs [renormalizeAll] once when it moves.
          */
-        const val NORMALIZER_VERSION = 9
+        const val NORMALIZER_VERSION = 10
         private const val MAX_MERGE_HOPS = 8
     }
 }

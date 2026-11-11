@@ -82,6 +82,28 @@ object CategoryFamily {
         return Family(if (base.isEmpty()) "" else "$country|$base", source, working.trim())
     }
 
+    /**
+     * Shelves that are a part of another shelf's name: `Intrattenimento` and `Cultura` next to
+     * `Intrattenimento & Cultura` hold the same channels split another way, so they fold into it.
+     * Only names joined by `&` — `Sport` never folds into `Sky Sport`. Returns family key → the
+     * family key of the shelf it folds into; by name parts, so a renamed shelf keeps working.
+     */
+    fun umbrellas(names: Collection<String>, extraTags: Set<String> = emptySet()): Map<String, String> {
+        val out = HashMap<String, String>()
+        for (name in names) {
+            val family = of(name, extraTags)
+            if (family.key.isEmpty() || '&' !in family.name) continue
+            val country = family.key.substringBefore('|')
+            for (part in family.name.split('&')) {
+                val key = ChannelNameNormalizer.groupKeyOf(part)
+                if (key.isEmpty()) continue
+                val partKey = "$country|" + (ALIASES[key] ?: key)
+                if (partKey != family.key) out.putIfAbsent(partKey, family.key)
+            }
+        }
+        return out
+    }
+
     /** Tags that say how a feed looks or when it airs, not who restreams it — kept in a lone name. */
     private val KEEP_IN_NAME = setOf("4K", "RAW")
 
