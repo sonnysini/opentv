@@ -651,7 +651,15 @@ fun HomeScreen(
             }
         }
         val close = { recordTarget = null }
-        val hasPrimary = liveNow || !isPast || channel.tvArchive
+        // The archived copy of the channel (often only one of its feeds is), within its days.
+        var archive by remember(channel.id) { mutableStateOf(channel.takeIf { it.tvArchive }) }
+        LaunchedEffect(channel.id) {
+            archive = runCatching { graph.catalogRepository.archiveCopy(channel) }.getOrNull()
+        }
+        val archived = archive?.let { a ->
+            a.tvArchiveDays <= 0 || nowMillis - programme.startUtcMillis <= a.tvArchiveDays * 86_400_000L
+        } == true
+        val hasPrimary = liveNow || !isPast || archived
         // Up/down into the chips lands on the one chosen, not on whichever sits under the row's middle.
         val chosenChip = remember { FocusRequester() }
         val choices: List<Pair<Channel, String>> = when {
@@ -689,12 +697,13 @@ fun HomeScreen(
                         stringResource(R.string.panel_watch_from_start), downToChip.startFocus(first), icon = R.drawable.ic_act_from_start,
                     ) {
                         recordScope.launch {
-                            val source = graph.sourceRepository.byId(channel.sourceId)
+                            val copy = archive ?: channel
+                            val source = graph.sourceRepository.byId(copy.sourceId)
                             if (source == null) {
                                 Toast.makeText(context, context.getString(R.string.guide_catchup_link_failed), Toast.LENGTH_SHORT).show()
                             } else {
                                 val mins = (programme.durationMillis / 60000).toInt().coerceAtLeast(1)
-                                val url = graph.xtreamApi.catchupUrl(source, channel.streamId, programme.startUtcMillis, mins)
+                                val url = graph.xtreamApi.catchupUrl(source, copy.streamId, programme.startUtcMillis, mins)
                                 onPlayCatchup(
                                     "catchup:${channel.id}:${programme.startUtcMillis}",
                                     url,

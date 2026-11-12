@@ -44,6 +44,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -149,6 +150,9 @@ fun VodPlayerScreen(
     // little differently in the transport: the "length" is how much has been recorded so far, which
     // keeps growing, and seeking is bounded to that recorded extent.
     val growingRec = remember(streamUrl) { streamUrl.startsWith("optvrec://") }
+    // "Restart" from the live player: the programme on now, out of the archive. It starts at the
+    // top, isn't kept for Continue Watching, and goes back to live when it catches up.
+    val restart = remember(mediaKey) { RestartKey.parse(mediaKey) }
     // The SMB source lets a recording stored on a NAS play and seek in-app; harmless for the
     // http/file URLs of ordinary VOD.
     val controller = remember {
@@ -306,6 +310,7 @@ fun VodPlayerScreen(
     }
 
     suspend fun savePosition() {
+        if (restart != null) return
         currentPoint()?.let { graph.playbackPositions.upsert(it) }
     }
 
@@ -322,7 +327,7 @@ fun VodPlayerScreen(
             app.opentv.core.EventLog.keepAwake("VodPlayer", "off (closed)", context.findActivity())
             // Read the point before the player goes, and write it outside this screen's scope:
             // cancelled right below, it would drop the write (leaving only the 15 s saves).
-            currentPoint()?.let { last ->
+            currentPoint()?.takeIf { restart == null }?.let { last ->
                 CoroutineScope(Dispatchers.IO).launch { graph.playbackPositions.upsert(last) }
             }
             controller.release()
@@ -359,7 +364,8 @@ fun VodPlayerScreen(
     }
 
     LaunchedEffect(mediaKey) {
-        val resumeFrom = graph.playbackPositions.get(settings.activeProfileId.value, mediaKey)
+        val resumeFrom = if (restart != null) 0L
+        else graph.playbackPositions.get(settings.activeProfileId.value, mediaKey)
             ?.takeIf { !it.isFinished }?.positionMillis ?: 0L
         controller.play(
             PlayerController.Request(
@@ -385,6 +391,38 @@ fun VodPlayerScreen(
         if (wait > 0) delay(wait)
         SleepTimer.clear()
         onBack()
+    }
+
+    // A restarted programme: the archive only holds what has gone out so far, so reaching its end
+    // means asking again (it has grown since) — until the programme is over or we're about at live,
+    // where the live channel takes over.
+    if (restart != null) {
+        LaunchedEffect(Unit) {
+            while (isActive) {
+                delay(1_000)
+                val p = controller.player
+                if (p.playbackState != androidx.media3.common.Player.STATE_ENDED) continue
+                val at = restart.startUtcMillis + p.currentPosition.coerceAtLeast(0L)
+                val liveEdge = minOf(restart.endUtcMillis, System.currentTimeMillis() - RESTART_LIVE_MARGIN_MILLIS)
+                if (at >= liveEdge) {
+                    app.opentv.core.EventLog.log("vod", "restart caught up, back to live")
+                    onBack()
+                    return@LaunchedEffect
+                }
+                app.opentv.core.EventLog.log("vod", "restart archive end, reload at ${p.currentPosition / 1000}s")
+                controller.play(
+                    PlayerController.Request(
+                        url = streamUrl,
+                        title = title,
+                        userAgent = userAgent,
+                        startPositionMillis = p.currentPosition,
+                        isLive = false,
+                    ),
+                    debounce = false,
+                )
+                delay(5_000)
+            }
+        }
     }
 
     // Poll position/duration for the seek bar while the film plays.
@@ -683,6 +721,12 @@ fun VodPlayerScreen(
                     ) { togglePause() }
                     VodIconButton(Icons.Filled.Forward10, stringResource(R.string.player_forward), seekFocus, ::hideFromButtons) {
                         if (growingRec) seekRelative(15_000) else controller.seekForward(); interaction++
+                    }
+                    if (restart != null) {
+                        // Back to the channel, live.
+                        VodIconButton(Icons.Filled.LiveTv, stringResource(R.string.player_back_to_live), seekFocus, ::hideFromButtons) {
+                            onBack()
+                        }
                     }
                     Spacer(Modifier.width(16.dp))
                     VodIconButton(
@@ -1155,4 +1199,21 @@ private fun formatDuration(ms: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+/** How close to live a restarted programme has to get before the live channel takes over. */
+private const val RESTART_LIVE_MARGIN_MILLIS = 90_000L
+
+/** `restart:<channelId>:<startUtcMillis>:<endUtcMillis>`, the key the live player's "Restart" opens. */
+internal data class RestartKey(val channelId: Long, val startUtcMillis: Long, val endUtcMillis: Long) {
+    companion object {
+        fun parse(key: String): RestartKey? {
+            val parts = key.split(":")
+            if (parts.size != 4 || parts[0] != "restart") return null
+            val ch = parts[1].toLongOrNull() ?: return null
+            val start = parts[2].toLongOrNull() ?: return null
+            val end = parts[3].toLongOrNull() ?: return null
+            return if (end > start) RestartKey(ch, start, end) else null
+        }
+    }
 }

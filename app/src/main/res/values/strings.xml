@@ -158,6 +158,8 @@
 
     <!-- ============================ Player controls ============================ -->
     <string name="player_rewind">Rewind</string>
+    <string name="player_restart">Restart</string>
+    <string name="player_back_to_live">Live</string>
     <string name="player_pause">Pause</string>
     <string name="player_forward">Forward</string>
     <string name="player_subtitles">Subtitles</string>

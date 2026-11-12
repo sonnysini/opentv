@@ -644,6 +644,14 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     channelId = channelId,
                     channels = channelsViewModel,
                     onBack = { navController.popBackStack() },
+                    // The archive plays in the film player; leaving it lands back on live, on the
+                    // channel restarted (not the one the player was first opened on, if zapped since).
+                    onRestart = { backId, key, url, title, ua ->
+                        navController.navigate(Routes.player(backId)) {
+                            popUpTo(Routes.PLAYER) { inclusive = true }
+                        }
+                        navController.navigate(Routes.vodPlayer(key, url, title, ua))
+                    },
                 )
             }
 
