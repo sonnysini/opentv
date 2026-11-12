@@ -76,3 +76,16 @@ class VodShelvesTest {
         assertThat(VodShelves.mightBePerson("Gemme da scoprire")).isFalse()
     }
 }
+
+class PersonNameTest {
+    private fun same(a: String, b: String) = app.opentv.data.remote.TmdbLists.sameName(a, b)
+
+    @Test
+    fun `provider spellings match TMDB's`() {
+        assertThat(same("danny devito", "danny de vito")).isTrue()
+        assertThat(same("alessandro gassmann", "alessandro gassman")).isTrue()
+        assertThat(same("toto", "toto")).isTrue()
+        assertThat(same("johnny depp", "jhonny deep")).isFalse()
+        assertThat(same("tom hanks", "tom hardy")).isFalse()
+    }
+}

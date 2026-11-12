@@ -161,7 +161,7 @@ class TmdbLists(
         val answer = results.take(PERSON_RESULTS).any { el ->
             val o = el.jsonObject
             val dept = o["known_for_department"]?.jsonPrimitive?.contentOrNull
-            personName(o["name"]?.jsonPrimitive?.contentOrNull.orEmpty()) == wanted &&
+            sameName(personName(o["name"]?.jsonPrimitive?.contentOrNull.orEmpty()), wanted) &&
                 dept in PERSON_DEPARTMENTS
         }
         known[wanted] = answer
@@ -222,9 +222,32 @@ class TmdbLists(
         private const val IMG_BACKDROP = "https://image.tmdb.org/t/p/w1280"
         private const val IMG_LOGO = "https://image.tmdb.org/t/p/w500"
         const val TTL_MILLIS = 12L * 60 * 60 * 1000
-        private const val PEOPLE_FILE = "people.json"
+        // v2: names are matched loosely (see sameName); answers from the exact-match days are dropped.
+        private const val PEOPLE_FILE = "people-v2.json"
         private const val PERSON_RESULTS = 3
         private val PERSON_DEPARTMENTS = setOf("Acting", "Directing", "Writing")
+
+        /**
+         * Provider spellings drift: "Danny De Vito" is TMDB's "Danny DeVito", "Alessandro Gassman" its
+         * "Alessandro Gassmann". Spaces aside, a letter or two apart is the same name (one for short ones).
+         */
+        internal fun sameName(a: String, b: String): Boolean {
+            val x = a.replace(" ", "")
+            val y = b.replace(" ", "")
+            if (x == y) return true
+            val allowed = if (minOf(x.length, y.length) >= 10) 2 else 1
+            if (minOf(x.length, y.length) < 6 || kotlin.math.abs(x.length - y.length) > allowed) return false
+            var prev = IntArray(y.length + 1) { it }
+            for (i in 1..x.length) {
+                val cur = IntArray(y.length + 1)
+                cur[0] = i
+                for (j in 1..y.length) {
+                    cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (x[i - 1] == y[j - 1]) 0 else 1)
+                }
+                prev = cur
+            }
+            return prev[y.length] <= allowed
+        }
 
         /** The genre tabs on the Movies page: TMDB id → Italian label, in tab order. */
         val MOVIE_GENRES = linkedMapOf(
