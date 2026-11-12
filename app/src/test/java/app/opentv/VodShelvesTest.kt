@@ -58,12 +58,11 @@ class VodShelvesTest {
     }
 
     @Test
-    fun `adult never, foreign only when not Italian-only, empty never`() {
+    fun `never adult, foreign or empty`() {
         val cats = listOf(cat("🇮🇹 Azione"), cat("XXX | Hot"), cat("🇩🇪 DE Horror"), cat("🇮🇹 Vuota"))
         val counts = mapOf("1:${cats[0].id}" to 5, "1:${cats[1].id}" to 5, "1:${cats[2].id}" to 5)
         assertThat(plan(cats, counts = counts).map { it.name() }).containsExactly("Azione")
-        assertThat(plan(cats, italianOnly = false, counts = counts).map { it.name() })
-            .containsExactly("Azione", "DE Horror").inOrder()
+        assertThat(plan(cats, italianOnly = false, counts = counts).map { it.name() }).containsExactly("Azione")
     }
 
     @Test

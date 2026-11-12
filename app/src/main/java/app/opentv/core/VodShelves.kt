@@ -16,7 +16,7 @@ import app.opentv.data.parser.CategoryMacro
  * the family's first category was:
  *  - categories named "Prefix: name" sharing a prefix ("Saga: Rocky", "Saga: Alien" → Sagas);
  *  - categories named after a person (actors, directors), when TMDB says so ([people]).
- * Adult categories never get a shelf; foreign ones neither when the user keeps only Italian.
+ * Adult and foreign-language categories never get a shelf (they stay under All).
  */
 object VodShelves {
 
@@ -46,7 +46,7 @@ object VodShelves {
     ): List<Shelf> {
         val rows = categories
             .filter { CategoryMacro.of(it.name).macro != CategoryMacro.Macro.ADULT }
-            .filter { !(italianOnly && CategoryLanguage.isForeign(it.name)) }
+            .filter { !CategoryLanguage.isForeign(it.name) }
             .filter { counts.isEmpty() || (counts[countKey(it)] ?: 0) > 0 }
             .map { Row(it, label(it.name)) }
 
