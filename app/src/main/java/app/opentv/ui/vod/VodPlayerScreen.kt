@@ -1289,8 +1289,7 @@ internal data class RestartKey(val channelId: Long, val startUtcMillis: Long, va
             .apply { timeZone = zone }
             .format(java.util.Date(from))
         val minutes = ((endUtcMillis - from + 59_999L) / 60_000L).toInt().coerceAtLeast(1)
-        return TIMESHIFT.replaceFirst(url) { m ->
-            "/timeshift/${m.groupValues[1]}/${m.groupValues[2]}/$minutes/$stamp/"
-        }
+        val m = TIMESHIFT.find(url) ?: return url
+        return url.replaceRange(m.range, "/timeshift/${m.groupValues[1]}/${m.groupValues[2]}/$minutes/$stamp/")
     }
 }
