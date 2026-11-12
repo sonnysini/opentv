@@ -1356,10 +1356,16 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
                     .map { VodShelves.label(it.name) }
                     .filter { VodShelves.mightBePerson(it) }
                     .distinct()
-                if (names.isNotEmpty()) {
-                    val people = runCatching { graph.vodHomeRepository.people(names) }.getOrDefault(emptySet())
-                    if (people != _people.value) _people.value = people
+                // Asked in small batches, so the people's shelf shows up (and grows) while TMDB is
+                // still being asked about the rest on a first run; later runs read the disk.
+                val found = HashSet<String>()
+                names.chunked(PEOPLE_BATCH).forEach { batch ->
+                    runCatching { graph.vodHomeRepository.people(batch) }
+                        .onFailure { android.util.Log.w("VodShelves", "people lookup failed", it) }
+                        .getOrNull()?.let { found += it }
+                    if (found != _people.value) _people.value = found.toSet()
                 }
+                android.util.Log.i("VodShelves", "people: ${found.size} of ${names.size} names")
             }
         }
     }
@@ -1905,6 +1911,9 @@ private const val HOME_REFRESH_STEP = 20_000
 
 /** Titles a provider shelf shows before its "See all" card. */
 private const val SHELF_ITEMS = 20
+
+/** Names asked of TMDB between two updates of the people's shelf. */
+private const val PEOPLE_BATCH = 15
 
 /**
  * Backs the Categories screen: every provider category of one type, each switchable off so it is

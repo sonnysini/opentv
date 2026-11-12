@@ -156,7 +156,7 @@ class TmdbLists(
             http.newCall(Request.Builder().url(url).header("User-Agent", "OpenTV").build()).execute().use { r ->
                 if (r.isSuccessful) r.body?.string() else null
             }
-        }.getOrNull() ?: return null
+        }.onFailure { Log.w(TAG, "TMDB person lookup failed", it) }.getOrNull() ?: return null
         val results = runCatching { json.parseToJsonElement(body).jsonObject["results"]?.jsonArray }.getOrNull() ?: return null
         val answer = results.take(PERSON_RESULTS).any { el ->
             val o = el.jsonObject
