@@ -32,7 +32,7 @@ class PerfIndexesTest {
 
     private fun open(): OpenTvDatabase =
         Room.databaseBuilder(context, OpenTvDatabase::class.java, name)
-            .addMigrations(OpenTvDatabase.MIGRATION_14_15)
+            .addMigrations(OpenTvDatabase.MIGRATION_14_15, OpenTvDatabase.MIGRATION_15_16)
             .allowMainThreadQueries()
             .build()
 
