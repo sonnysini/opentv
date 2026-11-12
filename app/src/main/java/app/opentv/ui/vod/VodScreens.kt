@@ -159,6 +159,8 @@ fun MoviesScreen(
                 .firstOrNull { it.key == key }
         }
     }
+    val park = rememberFocusPark()
+    FocusParkSpot(park)
     if (opened != null) {
         LaunchedEffect(opened.key) { viewModel.selectMovieCategory(opened.category.id) }
         ShelfPage(
@@ -166,7 +168,7 @@ fun MoviesScreen(
             sectionLabel = stringResource(R.string.nav_movies),
             count = shelfCounts[VodShelves.countKey(opened.category)],
             countRes = R.string.vod_shelf_count_movies,
-            onBack = { returnFocus = opened.key; openShelfKey = null; openShelfFamily = null },
+            onBack = { park.park(); returnFocus = opened.key; openShelfKey = null; openShelfFamily = null },
         ) { MovieCategoryGrid(categoryMovies, viewModel, onOpenMovie) }
         return
     }
@@ -368,6 +370,8 @@ fun SeriesScreen(
                 .firstOrNull { it.key == key }
         }
     }
+    val park = rememberFocusPark()
+    FocusParkSpot(park)
     if (opened != null) {
         LaunchedEffect(opened.key) { viewModel.selectSeriesCategory(opened.category.id) }
         ShelfPage(
@@ -375,7 +379,7 @@ fun SeriesScreen(
             sectionLabel = stringResource(R.string.nav_shows),
             count = shelfCounts[VodShelves.countKey(opened.category)],
             countRes = R.string.vod_shelf_count_shows,
-            onBack = { returnFocus = opened.key; openShelfKey = null; openShelfFamily = null },
+            onBack = { park.park(); returnFocus = opened.key; openShelfKey = null; openShelfFamily = null },
         ) { SeriesCategoryGrid(categorySeries, onOpenSeries) }
         return
     }

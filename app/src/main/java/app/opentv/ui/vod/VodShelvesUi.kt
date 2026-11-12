@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,11 +37,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -325,6 +330,41 @@ private fun ShelfHeader(title: String, note: String?) {
         note?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
+    }
+}
+
+/**
+ * Somewhere for the focus to wait while a [ShelfPage] closes. The page's focused card goes away
+ * with it, and focus with nowhere to go lands on the first thing on screen — the menu, which then
+ * opens. Parked here instead, inside the page, it waits for the card that asked for it back; if
+ * that card never shows (scrolled away), it steps down onto the nearest one.
+ */
+internal class FocusPark {
+    val requester = FocusRequester()
+    var held by mutableStateOf(false)
+    // Only while parking: the D-pad never lands here otherwise.
+    var armed = false
+    fun park() { armed = true; runCatching { requester.requestFocus() } }
+}
+
+@Composable
+internal fun rememberFocusPark(): FocusPark = remember { FocusPark() }
+
+@Composable
+internal fun FocusParkSpot(park: FocusPark) {
+    val focusManager = LocalFocusManager.current
+    Box(
+        Modifier
+            .size(1.dp)
+            .focusRequester(park.requester)
+            .focusProperties { canFocus = park.armed }
+            .onFocusChanged { park.held = it.isFocused; if (!it.isFocused) park.armed = false }
+            .focusable(),
+    )
+    LaunchedEffect(park.held) {
+        if (!park.held) return@LaunchedEffect
+        kotlinx.coroutines.delay(1_600)
+        if (park.held) focusManager.moveFocus(FocusDirection.Down)
     }
 }
 
