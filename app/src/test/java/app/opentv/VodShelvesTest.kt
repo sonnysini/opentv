@@ -86,5 +86,6 @@ class PersonNameTest {
         assertThat(same("toto", "toto")).isTrue()
         assertThat(same("johnny depp", "jhonny deep")).isFalse()
         assertThat(same("tom hanks", "tom hardy")).isFalse()
+        assertThat(same("fantasy a", "fantasy")).isFalse()
     }
 }

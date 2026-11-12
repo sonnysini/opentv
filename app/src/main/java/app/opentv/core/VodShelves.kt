@@ -45,8 +45,7 @@ object VodShelves {
         peopleLabel: String,
     ): List<Shelf> {
         val rows = categories
-            .filter { CategoryMacro.of(it.name).macro != CategoryMacro.Macro.ADULT }
-            .filter { !CategoryLanguage.isForeign(it.name) }
+            .filter { couldHaveShelf(it) }
             .filter { counts.isEmpty() || (counts[countKey(it)] ?: 0) > 0 }
             .map { Row(it, label(it.name)) }
 
@@ -78,6 +77,10 @@ object VodShelves {
         }
         return out
     }
+
+    /** Neither adult nor in a foreign language: the categories the home may show. */
+    fun couldHaveShelf(category: Category): Boolean =
+        CategoryMacro.of(category.name).macro != CategoryMacro.Macro.ADULT && !CategoryLanguage.isForeign(category.name)
 
     /** "🇮🇹 Il meglio del 2026" → "Il meglio del 2026": flags and symbols in front dropped. */
     fun label(name: String): String = name.trim().trimStart { !it.isLetterOrDigit() }.trim().ifEmpty { name.trim() }

@@ -222,8 +222,8 @@ class TmdbLists(
         private const val IMG_BACKDROP = "https://image.tmdb.org/t/p/w1280"
         private const val IMG_LOGO = "https://image.tmdb.org/t/p/w500"
         const val TTL_MILLIS = 12L * 60 * 60 * 1000
-        // v2: names are matched loosely (see sameName); answers from the exact-match days are dropped.
-        private const val PEOPLE_FILE = "people-v2.json"
+        // v3: names are matched loosely (see sameName); answers from earlier rules are dropped.
+        private const val PEOPLE_FILE = "people-v3.json"
         private const val PERSON_RESULTS = 3
         private val PERSON_DEPARTMENTS = setOf("Acting", "Directing", "Writing")
 
@@ -235,6 +235,8 @@ class TmdbLists(
             val x = a.replace(" ", "")
             val y = b.replace(" ", "")
             if (x == y) return true
+            // One word ("Fantasy", "Toto") must match exactly: "Fantasy A" is an actor, not the genre.
+            if (!a.contains(' ') || !b.contains(' ')) return false
             val allowed = if (minOf(x.length, y.length) >= 10) 2 else 1
             if (minOf(x.length, y.length) < 6 || kotlin.math.abs(x.length - y.length) > allowed) return false
             var prev = IntArray(y.length + 1) { it }

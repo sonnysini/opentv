@@ -1353,6 +1353,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val names = runCatching { graph.catalogRepository.observeCategories(StreamKind.MOVIE).first() }
                     .getOrDefault(emptyList())
+                    .filter { VodShelves.couldHaveShelf(it) }
                     .map { VodShelves.label(it.name) }
                     .filter { VodShelves.mightBePerson(it) }
                     .distinct()
