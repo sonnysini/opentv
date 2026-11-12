@@ -634,12 +634,13 @@ private val BAR_PAGE_START = MENU_MARGIN + BAR_CLOSED
 private val LOGO_BLOCK = 46.dp
 private val LOGO_SIZE = 27.dp
 private val WORDMARK_SIZE = 17.sp
-private val ITEM_PITCH = 44.dp
-private val PILL_HEIGHT = 36.dp
+// The pill as tall as a group in the Live list (44dp), with the same 4dp between.
+private val ITEM_PITCH = 48.dp
+private val PILL_HEIGHT = 44.dp
 private val PILL_INSET = 4.dp
 private val PILL_RADIUS = 10.dp
 private val ICON_SIZE = 23.dp
-private val LABEL_SIZE = 15.sp
+private val LABEL_SIZE = 17.sp
 private val SEP_GAP = 13.dp
 private val PAGE_IN_SHIFT = 30.dp
 private const val OPEN_MILLIS = 400

@@ -382,37 +382,46 @@ private fun GroupsList(
     val selectedIndex = entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     // Once the remembered group shows up, move focus onto it (once — later picks follow focus).
     var landed by remember { mutableStateOf(false) }
-    FocusedList(
-        count = entries.size,
-        startIndex = selectedIndex,
-        active = takesFocus,
-        activeIndex = selectedIndex,
-        jumpTo = selectedIndex.takeIf { takesFocus && hasSelection && !landed },
-        jumpVersion = hasSelection,
-        onJumped = { if (hasSelection) landed = true },
-        enterAtActive = true,
-    ) { index, requester ->
-        val entry = entries[index]
-        Column {
-            entry.section?.let { GroupsHeader(it, true) }
-            CategoryEntry(
-                label = entry.label,
-                kicker = entry.kicker,
-                selected = entry.selected,
-                count = entry.count,
-                open = open,
-                modifier = if (index == 0) requester.focusProperties { up = above } else requester,
-                onFocused = { if (firstFocused == null) firstFocused = entry.key },
-                // Resting on a group opens it — once the user is moving, not where focus first
-                // landed before the remembered group turned up.
-                follows = open && (hasSelection || entry.key != firstFocused),
-                onPick = { entry.pick() },
-                onLeft = onLeft,
-                onEnter = {
-                    if (!entry.selected) entry.pick()
-                    onEnter()
-                },
-            )
+    // The group the focus is on: while it rests on another one, the open group drops its
+    // highlight at once instead of keeping it until the channels beside it have switched.
+    var focusedIndex by remember { mutableStateOf<Int?>(null) }
+    Box(Modifier.onFocusChanged { if (!it.hasFocus) focusedIndex = null }) {
+        FocusedList(
+            count = entries.size,
+            startIndex = selectedIndex,
+            active = takesFocus,
+            activeIndex = selectedIndex,
+            jumpTo = selectedIndex.takeIf { takesFocus && hasSelection && !landed },
+            jumpVersion = hasSelection,
+            onJumped = { if (hasSelection) landed = true },
+            enterAtActive = true,
+        ) { index, requester ->
+            val entry = entries[index]
+            Column {
+                entry.section?.let { GroupsHeader(it, true) }
+                CategoryEntry(
+                    label = entry.label,
+                    kicker = entry.kicker,
+                    selected = entry.selected,
+                    elsewhere = focusedIndex != null && focusedIndex != index,
+                    count = entry.count,
+                    open = open,
+                    modifier = if (index == 0) requester.focusProperties { up = above } else requester,
+                    onFocused = {
+                        focusedIndex = index
+                        if (firstFocused == null) firstFocused = entry.key
+                    },
+                    // Resting on a group opens it — once the user is moving, not where focus first
+                    // landed before the remembered group turned up.
+                    follows = open && (hasSelection || entry.key != firstFocused),
+                    onPick = { entry.pick() },
+                    onLeft = onLeft,
+                    onEnter = {
+                        if (!entry.selected) entry.pick()
+                        onEnter()
+                    },
+                )
+            }
         }
     }
 }
@@ -614,6 +623,8 @@ private fun CategoryEntry(
     label: String,
     kicker: String?,
     selected: Boolean,
+    // The focus is on another group: the open one is drawn like the rest.
+    elsewhere: Boolean,
     count: Int?,
     // Closed: drawn the same, but can't take focus.
     open: Boolean,
@@ -628,6 +639,7 @@ private fun CategoryEntry(
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(10.dp)
     val pick by rememberUpdatedState(onPick)
+    val shown = selected && !elsewhere
     LaunchedEffect(focused, selected, follows) {
         if (!focused || selected || !follows) return@LaunchedEffect
         delay(GROUP_FOLLOW_DELAY_MILLIS)
@@ -644,7 +656,7 @@ private fun CategoryEntry(
             }
             .fillMaxWidth()
             .clip(shape)
-            .background(if (focused || selected) GroupOpenVeil else GroupGround)
+            .background(if (focused || shown) GroupOpenVeil else GroupGround)
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
@@ -656,12 +668,12 @@ private fun CategoryEntry(
     ) {
         // The broadcaster, then the name, on one line and in one colour: "SKY INTRATTENIMENTO".
         // The accent on the focused and the open group, white otherwise.
-        val ink = if (focused || selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        val ink = if (focused || shown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
         Text(
             if (kicker != null) "${kicker.uppercase()} ${label.uppercase()}" else label.uppercase(),
             color = ink,
             fontFamily = Oswald,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (shown) FontWeight.Bold else FontWeight.Normal,
             fontSize = 18.sp,
             letterSpacing = 1.5.sp,
             maxLines = 1,

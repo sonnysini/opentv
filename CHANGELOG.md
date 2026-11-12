@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.59.1 — 12 November 2026
+
+- **The group highlight follows you.** Moving through the Live groups, the open group drops its
+  highlight as soon as the focus leaves it, instead of staying lit next to the new one until the
+  channels beside them had switched.
+- **Menu entries as tall as the groups.** The menu's highlight is 44dp high like a Live group
+  (was 36dp), with the same 4dp between entries, and its names are a touch bigger (17sp).
+
 ## 0.59.0 — 11 November 2026
 
 - **Channel names that read like channels.** Every row now has one tidy name: `EUROSPORT 1` reads
