@@ -133,6 +133,63 @@ class TmdbLists(
         )
     }
 
+    /**
+     * Whether TMDB knows [name] as an actor, director or writer — how the Movies home tells a
+     * provider category named after a person ("Alberto Sordi", "Toto") from any other. An exact
+     * name match (accents and case aside) among the first results is required. Answers are kept
+     * on disk for good: a name doesn't stop being a person. null = can't tell (no key, offline).
+     */
+    @Synchronized
+    fun isPerson(name: String): Boolean? {
+        val key = settings.tmdbApiKey.value.trim()
+        val wanted = personName(name)
+        if (wanted.isEmpty()) return false
+        val known = people()
+        known[wanted]?.let { return it }
+        if (key.isEmpty()) return null
+        val url = BASE.newBuilder().addPathSegments("search/person")
+            .addQueryParameter("api_key", key)
+            .addQueryParameter("query", name)
+            .addQueryParameter("include_adult", "false")
+            .build()
+        val body = runCatching {
+            http.newCall(Request.Builder().url(url).header("User-Agent", "OpenTV").build()).execute().use { r ->
+                if (r.isSuccessful) r.body?.string() else null
+            }
+        }.onFailure { Log.w(TAG, "TMDB person lookup failed", it) }.getOrNull() ?: return null
+        val results = runCatching { json.parseToJsonElement(body).jsonObject["results"]?.jsonArray }.getOrNull() ?: return null
+        val answer = results.take(PERSON_RESULTS).any { el ->
+            val o = el.jsonObject
+            val dept = o["known_for_department"]?.jsonPrimitive?.contentOrNull
+            sameName(personName(o["name"]?.jsonPrimitive?.contentOrNull.orEmpty()), wanted) &&
+                dept in PERSON_DEPARTMENTS
+        }
+        known[wanted] = answer
+        runCatching {
+            cacheDir.mkdirs()
+            File(cacheDir, PEOPLE_FILE).writeText(
+                kotlinx.serialization.json.JsonObject(known.mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) }).toString(),
+            )
+        }
+        return answer
+    }
+
+    private var peopleCache: MutableMap<String, Boolean>? = null
+
+    private fun people(): MutableMap<String, Boolean> = peopleCache ?: run {
+        val file = File(cacheDir, PEOPLE_FILE)
+        val read = if (file.exists()) read(file)?.mapValues { it.value.jsonPrimitive.contentOrNull == "true" } else null
+        (read?.toMutableMap() ?: mutableMapOf()).also { peopleCache = it }
+    }
+
+    /** "Totò" and "Toto", "De Sica" and "de sica": the same person. */
+    private fun personName(raw: String): String =
+        java.text.Normalizer.normalize(raw, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+
     /** The answer for [url] from disk while it's fresh, else from TMDB (falling back to a stale copy). */
     private fun cached(url: HttpUrl): JsonObject? {
         // The key is in the URL; the file name must not carry it.
@@ -165,6 +222,34 @@ class TmdbLists(
         private const val IMG_BACKDROP = "https://image.tmdb.org/t/p/w1280"
         private const val IMG_LOGO = "https://image.tmdb.org/t/p/w500"
         const val TTL_MILLIS = 12L * 60 * 60 * 1000
+        // v3: names are matched loosely (see sameName); answers from earlier rules are dropped.
+        private const val PEOPLE_FILE = "people-v3.json"
+        private const val PERSON_RESULTS = 3
+        private val PERSON_DEPARTMENTS = setOf("Acting", "Directing", "Writing")
+
+        /**
+         * Provider spellings drift: "Danny De Vito" is TMDB's "Danny DeVito", "Alessandro Gassman" its
+         * "Alessandro Gassmann". Spaces aside, a letter or two apart is the same name (one for short ones).
+         */
+        internal fun sameName(a: String, b: String): Boolean {
+            val x = a.replace(" ", "")
+            val y = b.replace(" ", "")
+            if (x == y) return true
+            // One word ("Fantasy", "Toto") must match exactly: "Fantasy A" is an actor, not the genre.
+            if (!a.contains(' ') || !b.contains(' ')) return false
+            val allowed = if (minOf(x.length, y.length) >= 10) 2 else 1
+            if (minOf(x.length, y.length) < 6 || kotlin.math.abs(x.length - y.length) > allowed) return false
+            var prev = IntArray(y.length + 1) { it }
+            for (i in 1..x.length) {
+                val cur = IntArray(y.length + 1)
+                cur[0] = i
+                for (j in 1..y.length) {
+                    cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (x[i - 1] == y[j - 1]) 0 else 1)
+                }
+                prev = cur
+            }
+            return prev[y.length] <= allowed
+        }
 
         /** The genre tabs on the Movies page: TMDB id → Italian label, in tab order. */
         val MOVIE_GENRES = linkedMapOf(

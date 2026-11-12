@@ -88,6 +88,14 @@ class VodHomeRepository(
     fun isConfigured(): Boolean = lists.isConfigured()
 
     /**
+     * Which of [labels] TMDB knows as a person (see [TmdbLists.isPerson]), as
+     * [app.opentv.core.VodShelves.personKey]s. Asked once per name ever; later calls read the disk.
+     */
+    suspend fun people(labels: List<String>): Set<String> = withContext(Dispatchers.IO) {
+        labels.filter { lists.isPerson(it) == true }.mapTo(HashSet()) { app.opentv.core.VodShelves.personKey(it) }
+    }
+
+    /**
      * The Movies home, or null with no TMDB key. [catalogueSize] keys the memory cache: a sync that
      * changes the library rebuilds it.
      */

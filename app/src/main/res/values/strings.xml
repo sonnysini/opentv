@@ -563,6 +563,11 @@
     <string name="vod_large_provider_note">A large provider can take a couple of minutes the first time.</string>
     <string name="vod_recommended">Recommended for you</string>
     <string name="vod_recently_added">Recently added</string>
+    <string name="vod_shelf_people">Actors and directors</string>
+    <string name="vod_shelf_see_all">See all</string>
+    <string name="vod_shelf_count_movies">%1$d films</string>
+    <string name="vod_shelf_count_shows">%1$d shows</string>
+    <string name="vod_shelf_groups">%1$d collections</string>
     <string name="vod_hero_rank">No. %1$d this week</string>
     <string name="vod_hero_watch">Watch</string>
     <string name="vod_hero_details">Details</string>

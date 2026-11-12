@@ -31,6 +31,7 @@ import app.opentv.data.model.SeriesRule
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StreamKind
+import app.opentv.data.model.VodLink
 
 class Converters {
     @TypeConverter fun sourceKindToString(value: SourceKind): String = value.name
@@ -70,8 +71,9 @@ class Converters {
         Recording::class,
         SeriesRule::class,
         Reminder::class,
+        VodLink::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -90,6 +92,7 @@ abstract class OpenTvDatabase : RoomDatabase() {
     abstract fun recordings(): RecordingDao
     abstract fun seriesRules(): SeriesRuleDao
     abstract fun reminders(): ReminderDao
+    abstract fun vodLinks(): VodLinkDao
 
     companion object {
         /**
@@ -326,6 +329,25 @@ abstract class OpenTvDatabase : RoomDatabase() {
         }
 
         /**
+         * v15 → v16: vod_links, every category a film or show is listed in (see [VodLink]). Purely
+         * additive; it fills on the next catalogue sync, and until then shelves fall back to
+         * [Movie.categoryId].
+         */
+        @androidx.annotation.VisibleForTesting
+        internal val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `vod_links` (`kind` TEXT NOT NULL, `sourceId` INTEGER NOT NULL, " +
+                        "`categoryId` TEXT NOT NULL, `itemId` TEXT NOT NULL, `position` INTEGER NOT NULL, " +
+                        "`lastSeenMillis` INTEGER NOT NULL, PRIMARY KEY(`kind`, `sourceId`, `categoryId`, `itemId`))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_vod_links_kind_sourceId_itemId` ON `vod_links` (`kind`, `sourceId`, `itemId`)",
+                )
+            }
+        }
+
+        /**
          * Per-connection tuning, applied when Room opens the database. In WAL mode `NORMAL` skips
          * the flush to storage on every commit (it still flushes at each checkpoint): the database
          * can't be corrupted by a power cut, at worst the last instants of writes are lost. On a
@@ -346,7 +368,7 @@ abstract class OpenTvDatabase : RoomDatabase() {
                 .addMigrations(
                     MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                     MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-                    MIGRATION_12_14, MIGRATION_13_14, MIGRATION_14_15,
+                    MIGRATION_12_14, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
                 )
                 .addCallback(TUNING)
                 /*

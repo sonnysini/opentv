@@ -510,6 +510,11 @@
     <string name="vod_large_provider_note">Con un fornitore di grandi dimensioni la prima volta può richiedere qualche minuto.</string>
     <string name="vod_recommended">Consigliati per te</string>
     <string name="vod_recently_added">Aggiunti di recente</string>
+    <string name="vod_shelf_people">Attori e registi</string>
+    <string name="vod_shelf_see_all">Vedi tutti</string>
+    <string name="vod_shelf_count_movies">%1$d film</string>
+    <string name="vod_shelf_count_shows">%1$d serie</string>
+    <string name="vod_shelf_groups">%1$d gruppi</string>
     <string name="vod_hero_rank">N.%1$d della settimana</string>
     <string name="vod_hero_watch">Guarda</string>
     <string name="vod_hero_details">Scheda</string>

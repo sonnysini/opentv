@@ -140,9 +140,12 @@ class XtreamApi(
         source: Source,
         batchSize: Int = STREAM_BATCH,
         maxBytesPerSecond: Long = 0,
-        onBatch: suspend (List<Movie>) -> Unit,
+        onBatch: suspend (List<Listed<Movie>>) -> Unit,
     ): Int = withContext(Dispatchers.IO) {
-        streamArray(source, "get_vod_streams", batchSize, maxBytesPerSecond, onBatch) { obj -> parseMovie(source, obj) }
+        var position = 0
+        streamArray(source, "get_vod_streams", batchSize, maxBytesPerSecond, onBatch) { obj ->
+            parseMovie(source, obj)?.let { Listed(it, listedCategoryIds(obj, it.categoryId), position++) }
+        }
     }
 
     /** Every series on the panel, in batches. Same streaming contract as [movies]. */
@@ -150,9 +153,24 @@ class XtreamApi(
         source: Source,
         batchSize: Int = STREAM_BATCH,
         maxBytesPerSecond: Long = 0,
-        onBatch: suspend (List<Series>) -> Unit,
+        onBatch: suspend (List<Listed<Series>>) -> Unit,
     ): Int = withContext(Dispatchers.IO) {
-        streamArray(source, "get_series", batchSize, maxBytesPerSecond, onBatch) { obj -> parseSeries(source, obj) }
+        var position = 0
+        streamArray(source, "get_series", batchSize, maxBytesPerSecond, onBatch) { obj ->
+            parseSeries(source, obj)?.let { Listed(it, listedCategoryIds(obj, it.categoryId), position++) }
+        }
+    }
+
+    /**
+     * Every category a listed title sits in: `category_id` plus the `category_ids` array some panels
+     * add. Panels that put a title in several categories also repeat the whole entry once per
+     * category, so each repeat brings its own `category_id` in any case.
+     */
+    private fun listedCategoryIds(obj: JsonObject, categoryId: String?): List<String> {
+        val extra = (obj["category_ids"] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { it.asStringOrNull }
+            .orEmpty()
+        return (listOfNotNull(categoryId) + extra).filter { it.isNotBlank() }.distinct()
     }
 
     private fun parseMovie(source: Source, obj: JsonObject): Movie? {
@@ -545,3 +563,6 @@ private val JsonElement?.asLongOrNull: Long?
 
 private val JsonElement?.asDoubleOrNull: Double?
     get() = asStringOrNull?.toDoubleOrNull()
+
+/** A film or show as the panel lists it: every category it is in, and its place in the list. */
+data class Listed<T>(val item: T, val categoryIds: List<String>, val position: Int)

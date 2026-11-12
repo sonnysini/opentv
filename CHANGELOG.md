@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.61.0 — 12 November 2026
+
+- **A shelf for every provider category.** Movies and Shows now end their *Featured* page with a
+  row of posters for each of the provider's categories, in the provider's own order (20 posters
+  and a *See all* card that opens the whole category as a page). A title the provider lists under
+  several categories now shows up in all of them, not just the last one read.
+- **Sagas and people as tiles.** Categories that come as a family (`Saga: Agente 007`, …) are
+  gathered into one row of wide tiles, and so are the ones named after an actor or director
+  (checked with TMDB): a tile opens the category as a page, and Back returns to the tile without
+  opening the menu. Foreign-language categories stay under *All*.
+
 ## 0.60.0 — 12 November 2026
 
 - **Restart.** On a channel the provider keeps an archive of (catch-up), the live player's bar

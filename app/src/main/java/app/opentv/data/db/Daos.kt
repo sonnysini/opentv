@@ -30,6 +30,8 @@ import app.opentv.data.model.Series
 import app.opentv.data.model.SeriesRule
 import app.opentv.data.model.Source
 import app.opentv.data.model.StreamKind
+import app.opentv.data.model.VodLink
+import app.opentv.data.model.CategoryCount
 import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
@@ -563,6 +565,13 @@ interface ProgrammeDao {
 
 @Dao
 interface MovieDao {
+    /** One category's titles without [VodLink]s (before the first sync that writes them). */
+    @Query("SELECT * FROM movies WHERE sourceId = :sourceId AND categoryId = :categoryId ORDER BY addedMillis DESC, name LIMIT :limit")
+    suspend fun inCategory(sourceId: Long, categoryId: String, limit: Int): List<Movie>
+
+    @Query("SELECT sourceId, categoryId, COUNT(*) AS n FROM movies WHERE categoryId IS NOT NULL GROUP BY sourceId, categoryId")
+    suspend fun categoryCounts(): List<CategoryCount>
+
     /**
      * One category's films for the browse grid, newest first, capped at [limit]. Never the whole
      * table: a big provider ships 300k titles, and a Flow over all of them — re-emitted on every
@@ -737,6 +746,13 @@ data class GenreCount(val genre: String, val count: Int)
 
 @Dao
 interface SeriesDao {
+    /** One category's titles without [VodLink]s (before the first sync that writes them). */
+    @Query("SELECT * FROM series WHERE sourceId = :sourceId AND categoryId = :categoryId ORDER BY addedMillis DESC, name LIMIT :limit")
+    suspend fun inCategory(sourceId: Long, categoryId: String, limit: Int): List<Series>
+
+    @Query("SELECT sourceId, categoryId, COUNT(*) AS n FROM series WHERE categoryId IS NOT NULL GROUP BY sourceId, categoryId")
+    suspend fun categoryCounts(): List<CategoryCount>
+
     /** One category's shows for the browse grid, capped. See [MovieDao.observeInCategory]. */
     @Query(
         """
@@ -1091,3 +1107,74 @@ data class ChannelMatchInput(
     val matchedEpgId: String?,
     val guideLogoUrl: String?,
 )
+
+/**
+ * Every category each film/show is listed in (see [VodLink]): the shelves on the Movies and Shows
+ * home read a category's titles through here, in the provider's order.
+ */
+@Dao
+interface VodLinkDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(links: List<VodLink>)
+
+    /** Run only after a COMPLETE sync of [sourceId]'s [kind]: drops the links it no longer lists. */
+    @Query("DELETE FROM vod_links WHERE kind = :kind AND sourceId = :sourceId AND lastSeenMillis < :syncStamp")
+    suspend fun deleteStale(kind: String, sourceId: Long, syncStamp: Long)
+
+    @Query("DELETE FROM vod_links WHERE sourceId = :sourceId")
+    suspend fun deleteForSource(sourceId: Long)
+
+    /** A switched-off category's links (callers chunk [categoryIds]). */
+    @Query("DELETE FROM vod_links WHERE kind = :kind AND sourceId = :sourceId AND categoryId IN (:categoryIds)")
+    suspend fun deleteInCategories(kind: String, sourceId: Long, categoryIds: List<String>)
+
+    @Query(
+        """
+        SELECT m.* FROM vod_links l
+        JOIN movies m ON m.sourceId = l.sourceId AND m.streamId = l.itemId
+        WHERE l.kind = 'movie' AND l.sourceId = :sourceId AND l.categoryId = :categoryId
+        ORDER BY l.position
+        LIMIT :limit
+        """
+    )
+    suspend fun movies(sourceId: Long, categoryId: String, limit: Int): List<Movie>
+
+    @Query(
+        """
+        SELECT m.* FROM vod_links l
+        JOIN movies m ON m.sourceId = l.sourceId AND m.streamId = l.itemId
+        WHERE l.kind = 'movie' AND l.categoryId = :categoryId
+        ORDER BY l.position
+        LIMIT :limit
+        """
+    )
+    fun observeMovies(categoryId: String, limit: Int): Flow<List<Movie>>
+
+    @Query(
+        """
+        SELECT s.* FROM vod_links l
+        JOIN series s ON s.sourceId = l.sourceId AND s.seriesId = l.itemId
+        WHERE l.kind = 'series' AND l.sourceId = :sourceId AND l.categoryId = :categoryId
+        ORDER BY l.position
+        LIMIT :limit
+        """
+    )
+    suspend fun series(sourceId: Long, categoryId: String, limit: Int): List<Series>
+
+    @Query(
+        """
+        SELECT s.* FROM vod_links l
+        JOIN series s ON s.sourceId = l.sourceId AND s.seriesId = l.itemId
+        WHERE l.kind = 'series' AND l.categoryId = :categoryId
+        ORDER BY l.position
+        LIMIT :limit
+        """
+    )
+    fun observeSeries(categoryId: String, limit: Int): Flow<List<Series>>
+
+    @Query("SELECT sourceId, categoryId, COUNT(*) AS n FROM vod_links WHERE kind = :kind GROUP BY sourceId, categoryId")
+    suspend fun counts(kind: String): List<CategoryCount>
+
+    @Query("SELECT COUNT(*) FROM vod_links WHERE kind = :kind")
+    suspend fun count(kind: String): Int
+}

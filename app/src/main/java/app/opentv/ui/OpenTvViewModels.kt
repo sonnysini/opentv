@@ -38,6 +38,7 @@ import app.opentv.data.repo.MovieVariantGroup
 import app.opentv.data.repo.PersonTitle
 import app.opentv.data.repo.distinctByQuality
 import app.opentv.R
+import app.opentv.core.VodShelves
 import app.opentv.pairing.ManagerServer
 import app.opentv.sync.NasSync
 import app.opentv.sync.SyncBundle
@@ -62,6 +63,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
 import app.opentv.ui.channels.LiveSnapshot
 import app.opentv.ui.channels.LiveSnapshotStore
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
@@ -1274,6 +1276,101 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         seriesCategory.value = null
     }
 
+    // ---- Provider shelves -----------------------------------------------------------------------
+    // Below the charts, one row per provider category in the provider's order, families of small
+    // categories (sagas, actors) folded into a row of wide tiles. See [VodShelves].
+
+    private val _movieShelfCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val _seriesShelfCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val _people = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Bumped whenever the shelves' titles may have changed (a sync landed): rows re-read then. */
+    private val _shelfVersion = MutableStateFlow(0)
+    val shelfVersion: StateFlow<Int> = _shelfVersion.asStateFlow()
+
+    private val peopleLabel = app.getString(R.string.vod_shelf_people)
+
+    val movieShelves: StateFlow<List<VodShelves.Shelf>> =
+        combine(
+            graph.catalogRepository.observeCategories(StreamKind.MOVIE),
+            _movieShelfCounts,
+            _people,
+            settings.italianOnly,
+        ) { categories, counts, people, italianOnly ->
+            VodShelves.plan(categories, counts, people, italianOnly, peopleLabel)
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val seriesShelves: StateFlow<List<VodShelves.Shelf>> =
+        combine(
+            graph.catalogRepository.observeCategories(StreamKind.SERIES),
+            _seriesShelfCounts,
+            _people,
+            settings.italianOnly,
+        ) { categories, counts, people, italianOnly ->
+            VodShelves.plan(categories, counts, people, italianOnly, peopleLabel)
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Titles per "sourceId:categoryId", for the "See all N" card. */
+    val movieShelfCounts: StateFlow<Map<String, Int>> = _movieShelfCounts.asStateFlow()
+    val seriesShelfCounts: StateFlow<Map<String, Int>> = _seriesShelfCounts.asStateFlow()
+
+    private val shelfMovieCache = java.util.concurrent.ConcurrentHashMap<String, List<Movie>>()
+    private val shelfSeriesCache = java.util.concurrent.ConcurrentHashMap<String, List<Series>>()
+    private val shelvesMutex = Mutex()
+
+    /** A shelf's first titles, kept in memory until the catalogue changes. */
+    suspend fun shelfMovies(category: Category): List<Movie> {
+        val key = VodShelves.countKey(category)
+        shelfMovieCache[key]?.let { return it }
+        return runCatching { graph.catalogRepository.shelfMovies(category, SHELF_ITEMS) }.getOrDefault(emptyList())
+            .also { shelfMovieCache[key] = it }
+    }
+
+    suspend fun shelfSeries(category: Category): List<Series> {
+        val key = VodShelves.countKey(category)
+        shelfSeriesCache[key]?.let { return it }
+        return runCatching { graph.catalogRepository.shelfSeries(category, SHELF_ITEMS) }.getOrDefault(emptyList())
+            .also { shelfSeriesCache[key] = it }
+    }
+
+    /**
+     * Re-reads the shelves' counts (cheap GROUP BY) and, the first time, asks TMDB which categories
+     * are named after people. Called on opening Movies/Shows and when a sync ends.
+     */
+    fun loadShelves() {
+        viewModelScope.launch {
+            shelvesMutex.withLock {
+                val movies = runCatching { graph.catalogRepository.shelfCounts(StreamKind.MOVIE) }.getOrDefault(emptyMap())
+                val series = runCatching { graph.catalogRepository.shelfCounts(StreamKind.SERIES) }.getOrDefault(emptyMap())
+                if (movies != _movieShelfCounts.value || series != _seriesShelfCounts.value) {
+                    shelfMovieCache.clear()
+                    shelfSeriesCache.clear()
+                    _movieShelfCounts.value = movies
+                    _seriesShelfCounts.value = series
+                    _shelfVersion.value++
+                }
+                val names = runCatching { graph.catalogRepository.observeCategories(StreamKind.MOVIE).first() }
+                    .getOrDefault(emptyList())
+                    .filter { VodShelves.couldHaveShelf(it) }
+                    .map { VodShelves.label(it.name) }
+                    .filter { VodShelves.mightBePerson(it) }
+                    .distinct()
+                // Asked in small batches, so the people's shelf shows up (and grows) while TMDB is
+                // still being asked about the rest on a first run; later runs read the disk.
+                val found = HashSet<String>()
+                names.chunked(PEOPLE_BATCH).forEach { batch ->
+                    runCatching { graph.vodHomeRepository.people(batch) }
+                        .onFailure { android.util.Log.w("VodShelves", "people lookup failed", it) }
+                        .getOrNull()?.let { found += it }
+                    if (found != _people.value) _people.value = found.toSet()
+                }
+                android.util.Log.i("VodShelves", "people: ${found.size} of ${names.size} names")
+            }
+        }
+    }
+
     // ---- Netflix-style home rows ----------------------------------------------------------------
     // "Recently added" is reactive: it fills in live as a VOD sync lands. The computed feeds
     // (recommended, by-genre) are held in the StateFlows below and (re)built by [loadHomeFeeds] from
@@ -1394,6 +1491,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
      * is free and a post-sync refresh still fills the rows in.
      */
     fun loadHomeFeeds() {
+        loadShelves()
         viewModelScope.launch {
             homeFeedsMutex.withLock {
                 val profileId = settings.activeProfileId.value
@@ -1811,6 +1909,12 @@ class WebManagerViewModel(app: Application) : AndroidViewModel(app) {
 
 /** Titles between home-row rebuilds while a VOD sync is still landing. */
 private const val HOME_REFRESH_STEP = 20_000
+
+/** Titles a provider shelf shows before its "See all" card. */
+private const val SHELF_ITEMS = 20
+
+/** Names asked of TMDB between two updates of the people's shelf. */
+private const val PEOPLE_BATCH = 15
 
 /**
  * Backs the Categories screen: every provider category of one type, each switchable off so it is

@@ -96,6 +96,7 @@ object ServiceLocator {
                 seriesDao = database.series(),
                 episodeDao = database.episodes(),
                 positionDao = database.positions(),
+                vodLinkDao = database.vodLinks(),
                 api = xtreamApi,
                 stalkerApi = stalkerApi,
                 http = httpClient,
