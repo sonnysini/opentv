@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
+import app.opentv.core.VodShelves
 import app.opentv.data.model.Movie
 import app.opentv.data.model.Series
 import app.opentv.data.model.Source
@@ -141,6 +142,35 @@ fun MoviesScreen(
         }
     }
 
+    // The provider's shelves (see VodShelvesUi): which category page is open, kept across a trip
+    // to a title's page and back; and which card takes the focus back when the page closes.
+    val shelves by viewModel.movieShelves.collectAsStateWithLifecycle()
+    val shelfCounts by viewModel.movieShelfCounts.collectAsStateWithLifecycle()
+    val shelfVersion by viewModel.shelfVersion.collectAsStateWithLifecycle()
+    var openShelfKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var openShelfFamily by rememberSaveable { mutableStateOf<String?>(null) }
+    var returnFocus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(returnFocus) { if (returnFocus != null) { kotlinx.coroutines.delay(1_500); returnFocus = null } }
+    val listState = rememberLazyListState()
+    val openShelf: (OpenShelf) -> Unit = { openShelfKey = it.row.key; openShelfFamily = it.family }
+    val opened = remember(openShelfKey, shelves) {
+        openShelfKey?.let { key ->
+            shelves.flatMap { sh -> if (sh is VodShelves.Collection) sh.members else listOf(sh as VodShelves.Row) }
+                .firstOrNull { it.key == key }
+        }
+    }
+    if (opened != null) {
+        LaunchedEffect(opened.key) { viewModel.selectMovieCategory(opened.category.id) }
+        ShelfPage(
+            open = OpenShelf(opened, openShelfFamily, opened.key),
+            sectionLabel = stringResource(R.string.nav_movies),
+            count = shelfCounts[VodShelves.countKey(opened.category)],
+            countRes = R.string.vod_shelf_count_movies,
+            onBack = { returnFocus = opened.key; openShelfKey = null; openShelfFamily = null },
+        ) { MovieCategoryGrid(categoryMovies, viewModel, onOpenMovie) }
+        return
+    }
+
     if (tab == allTab) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.height(12.dp))
@@ -179,7 +209,6 @@ fun MoviesScreen(
 
     // The hero lands after the first rows when the charts come in late: bring the page back to
     // the top then, unless someone has already scrolled down.
-    val listState = rememberLazyListState()
     val hasHero = slides.isNotEmpty()
     LaunchedEffect(hasHero) {
         if (hasHero && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
@@ -217,6 +246,16 @@ fun MoviesScreen(
                 }
                 items(genreRows, key = { "g:${it.genre}" }) { group ->
                     MoviePosterRow(group.genre, group.items, onOpenMovie)
+                }
+            }
+            items(shelves, key = { "s:" + it.key }) { shelf ->
+                when (shelf) {
+                    is VodShelves.Row -> MovieShelfRow(shelf, shelfCounts[VodShelves.countKey(shelf.category)], shelfVersion, viewModel, returnFocus, onOpenMovie, openShelf)
+                    is VodShelves.Collection -> CollectionShelfRow(
+                        shelf, shelfCounts, R.string.vod_shelf_count_movies, shelfVersion, returnFocus,
+                        posters = { r -> viewModel.shelfMovies(r.category).map { it.posterUrl } },
+                        onOpen = openShelf,
+                    )
                 }
             }
         } else {
@@ -312,6 +351,35 @@ fun SeriesScreen(
         }
     }
 
+    // The provider's shelves (see VodShelvesUi): which category page is open, kept across a trip
+    // to a title's page and back; and which card takes the focus back when the page closes.
+    val shelves by viewModel.seriesShelves.collectAsStateWithLifecycle()
+    val shelfCounts by viewModel.seriesShelfCounts.collectAsStateWithLifecycle()
+    val shelfVersion by viewModel.shelfVersion.collectAsStateWithLifecycle()
+    var openShelfKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var openShelfFamily by rememberSaveable { mutableStateOf<String?>(null) }
+    var returnFocus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(returnFocus) { if (returnFocus != null) { kotlinx.coroutines.delay(1_500); returnFocus = null } }
+    val listState = rememberLazyListState()
+    val openShelf: (OpenShelf) -> Unit = { openShelfKey = it.row.key; openShelfFamily = it.family }
+    val opened = remember(openShelfKey, shelves) {
+        openShelfKey?.let { key ->
+            shelves.flatMap { sh -> if (sh is VodShelves.Collection) sh.members else listOf(sh as VodShelves.Row) }
+                .firstOrNull { it.key == key }
+        }
+    }
+    if (opened != null) {
+        LaunchedEffect(opened.key) { viewModel.selectSeriesCategory(opened.category.id) }
+        ShelfPage(
+            open = OpenShelf(opened, openShelfFamily, opened.key),
+            sectionLabel = stringResource(R.string.nav_shows),
+            count = shelfCounts[VodShelves.countKey(opened.category)],
+            countRes = R.string.vod_shelf_count_shows,
+            onBack = { returnFocus = opened.key; openShelfKey = null; openShelfFamily = null },
+        ) { SeriesCategoryGrid(categorySeries, onOpenSeries) }
+        return
+    }
+
     if (tab == allTab) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.height(12.dp))
@@ -348,7 +416,6 @@ fun SeriesScreen(
     }
 
     // As on Movies: the charts may land after the first rows; go back to the hero if nobody scrolled.
-    val listState = rememberLazyListState()
     val hasHero = slides.isNotEmpty()
     LaunchedEffect(hasHero) {
         if (hasHero && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
@@ -385,6 +452,16 @@ fun SeriesScreen(
             if (home == null) {
                 items(genreRows, key = { "g:${it.genre}" }) { group ->
                     SeriesPosterRow(group.genre, group.items, onOpenSeries)
+                }
+            }
+            items(shelves, key = { "s:" + it.key }) { shelf ->
+                when (shelf) {
+                    is VodShelves.Row -> SeriesShelfRow(shelf, shelfCounts[VodShelves.countKey(shelf.category)], shelfVersion, viewModel, returnFocus, onOpenSeries, openShelf)
+                    is VodShelves.Collection -> CollectionShelfRow(
+                        shelf, shelfCounts, R.string.vod_shelf_count_shows, shelfVersion, returnFocus,
+                        posters = { r -> viewModel.shelfSeries(r.category).map { it.posterUrl } },
+                        onOpen = openShelf,
+                    )
                 }
             }
         } else {

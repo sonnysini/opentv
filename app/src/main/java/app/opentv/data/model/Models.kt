@@ -381,6 +381,36 @@ data class Movie(
     val lastSeenMillis: Long = 0,
 )
 
+/**
+ * One title's place in one of the provider's categories. Xtream lists a film once per category it
+ * sits in ("Odissea" is in Adventure, Film of the week and Best of 2026), but [Movie] keeps a single
+ * [Movie.categoryId]: this table keeps every one, with the title's place in the provider's list, so a
+ * category's shelf shows all its titles in the provider's own order. [kind] is MOVIE or SERIES;
+ * [itemId] is the stream id (films) or the series id (shows).
+ */
+@Entity(
+    tableName = "vod_links",
+    primaryKeys = ["kind", "sourceId", "categoryId", "itemId"],
+    indices = [Index(value = ["kind", "sourceId", "itemId"])],
+)
+data class VodLink(
+    val kind: String,
+    val sourceId: Long,
+    val categoryId: String,
+    val itemId: String,
+    /** Where the provider's list put it: shelves sort by this. */
+    val position: Int,
+    val lastSeenMillis: Long,
+) {
+    companion object {
+        const val MOVIE = "movie"
+        const val SERIES = "series"
+    }
+}
+
+/** How many titles a category has, for the "See all N" card. */
+data class CategoryCount(val sourceId: Long, val categoryId: String, val n: Int)
+
 @Entity(
     tableName = "series",
     indices = [

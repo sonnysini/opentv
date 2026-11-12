@@ -14,6 +14,7 @@ import app.opentv.data.db.MovieDao
 import app.opentv.data.db.PlaybackPositionDao
 import app.opentv.data.db.SeriesDao
 import app.opentv.data.db.SourceDao
+import app.opentv.data.db.VodLinkDao
 import app.opentv.data.model.Category
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Episode
@@ -24,6 +25,7 @@ import app.opentv.data.model.Series
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
 import app.opentv.data.model.StreamKind
+import app.opentv.data.model.VodLink
 import app.opentv.data.parser.CategoryFamily
 import app.opentv.data.parser.CategoryLanguage
 import app.opentv.data.parser.ChannelCountry
@@ -36,6 +38,7 @@ import app.opentv.data.parser.VodTitleCleaner
 import app.opentv.data.remote.StalkerApi
 import app.opentv.data.remote.TmdbClient
 import app.opentv.data.remote.XtreamApi
+import app.opentv.data.remote.Listed
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +48,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
@@ -144,6 +148,8 @@ class CatalogRepository(
     private val seriesDao: SeriesDao,
     private val episodeDao: EpisodeDao,
     private val positionDao: PlaybackPositionDao,
+    /** Every category of each film/show; null (tests) = one category per title, as before. */
+    private val vodLinkDao: VodLinkDao? = null,
     private val api: XtreamApi,
     private val stalkerApi: StalkerApi,
     private val http: OkHttpClient,
@@ -258,8 +264,14 @@ class CatalogRepository(
                 ids.chunked(SQL_CHUNK).forEach { chunk ->
                     when (kind) {
                         StreamKind.LIVE -> channelDao.deleteInCategories(sourceId, chunk)
-                        StreamKind.MOVIE -> movieDao.deleteInCategories(sourceId, chunk)
-                        StreamKind.SERIES -> seriesDao.deleteInCategories(sourceId, chunk)
+                        StreamKind.MOVIE -> {
+                            movieDao.deleteInCategories(sourceId, chunk)
+                            vodLinkDao?.deleteInCategories(VodLink.MOVIE, sourceId, chunk)
+                        }
+                        StreamKind.SERIES -> {
+                            seriesDao.deleteInCategories(sourceId, chunk)
+                            vodLinkDao?.deleteInCategories(VodLink.SERIES, sourceId, chunk)
+                        }
                     }
                 }
             }
@@ -279,12 +291,18 @@ class CatalogRepository(
      */
     fun observeMovies(categoryId: String?): Flow<List<Movie>> =
         if (categoryId == null) flowOf(emptyList())
-        else movieDao.observeInCategory(categoryId, BROWSE_LIMIT).distinctUntilChanged()
+        else linkedOr(vodLinkDao?.observeMovies(categoryId, BROWSE_LIMIT), movieDao.observeInCategory(categoryId, BROWSE_LIMIT))
+
+    /** [linked] while it has rows (every title in the category, provider's order), else [own]. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun <T> linkedOr(linked: Flow<List<T>>?, own: Flow<List<T>>): Flow<List<T>> =
+        if (linked == null) own.distinctUntilChanged()
+        else linked.flatMapLatest { rows -> if (rows.isNotEmpty()) flowOf(rows) else own }.distinctUntilChanged()
 
     /** One category's shows for the browse grid. See [observeMovies]. */
     fun observeSeries(categoryId: String?): Flow<List<Series>> =
         if (categoryId == null) flowOf(emptyList())
-        else seriesDao.observeInCategory(categoryId, BROWSE_LIMIT).distinctUntilChanged()
+        else linkedOr(vodLinkDao?.observeSeries(categoryId, BROWSE_LIMIT), seriesDao.observeInCategory(categoryId, BROWSE_LIMIT))
 
     fun observeEpisodes(sourceId: Long, seriesId: String): Flow<List<Episode>> =
         episodeDao.observeForSeries(sourceId, seriesId)
@@ -1000,13 +1018,19 @@ class CatalogRepository(
             val categories = runCatching { api.movieCategories(source) }.getOrNull().orEmpty()
             if (categories.isNotEmpty()) categoryDao.upsertAll(categories)
             try {
-                val count = api.movies(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
+                val count = api.movies(source, maxBytesPerSecond = maxBytesPerSecond) { listed ->
                     val off = switchedOffIds(categories)
-                    val kept = if (off.isEmpty()) batch else batch.filter { it.categoryId !in off }
-                    movieDao.mergeBatch(source.id, kept, nowUtcMillis)
-                    _vodProgress.update { it?.copy(movies = it.movies + kept.size) }
+                    val kept = listed.filter { it.item.categoryId !in off }
+                    // A title repeated once per category arrives several times: store it once.
+                    val titles = kept.map { it.item }.distinctBy { it.streamId }
+                    movieDao.mergeBatch(source.id, titles, nowUtcMillis)
+                    saveLinks(VodLink.MOVIE, source.id, kept, off, nowUtcMillis) { it.streamId }
+                    _vodProgress.update { it?.copy(movies = it.movies + titles.size) }
                 }
-                if (count > 0) movieDao.deleteStale(source.id, nowUtcMillis)
+                if (count > 0) {
+                    movieDao.deleteStale(source.id, nowUtcMillis)
+                    vodLinkDao?.deleteStale(VodLink.MOVIE, source.id, nowUtcMillis)
+                }
                 Log.i(TAG, "VOD: $count movies for source ${source.id}")
             } catch (e: CancellationException) {
                 throw e
@@ -1019,13 +1043,18 @@ class CatalogRepository(
             val categories = runCatching { api.seriesCategories(source) }.getOrNull().orEmpty()
             if (categories.isNotEmpty()) categoryDao.upsertAll(categories)
             try {
-                val count = api.series(source, maxBytesPerSecond = maxBytesPerSecond) { batch ->
+                val count = api.series(source, maxBytesPerSecond = maxBytesPerSecond) { listed ->
                     val off = switchedOffIds(categories)
-                    val kept = if (off.isEmpty()) batch else batch.filter { it.categoryId !in off }
-                    seriesDao.mergeBatch(source.id, kept, nowUtcMillis)
-                    _vodProgress.update { it?.copy(series = it.series + kept.size) }
+                    val kept = listed.filter { it.item.categoryId !in off }
+                    val titles = kept.map { it.item }.distinctBy { it.seriesId }
+                    seriesDao.mergeBatch(source.id, titles, nowUtcMillis)
+                    saveLinks(VodLink.SERIES, source.id, kept, off, nowUtcMillis) { it.seriesId }
+                    _vodProgress.update { it?.copy(series = it.series + titles.size) }
                 }
-                if (count > 0) seriesDao.deleteStale(source.id, nowUtcMillis)
+                if (count > 0) {
+                    seriesDao.deleteStale(source.id, nowUtcMillis)
+                    vodLinkDao?.deleteStale(VodLink.SERIES, source.id, nowUtcMillis)
+                }
                 Log.i(TAG, "VOD: $count series for source ${source.id}")
             } catch (e: CancellationException) {
                 throw e
@@ -1357,6 +1386,48 @@ class CatalogRepository(
         movieDao.deleteForSource(sourceId)
         seriesDao.deleteForSource(sourceId)
         episodeDao.deleteForSource(sourceId)
+        vodLinkDao?.deleteForSource(sourceId)
+    }
+
+    /** One sync batch's category links (see [VodLink]), minus switched-off categories. */
+    private suspend fun <T> saveLinks(
+        kind: String,
+        sourceId: Long,
+        listed: List<Listed<T>>,
+        off: Set<String>,
+        stamp: Long,
+        itemId: (T) -> String,
+    ) {
+        val dao = vodLinkDao ?: return
+        val links = listed.flatMap { l ->
+            l.categoryIds.filter { it !in off }.map { VodLink(kind, sourceId, it, itemId(l.item), l.position, stamp) }
+        }.distinctBy { it.categoryId to it.itemId }
+        links.chunked(UPSERT_LINKS).forEach { dao.upsertAll(it) }
+    }
+
+    /**
+     * A category's titles for its shelf, in the provider's order, up to [limit]. Read through
+     * [VodLink] (every category a title is in); before the first sync that wrote links, by the
+     * title's own category.
+     */
+    suspend fun shelfMovies(category: Category, limit: Int): List<Movie> = withContext(Dispatchers.IO) {
+        vodLinkDao?.movies(category.sourceId, category.id, limit)?.takeIf { it.isNotEmpty() }
+            ?: movieDao.inCategory(category.sourceId, category.id, limit)
+    }
+
+    suspend fun shelfSeries(category: Category, limit: Int): List<Series> = withContext(Dispatchers.IO) {
+        vodLinkDao?.series(category.sourceId, category.id, limit)?.takeIf { it.isNotEmpty() }
+            ?: seriesDao.inCategory(category.sourceId, category.id, limit)
+    }
+
+    /** Titles per category ("sourceId:categoryId" → n), for the shelves' "See all N" card. */
+    suspend fun shelfCounts(kind: StreamKind): Map<String, Int> = withContext(Dispatchers.IO) {
+        val linkKind = if (kind == StreamKind.SERIES) VodLink.SERIES else VodLink.MOVIE
+        val links = vodLinkDao?.counts(linkKind).orEmpty()
+        val counts = links.ifEmpty {
+            if (kind == StreamKind.SERIES) seriesDao.categoryCounts() else movieDao.categoryCounts()
+        }
+        counts.associate { "${it.sourceId}:${it.categoryId}" to it.n }
     }
 
     companion object {
@@ -1400,6 +1471,7 @@ class CatalogRepository(
 
         /** Most titles a category grid holds at once. Bigger categories show their newest. */
         const val BROWSE_LIMIT = 3000
+        private const val UPSERT_LINKS = 400
 
         /** How many of the profile's / title's genres seed Recommended and More-Like-This. */
         private const val RECOMMEND_GENRES = 5
