@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.60.0 — 12 November 2026
+
+- **Restart.** On a channel the provider keeps an archive of (catch-up), the live player's bar
+  has a *Restart* button once the programme has been on a minute: it plays it from the top in
+  the film player, where you can pause and move through it a minute at a time (held: 5, then 10
+  minutes; the archive is asked again from that minute). When the archive runs out it asks again
+  (it has grown meanwhile), and once you're about at live — or the programme is over — the
+  channel comes back on live. A *Live* button takes you there at any time.
+- **Catch-up finds the archived feed.** Providers often archive one copy of a channel only
+  (`Rai 1 HD`, not the FHD one): restart and the guide's "Watch from the start" now look for it
+  among all the channel's feeds, and past programmes beyond the archive's days no longer offer it.
+
 ## 0.59.1 — 12 November 2026
 
 - **The group highlight follows you.** Moving through the Live groups, the open group drops its

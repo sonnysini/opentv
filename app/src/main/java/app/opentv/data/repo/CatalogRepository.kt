@@ -1285,6 +1285,19 @@ class CatalogRepository(
     }
 
     /**
+     * The copy of [channel] the provider keeps an archive of (catch-up), or null. Providers often
+     * archive one feed only (`Rai 1 HD`, not the FHD copy nor the other sources), so the whole group
+     * is looked at, not just the copy on screen; the best quality wins.
+     */
+    suspend fun archiveCopy(channel: Channel): Channel? {
+        if (channel.tvArchive) return channel
+        if (channel.groupKey.isEmpty()) return null
+        return channelDao.variantsInGroup(channel.groupKey)
+            .filter { it.tvArchive && it.sourceId == channel.sourceId }
+            .maxByOrNull { it.qualityRank }
+    }
+
+    /**
      * The record menu's "record from which provider" options: one channel per source that carries
      * this logical channel, each that source's best-quality copy, the current source first. With two
      * providers this lets a recording run on one account while the user keeps watching on the other —

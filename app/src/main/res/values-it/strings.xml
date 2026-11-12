@@ -144,6 +144,8 @@
     <string name="rec_background_prompt_allow">Consenti</string>
     <string name="rec_background_prompt_not_now">Non ora</string>
     <string name="player_rewind">Riavvolgi</string>
+    <string name="player_restart">Ricomincia</string>
+    <string name="player_back_to_live">Diretta</string>
     <string name="player_pause">Pausa</string>
     <string name="player_forward">Avanza</string>
     <string name="player_subtitles">Sottotitoli</string>

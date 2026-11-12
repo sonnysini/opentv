@@ -73,6 +73,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
@@ -181,6 +182,8 @@ fun PlayerScreen(
     // The guide's view model: the side menu browses its groups and channels.
     channels: ChannelsViewModel,
     onBack: () -> Unit,
+    /** "Restart": plays the programme on now from its start, out of the provider's archive. */
+    onRestart: (channelId: Long, mediaKey: String, url: String, title: String, ua: String) -> Unit = { _, _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -242,6 +245,13 @@ fun PlayerScreen(
     var listedId by remember { mutableStateOf<Long?>(null) }
     var listedChannel by remember { mutableStateOf<Channel?>(null) }
     LaunchedEffect(listedId) { if (listedId != null && listedId != channelId) poster = null }
+    // The copy of the channel the provider archives, if any: it makes "Restart" possible.
+    var archive by remember { mutableStateOf<Channel?>(null) }
+    LaunchedEffect(listedChannel?.id) {
+        archive = null
+        val ch = listedChannel ?: return@LaunchedEffect
+        archive = runCatching { graph.catalogRepository.archiveCopy(ch) }.getOrNull()
+    }
     // Quality fallback: the variants in try order (preferred first), the ones already tried for this
     // channel, and whether the current attempt has shown a picture yet. [attempt] restarts the timer.
     var tryOrder by remember { mutableStateOf<List<Channel>>(emptyList()) }
@@ -1249,6 +1259,31 @@ fun PlayerScreen(
                                     controller.seekForward(); watchEpoch++; interaction++
                                 }
                             }
+                            // Restart: the programme on now from its first minute, off the archive.
+                            val restartable = archive
+                            if (restartable != null && now != null && !matchFeeds &&
+                                System.currentTimeMillis() - now.startUtcMillis >= RESTART_MIN_ELAPSED_MILLIS
+                            ) {
+                                BarChip(Icons.Filled.Replay, stringResource(R.string.player_restart), false) {
+                                    scope.launch {
+                                        val source = graph.sourceRepository.byId(restartable.sourceId) ?: return@launch
+                                        val mins = ((now.endUtcMillis - now.startUtcMillis) / 60_000L).toInt().coerceAtLeast(1)
+                                        val url = graph.xtreamApi.catchupUrl(source, restartable.streamId, now.startUtcMillis, mins)
+                                        app.opentv.core.EventLog.log("player", "restart ${restartable.id} ${now.title}")
+                                        // One stream per account: let ours go before the archive opens.
+                                        paused = true
+                                        controller.stop()
+                                        val back = listedChannel?.id ?: restartable.id
+                                        onRestart(
+                                            back,
+                                            "restart:$back:${now.startUtcMillis}:${now.endUtcMillis}",
+                                            url,
+                                            "${(listedChannel ?: restartable).shownName} — ${now.title}",
+                                            source.userAgent,
+                                        )
+                                    }
+                                }
+                            }
 
                             // Most-used first: quality, then audio and subtitles; aspect is rarely touched.
                             Spacer(Modifier.width(16.dp))
@@ -2198,6 +2233,8 @@ private val SIDE_MENU_WIDTH = 360.dp
 private const val GROUP_LOAD_TIMEOUT_MILLIS = 5_000L
 private const val NUMBER_ENTRY_TIMEOUT_MILLIS = 2_000L
 private const val FALLBACK_NOTICE_MILLIS = 3_000L
+// "Restart" shows once a programme has been on a minute: before that, live is the start.
+private const val RESTART_MIN_ELAPSED_MILLIS = 60_000L
 private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
 // The logo on the channel name's line: about as tall as the name and its tags.
