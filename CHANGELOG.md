@@ -4,7 +4,8 @@
 
 - **Restart.** On a channel the provider keeps an archive of (catch-up), the live player's bar
   has a *Restart* button once the programme has been on a minute: it plays it from the top in
-  the film player, where you can pause, skip and seek. When the archive runs out it asks again
+  the film player, where you can pause and move through it a minute at a time (held: 5, then 10
+  minutes; the archive is asked again from that minute). When the archive runs out it asks again
   (it has grown meanwhile), and once you're about at live — or the programme is over — the
   channel comes back on live. A *Live* button takes you there at any time.
 - **Catch-up finds the archived feed.** Providers often archive one copy of a channel only

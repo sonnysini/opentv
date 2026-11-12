@@ -45,6 +45,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -265,6 +267,40 @@ fun VodPlayerScreen(
         reveal()
     }
 
+    // A restarted programme keeps its own clock. The archive restarts its timestamps between
+    // segments, so the player's own position and length are nonsense (a 20-minute archive reads as
+    // 24 hours): the place is where the current link starts in the programme plus the time played
+    // since, and moving is asking the archive again from another minute.
+    var restartBaseMs by remember { mutableLongStateOf(0L) }
+    var restartPlayedMs by remember { mutableLongStateOf(0L) }
+    fun restartPosition() = restartBaseMs + restartPlayedMs
+
+    /** Plays the restarted programme from [targetMs] (to the minute), or goes live if that's past what's out. */
+    fun restartJump(targetMs: Long) {
+        val r = restart ?: return
+        val liveEdge = minOf(r.endUtcMillis, System.currentTimeMillis() - RESTART_LIVE_MARGIN_MILLIS) - r.startUtcMillis
+        if (targetMs >= liveEdge) {
+            app.opentv.core.EventLog.log("vod", "restart at live, back to the channel")
+            onBack()
+            return
+        }
+        val minute = (targetMs.coerceAtLeast(0L) / 60_000L).toInt()
+        restartBaseMs = minute * 60_000L
+        restartPlayedMs = 0L
+        positionMs = restartBaseMs
+        app.opentv.core.EventLog.log("vod", "restart from minute $minute")
+        controller.play(
+            PlayerController.Request(
+                url = r.urlFrom(streamUrl, minute),
+                title = title,
+                userAgent = userAgent,
+                startPositionMillis = 0L,
+                isLive = false,
+            ),
+            debounce = false,
+        )
+    }
+
     /**
      * One left/right press (or one auto-repeat of a held button). The step grows the longer the
      * button is held — 10 s taps, then 30 s, a minute, two — so crossing a whole film takes seconds.
@@ -272,6 +308,24 @@ fun VodPlayerScreen(
     fun nudgeSeek(forward: Boolean, repeatCount: Int) {
         if (growingRec) {
             seekRelative(if (forward) 15_000 else -15_000); reveal(); return
+        }
+        if (restart != null) {
+            // Whole minutes: the archive is asked from a minute, so finer steps would just bounce back.
+            val step = when {
+                repeatCount < 6 -> 60_000L
+                repeatCount < 16 -> 5 * 60_000L
+                else -> 10 * 60_000L
+            }
+            val from = pendingSeekMs ?: positionMs
+            pendingSeekMs = (from + if (forward) step else -step).coerceIn(0L, durationMs)
+            reveal()
+            seekCommit?.cancel()
+            seekCommit = scope.launch {
+                delay(SEEK_COMMIT_DELAY_MILLIS)
+                pendingSeekMs?.let { restartJump(it) }
+                pendingSeekMs = null
+            }
+            return
         }
         if (!controller.isSeekable || durationMs <= 0) { reveal(); return }
         val step = when {
@@ -353,7 +407,7 @@ fun VodPlayerScreen(
                 }
                 Lifecycle.Event.ON_START -> if (stopped) {
                     stopped = false
-                    controller.player.prepare()
+                    if (restart != null) restartJump(restartPosition()) else controller.player.prepare()
                     controlsVisible = true
                 }
                 else -> Unit
@@ -402,24 +456,9 @@ fun VodPlayerScreen(
                 delay(1_000)
                 val p = controller.player
                 if (p.playbackState != androidx.media3.common.Player.STATE_ENDED) continue
-                val at = restart.startUtcMillis + p.currentPosition.coerceAtLeast(0L)
-                val liveEdge = minOf(restart.endUtcMillis, System.currentTimeMillis() - RESTART_LIVE_MARGIN_MILLIS)
-                if (at >= liveEdge) {
-                    app.opentv.core.EventLog.log("vod", "restart caught up, back to live")
-                    onBack()
-                    return@LaunchedEffect
-                }
-                app.opentv.core.EventLog.log("vod", "restart archive end, reload at ${p.currentPosition / 1000}s")
-                controller.play(
-                    PlayerController.Request(
-                        url = streamUrl,
-                        title = title,
-                        userAgent = userAgent,
-                        startPositionMillis = p.currentPosition,
-                        isLive = false,
-                    ),
-                    debounce = false,
-                )
+                app.opentv.core.EventLog.log("vod", "restart archive end at ${restartPosition() / 1000}s")
+                // Goes live by itself when the place is about at live or past the programme's end.
+                restartJump(restartPosition())
                 delay(5_000)
             }
         }
@@ -427,8 +466,19 @@ fun VodPlayerScreen(
 
     // Poll position/duration for the seek bar while the film plays.
     LaunchedEffect(Unit) {
+        var lastTick = android.os.SystemClock.elapsedRealtime()
         while (isActive) {
             val p = controller.player
+            if (restart != null) {
+                val tick = android.os.SystemClock.elapsedRealtime()
+                if (p.isPlaying) restartPlayedMs += tick - lastTick
+                lastTick = tick
+                positionMs = restartPosition()
+                bufferedMs = positionMs
+                durationMs = restart.endUtcMillis - restart.startUtcMillis
+                delay(500)
+                continue
+            }
             positionMs = p.currentPosition.coerceAtLeast(0)
             bufferedMs = p.bufferedPosition.coerceAtLeast(0)
             // A growing recording has no fixed length; the recorded-so-far extent (how far you
@@ -709,8 +759,13 @@ fun VodPlayerScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Kept for touch screens, where the seek bar can't be dragged; on a TV the bar
                     // itself is quicker.
-                    VodIconButton(Icons.Filled.Replay10, stringResource(R.string.player_rewind), seekFocus, ::hideFromButtons) {
-                        if (growingRec) seekRelative(-15_000) else controller.seekBackward(); interaction++
+                    VodIconButton(if (restart != null) Icons.Filled.FastRewind else Icons.Filled.Replay10, stringResource(R.string.player_rewind), seekFocus, ::hideFromButtons) {
+                        when {
+                            restart != null -> restartJump((restartPosition() - 60_000L).coerceAtLeast(0L))
+                            growingRec -> seekRelative(-15_000)
+                            else -> controller.seekBackward()
+                        }
+                        interaction++
                     }
                     VodIconButton(
                         icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
@@ -719,8 +774,13 @@ fun VodPlayerScreen(
                         onDown = ::hideFromButtons,
                         focusRequester = playFocus,
                     ) { togglePause() }
-                    VodIconButton(Icons.Filled.Forward10, stringResource(R.string.player_forward), seekFocus, ::hideFromButtons) {
-                        if (growingRec) seekRelative(15_000) else controller.seekForward(); interaction++
+                    VodIconButton(if (restart != null) Icons.Filled.FastForward else Icons.Filled.Forward10, stringResource(R.string.player_forward), seekFocus, ::hideFromButtons) {
+                        when {
+                            restart != null -> restartJump(restartPosition() + 60_000L)
+                            growingRec -> seekRelative(15_000)
+                            else -> controller.seekForward()
+                        }
+                        interaction++
                     }
                     if (restart != null) {
                         // Back to the channel, live.
@@ -1214,6 +1274,23 @@ internal data class RestartKey(val channelId: Long, val startUtcMillis: Long, va
             val start = parts[2].toLongOrNull() ?: return null
             val end = parts[3].toLongOrNull() ?: return null
             return if (end > start) RestartKey(ch, start, end) else null
+        }
+
+        private val TIMESHIFT = Regex("""/timeshift/([^/]+)/([^/]+)/\d+/\d{4}-\d{2}-\d{2}:\d{2}-\d{2}/""")
+    }
+
+    /**
+     * The archive link [url] moved to start [minute] minutes into the programme, asking for the rest
+     * of it. Same form and time zone as XtreamApi.catchupUrl.
+     */
+    fun urlFrom(url: String, minute: Int, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): String {
+        val from = startUtcMillis + minute * 60_000L
+        val stamp = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
+            .apply { timeZone = zone }
+            .format(java.util.Date(from))
+        val minutes = ((endUtcMillis - from + 59_999L) / 60_000L).toInt().coerceAtLeast(1)
+        return TIMESHIFT.replaceFirst(url) { m ->
+            "/timeshift/${m.groupValues[1]}/${m.groupValues[2]}/$minutes/$stamp/"
         }
     }
 }
