@@ -158,7 +158,7 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         appScope.launch {
             delay(VOD_AUTOSTART_DELAY_MILLIS)
             runCatching {
-                if (graph.catalogRepository.vodStale(System.currentTimeMillis())) {
+                if (graph.catalogRepository.vodStale(System.currentTimeMillis()) || graph.catalogRepository.linksMissing()) {
                     graph.catalogRepository.syncVodCatalogue(graph.sourceRepository.enabled(), System.currentTimeMillis())
                 }
             }

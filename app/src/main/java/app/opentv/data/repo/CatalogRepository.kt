@@ -900,7 +900,7 @@ class CatalogRepository(
         throttled: Boolean = true,
     ): Boolean = withContext(Dispatchers.IO) {
         vodMutex.withLock {
-            if (!force && !vodStale(nowUtcMillis) && !linksMissing()) return@withLock false
+            if (!force && !vodStale(nowUtcMillis) && !linksMissingNow()) return@withLock false
             val xtream = sources.filter { it.kind == SourceKind.XTREAM }
             if (xtream.isEmpty()) return@withLock false
             val rate = if (throttled) VOD_BACKGROUND_BYTES_PER_SECOND else 0L
@@ -1393,7 +1393,9 @@ class CatalogRepository(
      * A library on disk with no [VodLink]s at all: it was synced before v16 kept every category of
      * a title. Re-sync once so the shelves aren't missing most of their titles until the TTL lapses.
      */
-    private suspend fun linksMissing(): Boolean {
+    suspend fun linksMissing(): Boolean = withContext(Dispatchers.IO) { linksMissingNow() }
+
+    private suspend fun linksMissingNow(): Boolean {
         val dao = vodLinkDao ?: return false
         return (settings.moviesEnabled.value && movieDao.count() > 0 && dao.count(VodLink.MOVIE) == 0) ||
             (settings.seriesEnabled.value && seriesDao.count() > 0 && dao.count(VodLink.SERIES) == 0)
