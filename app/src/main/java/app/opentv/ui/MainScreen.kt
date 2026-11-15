@@ -336,7 +336,8 @@ fun MainScreen(
                   onFocusLeft = { navRevealed = false },
                   onFocusChange = { menuFocused.value = it },
                   onOpenSearch = onOpenSearch,
-                  onOpenSettings = { settingsToggled = true; settingsOpen = true },
+                  // The settings open with the focus in their menu, not in the page.
+                  onOpenSettings = { enterSettings = 0; settingsToggled = true; settingsOpen = true },
                   appSettingsFocus = appSettingsFocus,
                   settingsOpen = settingsOpen,
                   settingsK = { settingsAnim.value },

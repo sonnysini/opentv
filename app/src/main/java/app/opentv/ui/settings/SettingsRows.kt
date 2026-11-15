@@ -245,7 +245,8 @@ internal fun Pill(label: String, on: Boolean, enabled: Boolean = true, small: Bo
             .graphicsLayer { val s = if (focused) 1.06f else 1f; scaleX = s; scaleY = s }
             .clip(shape)
             .background(if (on) primary else if (focused) primary.copy(alpha = 0.24f) else Color.Transparent)
-            .border(1.5.dp, if (on || focused) primary else SetChipEdge, shape)
+            // The chosen pill with the focus on it gets a white edge, so the focus shows on it too.
+            .border(if (on && focused) 2.dp else 1.5.dp, if (on && focused) Color.White else if (on || focused) primary else SetChipEdge, shape)
             .clickable(interactionSource = null, indication = null) { if (enabled) onClick() }
             .padding(horizontal = if (small) 12.dp else 16.dp, vertical = if (small) 5.dp else 8.dp),
     )
