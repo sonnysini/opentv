@@ -104,18 +104,16 @@ fun StremioAddonsScreen(onBack: () -> Unit) {
         if (status is StremioAddonsViewModel.Status.Added) input = ""
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_addons_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded)) {
+        if (!embedded) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.settings_addons_title), style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.weight(1f))
+                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            }
+            Spacer(Modifier.height(8.dp))
         }
-
-        Spacer(Modifier.height(8.dp))
         Text(
             stringResource(R.string.addons_note),
             style = MaterialTheme.typography.bodyMedium,

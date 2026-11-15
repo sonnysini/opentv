@@ -90,6 +90,9 @@ import app.opentv.data.model.Recording
 import app.opentv.data.model.Series
 import app.opentv.ui.channels.HomeScreen
 import app.opentv.ui.recordings.RecordingsScreen
+import app.opentv.ui.settings.SettingsPanel
+import app.opentv.ui.settings.SettingsSection
+import app.opentv.ui.settings.SettingsSlots
 import app.opentv.ui.vod.MoviesScreen
 import app.opentv.ui.vod.SeriesScreen
 import kotlinx.coroutines.delay
@@ -121,7 +124,7 @@ fun MainScreen(
     onAddSource: () -> Unit,
     onRefresh: () -> Unit,
     onOpenSearch: () -> Unit,
-    onOpenSettings: () -> Unit,
+    settingsSlots: SettingsSlots,
     onPlayRecording: (Recording) -> Unit,
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit,
 ) {
@@ -204,9 +207,56 @@ fun MainScreen(
         )
     }
 
+    // Settings open in place: the menu stays where it is and turns into the settings menu (the app's
+    // entries slide out, Settings rises to the top as the title, the sections come in), the page
+    // fades into the settings page. [settingsK] runs that change, 0 = app, 1 = settings.
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsSection by rememberSaveable { mutableStateOf(LastSettings.section) }
+    val settingsAnim = remember { Animatable(if (settingsOpen) 1f else 0f) }
+    // The page under the settings is let go once they cover it (no live preview playing behind
+    // them), and built again — still hidden — before the way back starts: building the Live page
+    // takes a moment, and doing it mid-animation swallowed the animation.
+    var pageAlive by remember { mutableStateOf(!settingsOpen) }
+    LaunchedEffect(settingsOpen) {
+        val spec = tween<Float>(SETTINGS_MILLIS, easing = androidx.compose.animation.core.LinearEasing)
+        if (settingsOpen) {
+            settingsAnim.animateTo(1f, spec)
+            pageAlive = false
+        } else if (settingsAnim.value > 0f) {
+            pageAlive = true
+            repeat(3) { androidx.compose.runtime.withFrameNanos { } }
+            settingsAnim.animateTo(0f, spec)
+        } else {
+            pageAlive = true
+        }
+    }
+    // Read per frame only in layers; composition only hears when the change starts and ends.
+    val settingsShown by remember { androidx.compose.runtime.derivedStateOf { settingsAnim.value > 0f } }
+    var enterSettings by remember { mutableIntStateOf(0) }
+    val settingsFocus = remember { FocusRequester() }
+    val appSettingsFocus = remember { FocusRequester() }
+    var settingsToggled by remember { mutableStateOf(false) }
+    LaunchedEffect(settingsOpen) {
+        if (!settingsToggled) return@LaunchedEffect
+        delay(16)
+        runCatching { (if (settingsOpen) settingsFocus else appSettingsFocus).requestFocus() }
+    }
+    // Back in the settings: from the page back to the menu, from the menu out of the settings.
+    // (An open drop-down, and any screen inside it, is asked first.)
+    BackHandler(enabled = settingsOpen) {
+        if (menuFocused.value) {
+            settingsToggled = true
+            settingsOpen = false
+        } else {
+            runCatching { settingsFocus.requestFocus() }
+        }
+    }
+
     // The menu's style (Settings › Appearance): always a solid full-height bar beside the page —
     // icons that open with the names, nothing at rest until LEFT brings it in, or icons only.
-    val menuStyle by settings.menuStyle.collectAsStateWithLifecycle()
+    val chosenMenuStyle by settings.menuStyle.collectAsStateWithLifecycle()
+    // In the settings the menu is always the bar: it is their list.
+    val menuStyle = if (settingsOpen || settingsShown) AppSettings.MenuStyle.BAR else chosenMenuStyle
     val hidden = menuStyle == AppSettings.MenuStyle.HIDDEN
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // A new Animatable per tab, created at 0 in the very composition that switches the tab: snapping
@@ -281,12 +331,20 @@ fun MainScreen(
                   // same on every page (and again on the page already open).
                   onSelect = { tab = it; enterPage++ },
                   // RIGHT: back into the page.
-                  onEnterPage = { enterPage++ },
+                  onEnterPage = { if (settingsOpen) enterSettings++ else enterPage++ },
                   currentFocus = navFocus,
                   onFocusLeft = { navRevealed = false },
                   onFocusChange = { menuFocused.value = it },
                   onOpenSearch = onOpenSearch,
-                  onOpenSettings = onOpenSettings,
+                  // The settings open with the focus in their menu, not in the page.
+                  onOpenSettings = { enterSettings = 0; settingsToggled = true; settingsOpen = true },
+                  appSettingsFocus = appSettingsFocus,
+                  settingsOpen = settingsOpen,
+                  settingsK = { settingsAnim.value },
+                  section = settingsSection,
+                  settingsFocus = settingsFocus,
+                  onSectionFocus = { settingsSection = it; LastSettings.section = it },
+                  onSectionSelect = { settingsSection = it; LastSettings.section = it; enterSettings++ },
               )
               // The pages of cards keep the width they have with the menu closed: opening it slides
               // them right, partly off screen, instead of squeezing them (their cards are sized from
@@ -309,7 +367,33 @@ fun MainScreen(
                       .wrapContentWidth(Alignment.Start, unbounded = true)
                       .requiredWidth(screenWidth - if (hidden) 0.dp else BAR_PAGE_START)
                       .fillMaxHeight()
-                  Box(width.then(pageModifier)) { page() }
+                  // The page goes once the settings cover it (no live preview playing behind them).
+                  if (pageAlive) {
+                      Box(
+                          width.then(pageModifier).graphicsLayer {
+                              val k = ease(settingsAnim.value / 0.35f)
+                              alpha = 1f - k
+                              scaleX = 1f - 0.02f * k
+                              scaleY = 1f - 0.02f * k
+                          },
+                      ) { page() }
+                  }
+                  if (settingsShown || settingsOpen) {
+                      SettingsPanel(
+                          section = settingsSection,
+                          dimmed = menuFocused.value,
+                          slots = settingsSlots,
+                          onBackToRail = { runCatching { settingsFocus.requestFocus() } },
+                          enterKey = if (settingsOpen) enterSettings else 0,
+                          modifier = Modifier
+                              .fillMaxSize()
+                              .graphicsLayer {
+                                  val k = ease((settingsAnim.value - 0.4f) / 0.4f)
+                                  alpha = k
+                                  translationX = (1f - k) * SETTINGS_SHIFT.toPx()
+                              },
+                      )
+                  }
               }
           }
         }
@@ -396,6 +480,16 @@ private fun NavRail(
     onFocusLeft: () -> Unit = {},
     // Focus is in the rail (true) or not, at once.
     onFocusChange: (Boolean) -> Unit = {},
+    // The app's Settings entry, so coming back from the settings lands on it.
+    appSettingsFocus: FocusRequester? = null,
+    // The settings menu: shown instead of the app's entries while [settingsOpen]; [settingsK] runs
+    // the change between the two (0 = app, 1 = settings).
+    settingsOpen: Boolean = false,
+    settingsK: () -> Float = { 0f },
+    section: SettingsSection = SettingsSection.SOURCES,
+    settingsFocus: FocusRequester? = null,
+    onSectionFocus: (SettingsSection) -> Unit = {},
+    onSectionSelect: (SettingsSection) -> Unit = {},
 ) {
     val hidden = style == AppSettings.MenuStyle.HIDDEN
     val compact = style == AppSettings.MenuStyle.COMPACT
@@ -420,9 +514,11 @@ private fun NavRail(
         animationSpec = tween(OPEN_MILLIS, easing = OutCubic),
         label = "railOpen",
     )
+    val sections = SettingsSection.entries
     // Open, it is as wide as its longest name and a little more.
     val labels = tabs.map { stringResource(it.labelRes) } +
-        listOf(stringResource(R.string.nav_search), stringResource(R.string.nav_settings))
+        listOf(stringResource(R.string.nav_search), stringResource(R.string.nav_settings)) +
+        sections.map { stringResource(it.label) }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val labelStyle = MaterialTheme.typography.titleMedium.copy(fontSize = LABEL_SIZE, fontWeight = FontWeight.SemiBold)
@@ -433,10 +529,23 @@ private fun NavRail(
     val shape = RoundedCornerShape(BAR_RADIUS)
     // UP and DOWN step through the entries in order, never out of the menu.
     val requesters = remember(tabs.size) { List(tabs.size + 2) { FocusRequester() } }
+    val sectionRequesters = remember { List(sections.size) { FocusRequester() } }
     var focusedIndex by remember { mutableIntStateOf(-1) }
+    var focusedSection by remember { mutableIntStateOf(-1) }
+    // Which menu holds the focus. The one being left stays focusable until the focus has moved to
+    // the other: taking it away first dropped the focus on the page for a moment, and the menu
+    // closed and opened again.
+    var focusInSettings by remember { mutableStateOf(settingsOpen) }
+    val appFocusable = !settingsOpen || !focusInSettings
+    val settingsFocusable = settingsOpen || focusInSettings
     // The names fade in over the second half of the opening; the full-screen menu slides in with
     // them already there.
     val labelAlpha = { if (hidden) 1f else ((open - 0.4f) / 0.6f).coerceIn(0f, 1f) }
+    val shift = with(density) { ITEM_SHIFT.toPx() }
+    // Composition only hears when the change into the settings starts and ends; each frame of it
+    // is read in the layers.
+    val settingsShown by remember { androidx.compose.runtime.derivedStateOf { settingsK() > 0f } }
+    val flying by remember { androidx.compose.runtime.derivedStateOf { settingsK().let { it > 0f && it < 1f } } }
 
     // Full screen: the slot it takes beside the page grows from nothing as it slides in, so the page
     // is pushed by as much as the menu shows.
@@ -446,7 +555,7 @@ private fun NavRail(
         Modifier
     }
     Box(modifier.then(slot)) {
-    Column(
+    BoxWithConstraints(
         Modifier
             .then(if (hidden) Modifier.wrapContentWidth(Alignment.Start, unbounded = true) else Modifier)
             .padding(start = MENU_MARGIN)
@@ -469,8 +578,14 @@ private fun NavRail(
                 when (e.key) {
                     Key.DirectionRight -> { onEnterPage(); true }
                     Key.DirectionDown, Key.DirectionUp -> {
-                        val next = focusedIndex + if (e.key == Key.DirectionDown) 1 else -1
-                        if (focusedIndex >= 0 && next in requesters.indices) runCatching { requesters[next].requestFocus() }
+                        val step = if (e.key == Key.DirectionDown) 1 else -1
+                        if (settingsOpen) {
+                            val next = focusedSection + step
+                            if (focusedSection >= 0 && next in sectionRequesters.indices) runCatching { sectionRequesters[next].requestFocus() }
+                        } else {
+                            val next = focusedIndex + step
+                            if (focusedIndex >= 0 && next in requesters.indices) runCatching { requesters[next].requestFocus() }
+                        }
                         true
                     }
                     Key.DirectionLeft -> true
@@ -479,71 +594,206 @@ private fun NavRail(
             }
             // LEFT from the page lands on the page you're on, not on whichever item happens to
             // be level with the card you left (Recordings, from a row low on the screen).
-            .focusProperties { enter = { if (it == FocusDirection.Left && currentFocus != null) currentFocus else FocusRequester.Default } }
-            .focusGroup()
-            .padding(vertical = BAR_PAD),
+            .focusProperties {
+                enter = {
+                    val target = if (settingsOpen) settingsFocus else currentFocus
+                    if (it == FocusDirection.Left && target != null) target else FocusRequester.Default
+                }
+            }
+            .focusGroup(),
     ) {
-        // Brand: the logo mark alone when closed, the mark + two-tone "MyTV" wordmark when open,
-        // as in the banner; a hairline under it.
-        Row(
-            Modifier.height(LOGO_BLOCK).wrapContentWidth(Alignment.Start, unbounded = true),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.width(BAR_CLOSED), contentAlignment = Alignment.Center) {
-                Image(
-                    painter = painterResource(R.drawable.ic_opentv_logo),
-                    contentDescription = "MyTV",
-                    modifier = Modifier.size(LOGO_SIZE),
+        val barHeight = maxHeight
+        // ---- the app's menu -------------------------------------------------------------------
+        Column(Modifier.fillMaxSize().padding(vertical = BAR_PAD)) {
+            // Brand: the logo mark alone when closed, the mark + two-tone "MyTV" wordmark when open,
+            // as in the banner; a hairline under it.
+            Row(
+                Modifier
+                    .height(LOGO_BLOCK)
+                    .wrapContentWidth(Alignment.Start, unbounded = true)
+                    .graphicsLayer {
+                        val q = ease(settingsK() / 0.2f)
+                        alpha = 1f - q
+                        translationY = -q * shift / 2f
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(BAR_CLOSED), contentAlignment = Alignment.Center) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_opentv_logo),
+                        contentDescription = "MyTV",
+                        modifier = Modifier.size(LOGO_SIZE),
+                    )
+                }
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = Color.White)) { append("My") }
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("TV") }
+                    },
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = WORDMARK_SIZE),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.graphicsLayer { alpha = labelAlpha() },
                 )
             }
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = Color.White)) { append("My") }
-                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("TV") }
-                },
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = WORDMARK_SIZE),
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.graphicsLayer { alpha = labelAlpha() },
+            Hairline()
+            Spacer(Modifier.height(BAR_PAD))
+
+            // The entries slide out to the left one after the other as the settings come in.
+            val leave = { i: Int -> Modifier.graphicsLayer { val q = ease((settingsK() - i * 0.025f) / 0.28f); alpha = 1f - q; translationX = -q * shift } }
+            tabs.forEachIndexed { i, t ->
+                RailItem(
+                    t.icon,
+                    t.iconSelected,
+                    stringResource(t.labelRes),
+                    labelStyle = labelStyle,
+                    labelAlpha = labelAlpha,
+                    closed = BAR_CLOSED,
+                    selected = current == t,
+                    canFocus = appFocusable,
+                    modifier = leave(i).focusRequester(requesters[i])
+                        .then(if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier),
+                    onFocused = { focusedIndex = i; focusInSettings = false },
+                ) { onSelect(t) }
+            }
+
+            // Search and Settings at the bottom, as before.
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.fillMaxWidth().height(SEP_GAP).then(leave(tabs.size)), contentAlignment = Alignment.Center) { Hairline() }
+
+            RailItem(
+                R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha,
+                closed = BAR_CLOSED,
+                canFocus = appFocusable,
+                modifier = leave(tabs.size).focusRequester(requesters[tabs.size]),
+                onFocused = { focusedIndex = tabs.size; focusInSettings = false },
+                onClick = onOpenSearch,
+            )
+            // Settings itself: while the menu changes, its copy flies to the top (below).
+            RailItem(
+                R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha,
+                closed = BAR_CLOSED,
+                canFocus = appFocusable,
+                modifier = Modifier
+                    .graphicsLayer { alpha = if (settingsK() > 0f) 0f else 1f }
+                    .focusRequester(requesters[tabs.size + 1])
+                    .then(if (appSettingsFocus != null) Modifier.focusRequester(appSettingsFocus) else Modifier),
+                onFocused = { focusedIndex = tabs.size + 1; focusInSettings = false },
+                onClick = onOpenSettings,
             )
         }
-        Hairline()
-        Spacer(Modifier.height(BAR_PAD))
 
-        tabs.forEachIndexed { i, t ->
-            RailItem(
-                t.icon,
-                t.iconSelected,
-                stringResource(t.labelRes),
-                labelStyle = labelStyle,
-                labelAlpha = labelAlpha,
-                closed = BAR_CLOSED,
-                selected = current == t,
-                modifier = Modifier.focusRequester(requesters[i])
-                    .then(if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier),
-                onFocused = { focusedIndex = i },
-            ) { onSelect(t) }
+        // ---- the settings menu ----------------------------------------------------------------
+        if (settingsOpen || settingsShown) {
+            Column(Modifier.fillMaxSize().padding(vertical = BAR_PAD)) {
+                // The title, where the logo is: the gear in the accent, "Settings" in white. It
+                // shows once the flying copy has landed on it.
+                Row(
+                    Modifier
+                        .height(LOGO_BLOCK)
+                        .wrapContentWidth(Alignment.Start, unbounded = true)
+                        .graphicsLayer { alpha = if (settingsK() >= 1f) 1f else 0f },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.width(BAR_CLOSED), contentAlignment = Alignment.Center) {
+                        Icon(
+                            ImageVector.vectorResource(R.drawable.ic_nav_settings),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(LOGO_SIZE),
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.nav_settings),
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = WORDMARK_SIZE),
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.graphicsLayer { alpha = labelAlpha() },
+                    )
+                }
+                Box(Modifier.graphicsLayer { alpha = ease((settingsK() - 0.5f) / 0.25f) }) { Hairline() }
+                Spacer(Modifier.height(BAR_PAD))
+
+                // The sections come in from the left one after the other.
+                val arrive = { i: Int -> Modifier.graphicsLayer { val q = ease((settingsK() - 0.5f - i * 0.03f) / 0.25f); alpha = q; translationX = -(1f - q) * shift } }
+                sections.forEachIndexed { i, s ->
+                    if (s.bottom && (i == 0 || !sections[i - 1].bottom)) {
+                        Spacer(Modifier.weight(1f))
+                        Box(Modifier.fillMaxWidth().height(SEP_GAP).then(arrive(i)), contentAlignment = Alignment.Center) { Hairline() }
+                    }
+                    RailItem(
+                        s.icon, s.iconFill, stringResource(s.label), labelStyle, labelAlpha,
+                        closed = BAR_CLOSED,
+                        selected = s == section,
+                        canFocus = settingsFocusable,
+                        modifier = arrive(i)
+                            .focusRequester(sectionRequesters[i])
+                            .then(if (s == section && settingsFocus != null) Modifier.focusRequester(settingsFocus) else Modifier),
+                        onFocused = { focusedSection = i; focusInSettings = true; onSectionFocus(s) },
+                    ) { onSectionSelect(s) }
+                }
+            }
+
+            // The Settings entry flying from the bottom of the menu to the title's place, turning from
+            // the accent to white on the way. Everything that moves is read in the layers, so the
+            // menu isn't composed again on every frame.
+            if (flying) {
+                val from = barHeight - BAR_PAD - ITEM_PITCH
+                val to = BAR_PAD + (LOGO_BLOCK - ITEM_PITCH) / 2
+                val primary = MaterialTheme.colorScheme.primary
+                val label = stringResource(R.string.nav_settings)
+                val tw = { ease((settingsK() - 0.55f) / 0.2f) }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(ITEM_PITCH)
+                        .graphicsLayer {
+                            val mv = inOut((settingsK() - 0.08f) / 0.55f)
+                            translationY = (from + (to - from) * mv).toPx()
+                        },
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    // The focus pill travels with it for a while, then fades.
+                    Spacer(
+                        Modifier
+                            .padding(horizontal = PILL_INSET)
+                            .fillMaxWidth()
+                            .height(PILL_HEIGHT)
+                            .graphicsLayer { val k = settingsK(); alpha = if (k < 0.62f) 1f - ease((k - 0.4f) / 0.2f) else 0f }
+                            .clip(RoundedCornerShape(PILL_RADIUS))
+                            .background(primary.copy(alpha = FOCUS_VEIL_ALPHA)),
+                    )
+                    Row(Modifier.wrapContentWidth(Alignment.Start, unbounded = true), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.width(BAR_CLOSED).graphicsLayer { val g = 1f + (LOGO_SIZE / ICON_SIZE - 1f) * tw(); scaleX = g; scaleY = g },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                ImageVector.vectorResource(R.drawable.ic_nav_settings_fill),
+                                contentDescription = null,
+                                tint = primary,
+                                modifier = Modifier.size(ICON_SIZE).graphicsLayer { alpha = 1f - tw() },
+                            )
+                            Icon(
+                                ImageVector.vectorResource(R.drawable.ic_nav_settings),
+                                contentDescription = null,
+                                tint = primary,
+                                modifier = Modifier.size(ICON_SIZE).graphicsLayer { alpha = tw() },
+                            )
+                        }
+                        Box(Modifier.graphicsLayer { alpha = labelAlpha() }) {
+                            Text(label, style = labelStyle, color = primary, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false,
+                                modifier = Modifier.graphicsLayer { alpha = 1f - tw() })
+                            Text(label, style = labelStyle, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false,
+                                modifier = Modifier.graphicsLayer { alpha = tw() })
+                        }
+                    }
+                }
+            }
         }
-
-        // Search and Settings at the bottom, as before.
-        Spacer(Modifier.weight(1f))
-        Box(Modifier.fillMaxWidth().height(SEP_GAP), contentAlignment = Alignment.Center) { Hairline() }
-
-        RailItem(
-            R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha,
-            closed = BAR_CLOSED,
-            modifier = Modifier.focusRequester(requesters[tabs.size]),
-            onFocused = { focusedIndex = tabs.size },
-            onClick = onOpenSearch,
-        )
-        RailItem(
-            R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha,
-            closed = BAR_CLOSED,
-            modifier = Modifier.focusRequester(requesters[tabs.size + 1]),
-            onFocused = { focusedIndex = tabs.size + 1 },
-            onClick = onOpenSettings,
-        )
     }
     }
 }
@@ -567,6 +817,7 @@ private fun RailItem(
     closed: androidx.compose.ui.unit.Dp,
     selected: Boolean = false,
     modifier: Modifier = Modifier,
+    canFocus: Boolean = true,
     onFocused: () -> Unit = {},
     onClick: () -> Unit,
 ) {
@@ -584,6 +835,7 @@ private fun RailItem(
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
+            .focusProperties { this.canFocus = canFocus }
             .clickable(interactionSource = null, indication = null, onClick = onClick),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -644,6 +896,17 @@ private val LABEL_SIZE = 17.sp
 private val SEP_GAP = 13.dp
 private val PAGE_IN_SHIFT = 30.dp
 private const val OPEN_MILLIS = 400
+// The change into the settings and back (the approved mock: 1.1 s).
+private const val SETTINGS_MILLIS = 1100
+private val SETTINGS_SHIFT = 35.dp
+// How far the menu's entries slide as they leave / come in.
+private val ITEM_SHIFT = 28.dp
 private const val PAGE_IN_MILLIS = 220
 private val Dim = Color(0xFFDEE4E1).copy(alpha = 0.6f)
 private val OutCubic = Easing { x -> 1f - (1f - x) * (1f - x) * (1f - x) }
+
+private fun ease(p: Float): Float { val x = p.coerceIn(0f, 1f); return 1f - (1f - x) * (1f - x) * (1f - x) }
+private fun inOut(p: Float): Float { val x = p.coerceIn(0f, 1f); return if (x < 0.5f) 4f * x * x * x else 1f - (-2f * x + 2f).let { it * it * it } / 2f }
+
+/** The settings section used last, so the settings open on it again (for as long as the app runs). */
+private object LastSettings { var section: SettingsSection = SettingsSection.SOURCES }

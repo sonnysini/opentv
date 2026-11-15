@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -79,7 +80,7 @@ fun PhonePairingScreen(
         (state as? PairingServer.State.Received)?.let { onReceived(it.draft) }
     }
 
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(if (app.opentv.ui.settings.LocalSettingsEmbedded.current) 4.dp else 32.dp), contentAlignment = Alignment.Center) {
         when (val current = state) {
             is PairingServer.State.Listening -> Listening(current.session, onCancel)
 
@@ -118,6 +119,8 @@ private fun Listening(session: PairingServer.Session, onCancel: () -> Unit) {
     // Generated once per session rather than on every recomposition — encoding is not free
     // and the content does not change.
     val qr = remember(session.url) { QrCodes.render(session.url, QR_SIZE_PX) }
+    // In the settings window: smaller, and the window's own title stands in for the big one.
+    val compact = app.opentv.ui.settings.LocalSettingsEmbedded.current
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -128,23 +131,25 @@ private fun Listening(session: PairingServer.Session, onCancel: () -> Unit) {
                 bitmap = qr.asImageBitmap(),
                 contentDescription = stringResource(R.string.pairing_qr_desc),
                 modifier = Modifier
-                    .size(300.dp)
+                    .size(if (compact) 230.dp else 300.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .padding(12.dp),
             )
         }
 
-        Column(Modifier.widthIn(max = 520.dp)) {
-            Text(stringResource(R.string.pairing_setup_title), style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.widthIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+            if (!compact) {
+                Text(stringResource(R.string.pairing_setup_title), style = MaterialTheme.typography.displaySmall)
+                Spacer(Modifier.height(12.dp))
+            }
             Text(
                 stringResource(R.string.pairing_setup_desc),
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(if (compact) 14.dp else 28.dp))
             Text(
                 stringResource(R.string.pairing_enter_code),
                 style = MaterialTheme.typography.bodyMedium,
@@ -154,12 +159,12 @@ private fun Listening(session: PairingServer.Session, onCancel: () -> Unit) {
             Text(
                 // Spaced out because it is being read across a room and typed into a phone.
                 text = session.confirmCode.toCharArray().joinToString("  "),
-                fontSize = 52.sp,
+                fontSize = if (compact) 40.sp else 52.sp,
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(if (compact) 12.dp else 24.dp))
             Text(
                 stringResource(R.string.pairing_camera_fail),
                 style = MaterialTheme.typography.bodyMedium,
@@ -168,8 +173,9 @@ private fun Listening(session: PairingServer.Session, onCancel: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             Text(session.shortUrl, style = MaterialTheme.typography.titleLarge)
 
-            Spacer(Modifier.height(32.dp))
-            OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.pairing_type_on_tv)) }
+            Spacer(Modifier.height(if (compact) 16.dp else 32.dp))
+            if (compact) app.opentv.ui.settings.Pill(stringResource(R.string.pairing_type_on_tv), on = false, onClick = onCancel)
+            else OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.pairing_type_on_tv)) }
         }
     }
 }

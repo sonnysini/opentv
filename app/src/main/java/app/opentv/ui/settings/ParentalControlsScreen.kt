@@ -33,6 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -73,87 +76,49 @@ fun ParentalControlsScreen(
         return
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_parental_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+    var pinWindow by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetGroup(stringResource(R.string.parental_pin))
+        SetRow(
+            stringResource(R.string.parental_pin),
+            stringResource(if (pinIsSet) R.string.parental_pin_is_set else R.string.parental_pin_set),
+            R.drawable.ic_set_lock_simple,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val first = LocalSettingsFirstFocus.current
+                Pill(
+                    stringResource(if (pinIsSet) R.string.parental_change_pin else R.string.set_pin_set),
+                    on = false,
+                    modifier = if (first != null) Modifier.focusRequester(first) else Modifier,
+                ) { pinWindow = true }
+                if (pinIsSet) Pill(stringResource(R.string.parental_remove_pin), on = false, onClick = settings::clearPin)
+            }
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        PinSection(pinIsSet = pinIsSet, onSetPin = settings::setPin, onClearPin = settings::clearPin)
-
-        Spacer(Modifier.height(16.dp))
-
-        Text(stringResource(R.string.parental_hidden_categories), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            stringResource(R.string.parental_hidden_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
+        SetGroup(stringResource(R.string.parental_hidden_categories))
+        SetNote(stringResource(R.string.parental_hidden_desc))
+        SetSwitchRow(
+            stringResource(R.string.parental_show_hidden_title),
+            stringResource(R.string.parental_show_hidden_subtitle),
+            unlocked,
+            onToggle = settings::setHiddenUnlocked,
         )
-        Spacer(Modifier.height(12.dp))
-
-        Card {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.parental_show_hidden_title), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(R.string.parental_show_hidden_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = unlocked, onCheckedChange = settings::setHiddenUnlocked)
+        if (categories.isEmpty()) {
+            SetNote(stringResource(R.string.parental_no_categories))
+        } else {
+            // A plain Column inside the page's scroll: provider categories number in the dozens.
+            categories.forEach { group ->
+                SwitchRow(group.label, subtitle = null, checked = group.key in hidden, onToggle = { on ->
+                    val next = hidden.toMutableSet().apply { if (on) add(group.key) else remove(group.key) }
+                    settings.setHiddenCategories(next)
+                })
             }
         }
+    }
 
-        Spacer(Modifier.height(12.dp))
-
-        if (categories.isEmpty()) {
-            Text(
-                stringResource(R.string.parental_no_categories),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            // A plain Column (not LazyColumn) because the whole screen is now inside a
-            // verticalScroll — nesting a second scroll container here is what left the lower
-            // categories unreachable on the remote. Provider categories number in the dozens,
-            // so rendering them all is fine.
-            Column(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                categories.forEach { group ->
-                    Card {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(group.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = group.key in hidden,
-                                onCheckedChange = { on ->
-                                    val next = hidden.toMutableSet().apply { if (on) add(group.key) else remove(group.key) }
-                                    settings.setHiddenCategories(next)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(24.dp))
+    if (pinWindow) {
+        SetDialog(stringResource(R.string.parental_pin), onDismiss = { pinWindow = false }) {
+            PinSection(pinIsSet = pinIsSet, onSetPin = { settings.setPin(it); pinWindow = false }, onCancel = { pinWindow = false })
         }
     }
 }
@@ -162,67 +127,42 @@ fun ParentalControlsScreen(
 private fun PinSection(
     pinIsSet: Boolean,
     onSetPin: (String) -> Unit,
-    onClearPin: () -> Unit,
+    onCancel: () -> Unit,
 ) {
-    var editing by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val pinLenError = stringResource(R.string.parental_pin_len_error)
     val pinMismatchError = stringResource(R.string.parental_pin_mismatch)
+    val firstField = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { firstField.requestFocus() } }
 
-    Text(stringResource(R.string.parental_pin), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    SetNote(stringResource(if (pinIsSet) R.string.parental_pin_enter_new else R.string.parental_pin_set))
     Spacer(Modifier.height(8.dp))
-    Card {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            if (pinIsSet && !editing) {
-                Text(stringResource(R.string.parental_pin_is_set), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { editing = true; pin = ""; confirm = ""; error = null }) {
-                        Text(stringResource(R.string.parental_change_pin))
-                    }
-                    OutlinedButton(onClick = onClearPin) { Text(stringResource(R.string.parental_remove_pin)) }
-                }
-            } else {
-                Text(
-                    if (pinIsSet) stringResource(R.string.parental_pin_enter_new) else stringResource(R.string.parental_pin_set),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PinField(stringResource(R.string.parental_pin_new), pin) { if (it.length <= 4) pin = it.filter(Char::isDigit) }
-                    PinField(stringResource(R.string.parental_pin_confirm), confirm) { if (it.length <= 4) confirm = it.filter(Char::isDigit) }
-                }
-                error?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        enabled = pin.length == 4 && confirm.length == 4,
-                        onClick = {
-                            when {
-                                pin.length != 4 -> error = pinLenError
-                                pin != confirm -> error = pinMismatchError
-                                else -> {
-                                    onSetPin(pin); editing = false; pin = ""; confirm = ""; error = null
-                                }
-                            }
-                        },
-                    ) { Text(stringResource(R.string.parental_save_pin)) }
-                    if (editing) {
-                        OutlinedButton(onClick = { editing = false; error = null }) { Text(stringResource(R.string.common_cancel)) }
-                    }
-                }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PinField(stringResource(R.string.parental_pin_new), pin, Modifier.focusRequester(firstField)) { if (it.length <= 4) pin = it.filter(Char::isDigit) }
+        PinField(stringResource(R.string.parental_pin_confirm), confirm) { if (it.length <= 4) confirm = it.filter(Char::isDigit) }
+    }
+    error?.let {
+        Spacer(Modifier.height(8.dp))
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    }
+    Spacer(Modifier.height(16.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        val ready = pin.length == 4 && confirm.length == 4
+        Pill(stringResource(R.string.parental_save_pin), on = ready, enabled = ready) {
+            when {
+                pin.length != 4 -> error = pinLenError
+                pin != confirm -> error = pinMismatchError
+                else -> onSetPin(pin)
             }
         }
+        Pill(stringResource(R.string.common_cancel), on = false, onClick = onCancel)
     }
 }
 
 @Composable
-private fun PinField(label: String, value: String, onChange: (String) -> Unit) {
+private fun PinField(label: String, value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
@@ -230,7 +170,7 @@ private fun PinField(label: String, value: String, onChange: (String) -> Unit) {
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        modifier = Modifier.width(160.dp),
+        modifier = modifier.width(160.dp),
     )
 }
 

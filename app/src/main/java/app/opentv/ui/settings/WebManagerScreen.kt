@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,7 +67,8 @@ fun WebManagerScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+    val embedded = LocalSettingsEmbedded.current
+    Box(if (embedded) Modifier.fillMaxWidth().padding(8.dp) else Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         when (val current = state) {
             is ManagerServer.State.Listening -> Listening(current.session, onBack)
 
@@ -109,7 +111,7 @@ private fun Listening(session: ManagerServer.Session, onBack: () -> Unit) {
                 bitmap = qr.asImageBitmap(),
                 contentDescription = stringResource(R.string.webmanager_qr_desc),
                 modifier = Modifier
-                    .size(300.dp)
+                    .size(260.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .padding(12.dp),
@@ -117,8 +119,11 @@ private fun Listening(session: ManagerServer.Session, onBack: () -> Unit) {
         }
 
         Column(Modifier.widthIn(max = 520.dp)) {
-            Text(stringResource(R.string.webmanager_title), style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.height(12.dp))
+            // In the window its title is already on top.
+            if (!LocalSettingsEmbedded.current) {
+                Text(stringResource(R.string.webmanager_title), style = MaterialTheme.typography.displaySmall)
+                Spacer(Modifier.height(12.dp))
+            }
             Text(
                 stringResource(R.string.webmanager_desc),
                 style = MaterialTheme.typography.bodyLarge,
@@ -143,8 +148,8 @@ private fun Listening(session: ManagerServer.Session, onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(32.dp))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            Spacer(Modifier.height(28.dp))
+            Pill(stringResource(R.string.common_done), on = true, onClick = onBack)
         }
     }
 }

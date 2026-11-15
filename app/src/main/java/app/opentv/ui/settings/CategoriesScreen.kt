@@ -39,6 +39,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
 import app.opentv.data.model.StreamKind
@@ -67,30 +69,25 @@ fun CategoriesScreen(
     val italianOnly by viewModel.italianOnly.collectAsStateWithLifecycle()
     val foreignSportOff by viewModel.foreignSportOff.collectAsStateWithLifecycle()
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 28.dp, vertical = 20.dp),
-    ) {
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded, 28.dp, 20.dp).then(if (embedded) Modifier.fillMaxSize() else Modifier)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_categories_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.width(24.dp))
-            KindChip(stringResource(R.string.nav_live_tv), kind == StreamKind.LIVE) { viewModel.selectKind(StreamKind.LIVE) }
-            Spacer(Modifier.width(8.dp))
-            KindChip(stringResource(R.string.nav_movies), kind == StreamKind.MOVIE) { viewModel.selectKind(StreamKind.MOVIE) }
-            Spacer(Modifier.width(8.dp))
-            KindChip(stringResource(R.string.nav_shows), kind == StreamKind.SERIES) { viewModel.selectKind(StreamKind.SERIES) }
+            if (!embedded) {
+                Text(stringResource(R.string.settings_categories_title), style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.width(24.dp))
+            }
+            val kinds = listOf(StreamKind.LIVE, StreamKind.MOVIE, StreamKind.SERIES)
+            Pills(
+                listOf(stringResource(R.string.nav_live_tv), stringResource(R.string.nav_movies), stringResource(R.string.nav_shows)),
+                isOn = { kinds[it] == kind },
+            ) { viewModel.selectKind(kinds[it]) }
             Spacer(Modifier.weight(1f))
-            HubTextButton(stringResource(R.string.common_done), onBack)
+            if (!embedded) HubTextButton(stringResource(R.string.common_done), onBack)
         }
 
+        Spacer(Modifier.height(6.dp))
+        SetNote(stringResource(R.string.categories_desc))
         Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.categories_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
 
         Row(Modifier.fillMaxSize()) {
             OnScreenKeyboard(
@@ -106,8 +103,8 @@ fun CategoriesScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         query.ifEmpty { stringResource(R.string.categories_filter_hint) },
-                        style = MaterialTheme.typography.titleLarge,
-                        color = if (query.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 20.sp,
+                        color = if (query.isEmpty()) SetDim
                         else MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -143,12 +140,12 @@ fun CategoriesScreen(
                 if (shownOn > 0 || shownOff > 0) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (shownOn > 0) {
-                            HubTextButton(stringResource(R.string.categories_all_off, shownOn)) {
+                            Pill(stringResource(R.string.categories_all_off, shownOn), on = false) {
                                 viewModel.setEnabled(entries.filter { it.enabled }.map { it.key }, enabled = false)
                             }
                         }
                         if (shownOff > 0) {
-                            HubTextButton(stringResource(R.string.categories_all_on, shownOff)) {
+                            Pill(stringResource(R.string.categories_all_on, shownOff), on = false) {
                                 viewModel.setEnabled(entries.filter { !it.enabled }.map { it.key }, enabled = true)
                             }
                         }
@@ -179,34 +176,6 @@ fun CategoriesScreen(
 }
 
 @Composable
-private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(10.dp)
-    Text(
-        label,
-        style = MaterialTheme.typography.titleMedium,
-        color = when {
-            focused -> MaterialTheme.colorScheme.primary
-            selected -> MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        modifier = Modifier
-            .onFocusChanged { focused = it.isFocused }
-            .focusLift(focused)
-            .clip(shape)
-            .background(
-                when {
-                    focused -> focusVeil(MaterialTheme.colorScheme.surfaceVariant)
-                    selected -> MaterialTheme.colorScheme.primaryContainer
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                },
-            )
-            .toggleable(interactionSource = null, indication = null, value = selected, role = Role.Tab, onValueChange = { onClick() })
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}
-
-@Composable
 private fun CategoryRow(entry: CategoriesViewModel.Entry, onToggle: (Boolean) -> Unit) =
     SwitchRow(entry.label, subtitle = null, checked = entry.enabled, onToggle = onToggle)
 
@@ -223,46 +192,36 @@ internal fun SwitchRow(
     emphasised: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(10.dp)
-    // The whole row is the toggle, so the d-pad lands on one target per category; the Switch
-    // only mirrors the state.
+    val shape = RoundedCornerShape(11.dp)
+    // The whole row is the toggle, so the d-pad lands on one target per category; the switch only
+    // mirrors the state. Lower than a settings row: these lists run to hundreds.
     Row(
         Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
-            .focusLift(focused)
             .clip(shape)
-            .background(
-                if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant)
-                else MaterialTheme.colorScheme.surfaceVariant,
-            )
-                        .toggleable(interactionSource = null, indication = null, value = checked, role = Role.Switch, onValueChange = onToggle)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .background(if (focused) SetFocus else SetCard)
+            .toggleable(interactionSource = null, indication = null, value = checked, role = Role.Switch, onValueChange = onToggle)
+            .padding(horizontal = 18.dp, vertical = if (emphasised) 10.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(
                 label,
-                style = if (emphasised) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                fontSize = if (emphasised) 17.sp else 15.5.sp,
+                fontWeight = FontWeight.Medium,
                 color = when {
                     focused -> MaterialTheme.colorScheme.primary
-                    checked || emphasised -> MaterialTheme.colorScheme.onSurface
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    checked || emphasised -> SetOn
+                    else -> SetDim
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (focused) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Text(subtitle, fontSize = 13.sp, color = SetDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
-        Switch(checked = checked, onCheckedChange = null)
+        SetSwitch(checked, small = !emphasised)
     }
 }

@@ -140,177 +140,106 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
         settings.setRecordingTarget(safeTarget)
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_recording_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = { persist(); onBack() }) { Text(stringResource(R.string.common_done)) }
+    // No Save button: every choice applies at once, what was typed in the NAS window when it closes.
+    var nasWindow by remember { mutableStateOf(false) }
+    val targets = listOf(AppSettings.RecordingTarget.INTERNAL, AppSettings.RecordingTarget.SMB, AppSettings.RecordingTarget.USB)
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetGroup(stringResource(R.string.recset_save_to))
+        SetPillsRow(
+            stringResource(R.string.set_rec_save_to),
+            null,
+            listOf(stringResource(R.string.set_rec_internal), stringResource(R.string.set_rec_nas), stringResource(R.string.set_rec_usb)),
+            targets.indexOf(target),
+            first = true,
+        ) { i ->
+            target = targets[i]
+            when {
+                // USB needs a folder first: the picker opens, the choice is saved once one is granted.
+                target == AppSettings.RecordingTarget.USB && usbTree == null ->
+                    runCatching { folderPicker.launch(null) }.onFailure { status = context.getString(R.string.recset_usb_no_picker) }
+                else -> settings.setRecordingTarget(target)
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.recset_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
+        when (target) {
+            AppSettings.RecordingTarget.SMB -> SetActionRow(
+                stringResource(R.string.recset_nas_connection),
+                status,
+                value = if (host.isBlank()) stringResource(R.string.set_rec_nas_setup) else "$host/$share",
+                icon = R.drawable.ic_set_hard_drives,
+            ) { nasWindow = true }
+            AppSettings.RecordingTarget.USB -> SetActionRow(
+                stringResource(R.string.recset_usb_section),
+                if (usbTree == null) stringResource(R.string.recset_usb_need_folder) else stringResource(R.string.recset_usb_hint),
+                value = usbLabel ?: stringResource(R.string.recset_usb_choose),
+                icon = R.drawable.ic_set_folder,
+            ) {
+                runCatching { folderPicker.launch(null) }.onFailure { status = context.getString(R.string.recset_usb_no_picker) }
+            }
+            else -> StorageInfo()
+        }
+
+        SetGroup(stringResource(R.string.recset_behaviour_title))
+        val min = stringResource(R.string.recset_minutes_short)
+        SetStepRow(
+            stringResource(R.string.recset_pad_start), stringResource(R.string.recset_pad_start_desc), "$padStart $min",
+            canDown = padStart > 0, canUp = padStart < 30,
+            onDown = { padStart = (padStart - 1).coerceAtLeast(0); settings.setRecordPadding(padStart, padEnd) },
+            onUp = { padStart = (padStart + 1).coerceAtMost(30); settings.setRecordPadding(padStart, padEnd) },
         )
-
-        Spacer(Modifier.height(20.dp))
-        SectionCard(stringResource(R.string.recset_background_title)) {
-            BackgroundStatus()
+        SetStepRow(
+            stringResource(R.string.recset_pad_end), stringResource(R.string.recset_pad_end_desc), "$padEnd $min",
+            canDown = padEnd > 0, canUp = padEnd < 60,
+            onDown = { padEnd = (padEnd - 1).coerceAtLeast(0); settings.setRecordPadding(padStart, padEnd) },
+            onUp = { padEnd = (padEnd + 1).coerceAtMost(60); settings.setRecordPadding(padStart, padEnd) },
+        )
+        SetSwitchRow(stringResource(R.string.recset_autoswitch), stringResource(R.string.recset_autoswitch_desc), autoSwitch) {
+            autoSwitch = it; settings.setRecordAutoSwitch(it)
+        }
+        SetSwitchRow(stringResource(R.string.recset_livepause), stringResource(R.string.recset_livepause_desc), livePause) {
+            livePause = it; settings.setLivePauseEnabled(it)
         }
 
-        Spacer(Modifier.height(20.dp))
-        SectionCard(stringResource(R.string.recset_behaviour_title)) {
-            StepperRow(
-                label = stringResource(R.string.recset_pad_start),
-                subtitle = stringResource(R.string.recset_pad_start_desc),
-                value = padStart,
-                unit = stringResource(R.string.recset_minutes_short),
-                min = 0, max = 30,
-            ) { padStart = it; settings.setRecordPadding(padStart, padEnd) }
-            StepperRow(
-                label = stringResource(R.string.recset_pad_end),
-                subtitle = stringResource(R.string.recset_pad_end_desc),
-                value = padEnd,
-                unit = stringResource(R.string.recset_minutes_short),
-                min = 0, max = 60,
-            ) { padEnd = it; settings.setRecordPadding(padStart, padEnd) }
-            ToggleRow(
-                label = stringResource(R.string.recset_autoswitch),
-                subtitle = stringResource(R.string.recset_autoswitch_desc),
-                checked = autoSwitch,
-            ) { autoSwitch = it; settings.setRecordAutoSwitch(it) }
-            ToggleRow(
-                label = stringResource(R.string.recset_livepause),
-                subtitle = stringResource(R.string.recset_livepause_desc),
-                checked = livePause,
-            ) { livePause = it; settings.setLivePauseEnabled(it) }
-        }
+        SetGroup(stringResource(R.string.recset_background_title))
+        BackgroundStatus()
+    }
 
-        Spacer(Modifier.height(20.dp))
-        SectionCard(stringResource(R.string.recset_save_to)) {
-            TargetRow(
-                label = stringResource(R.string.recset_internal_label),
-                subtitle = RecordingStorage.internalDir(context).absolutePath,
-                selected = target == AppSettings.RecordingTarget.INTERNAL,
-            ) { target = AppSettings.RecordingTarget.INTERNAL }
-            Spacer(Modifier.height(8.dp))
-            TargetRow(
-                label = stringResource(R.string.recset_smb_label),
-                subtitle = stringResource(R.string.recset_smb_subtitle),
-                selected = target == AppSettings.RecordingTarget.SMB,
-            ) { target = AppSettings.RecordingTarget.SMB }
-            Spacer(Modifier.height(8.dp))
-            TargetRow(
-                label = stringResource(R.string.recset_usb_label),
-                subtitle = stringResource(R.string.recset_usb_subtitle),
-                selected = target == AppSettings.RecordingTarget.USB,
-            ) { target = AppSettings.RecordingTarget.USB }
-        }
-
-        if (target == AppSettings.RecordingTarget.SMB) {
-            Spacer(Modifier.height(16.dp))
-            SectionCard(stringResource(R.string.recset_nas_connection)) {
+    if (nasWindow) {
+        SetDialog(stringResource(R.string.recset_nas_connection), onDismiss = { persist(); nasWindow = false }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Field(stringResource(R.string.recset_field_server), host, "192.168.1.10") { host = it }
                 Field(stringResource(R.string.recset_field_share), share, "video") { share = it }
                 Field(stringResource(R.string.recset_field_folder), folder, "OpenTV") { folder = it }
                 Field(stringResource(R.string.recset_field_username), user, "") { user = it }
                 Field(stringResource(R.string.recset_field_password), password, "", isPassword = true) { password = it }
-
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(
-                        enabled = !testing && host.isNotBlank() && share.isNotBlank(),
-                        onClick = {
-                            testing = true
-                            status = context.getString(R.string.recset_status_testing)
-                            val cfg = SmbConfig(host.trim(), share.trim(), folder.trim(), user, password)
-                            scope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    runCatching { SmbClient.test(cfg) }
-                                }
-                                testing = false
-                                status = result.fold(
-                                    onSuccess = { context.getString(R.string.recset_status_connected) },
-                                    onFailure = { context.getString(R.string.recset_status_failed, it.message ?: it.javaClass.simpleName) },
-                                )
-                            }
-                        },
-                    ) { Text(if (testing) stringResource(R.string.recset_status_testing) else stringResource(R.string.recset_test_connection)) }
-                }
                 status?.let {
                     Spacer(Modifier.height(10.dp))
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
-            }
-        }
-
-        if (target == AppSettings.RecordingTarget.USB) {
-            Spacer(Modifier.height(16.dp))
-            SectionCard(stringResource(R.string.recset_usb_section)) {
-                val label = usbLabel
-                if (usbTree != null && label != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            stringResource(R.string.recset_usb_saving_to, label),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f),
-                        )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Pill(
+                        if (testing) stringResource(R.string.recset_status_testing) else stringResource(R.string.recset_test_connection),
+                        on = false,
+                        enabled = !testing && host.isNotBlank() && share.isNotBlank(),
+                    ) {
+                        testing = true
+                        status = context.getString(R.string.recset_status_testing)
+                        val cfg = SmbConfig(host.trim(), share.trim(), folder.trim(), user, password)
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { runCatching { SmbClient.test(cfg) } }
+                            testing = false
+                            status = result.fold(
+                                onSuccess = { context.getString(R.string.recset_status_connected) },
+                                onFailure = { context.getString(R.string.recset_status_failed, it.message ?: it.javaClass.simpleName) },
+                            )
+                        }
                     }
-                } else {
-                    Text(
-                        stringResource(R.string.recset_usb_none),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = {
-                    runCatching { folderPicker.launch(null) }
-                        .onFailure { status = context.getString(R.string.recset_usb_no_picker) }
-                }) {
-                    Text(
-                        if (usbTree != null) stringResource(R.string.recset_usb_change)
-                        else stringResource(R.string.recset_usb_choose),
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    stringResource(R.string.recset_usb_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (target == AppSettings.RecordingTarget.USB && usbTree == null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(R.string.recset_usb_need_folder),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    Pill(stringResource(R.string.common_save), on = true) {
+                        persist(); status = context.getString(R.string.recset_status_saved); nasWindow = false
+                    }
                 }
             }
         }
-
-        if (target == AppSettings.RecordingTarget.INTERNAL) {
-            Spacer(Modifier.height(20.dp))
-            SectionCard(stringResource(R.string.recset_storage_title)) {
-                StorageInfo()
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Button(
-            enabled = target != AppSettings.RecordingTarget.USB || usbTree != null,
-            onClick = { persist(); status = context.getString(R.string.recset_status_saved) },
-        ) { Text(stringResource(R.string.common_save)) }
     }
 }
 
@@ -331,97 +260,18 @@ private fun StorageInfo() {
         used = u; count = c; free = f
     }
 
-    if (used < 0) {
-        Text(stringResource(R.string.recset_storage_reading), color = MaterialTheme.colorScheme.onSurfaceVariant)
-    } else {
-        Text(
-            stringResource(R.string.recset_storage_used, formatBytes(used), count),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            stringResource(R.string.recset_storage_free, formatBytes(free)),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    SetRow(
+        stringResource(R.string.recset_storage_title),
+        if (used < 0) stringResource(R.string.recset_storage_reading)
+        else stringResource(R.string.recset_storage_used, formatBytes(used), count) + " · " + stringResource(R.string.recset_storage_free, formatBytes(free)),
+        R.drawable.ic_set_hard_drives,
+    )
 }
 
 private fun formatBytes(bytes: Long): String {
     if (bytes <= 0) return "0 MB"
     val mb = bytes / (1024.0 * 1024.0)
     return if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
-}
-
-/** A label + subtitle with a Material switch on the right. */
-@Composable
-private fun ToggleRow(label: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-/** A label + subtitle with a –/value/+ stepper on the right, clamped to [min]..[max]. */
-@Composable
-private fun StepperRow(
-    label: String,
-    subtitle: String,
-    value: Int,
-    unit: String,
-    min: Int,
-    max: Int,
-    onChange: (Int) -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(12.dp))
-        StepButton(Icons.Filled.Remove, enabled = value > min) { onChange((value - 1).coerceAtLeast(min)) }
-        Text(
-            "$value $unit",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.widthIn(min = 64.dp).padding(horizontal = 8.dp),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        StepButton(Icons.Filled.Add, enabled = value < max) { onChange((value + 1).coerceAtMost(max)) }
-    }
-}
-
-@Composable
-private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val bg = when {
-        focused -> focusVeil(MaterialTheme.colorScheme.surface)
-        enabled -> MaterialTheme.colorScheme.surface
-        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
-    }
-    val fg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    Box(
-        Modifier
-            .size(40.dp)
-            .focusLift(focused)
-            .clip(RoundedCornerShape(10.dp))
-            .background(bg)
-            .focusable()
-            .clickable(interactionSource = null, indication = null, enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = if (enabled) fg else fg.copy(alpha = 0.4f))
-    }
 }
 
 /**
@@ -451,104 +301,21 @@ private fun BackgroundStatus() {
     }
 
     if (allowed) {
-        // A plain, unmistakable "it's live" confirmation box — the thing the user is looking for
-        // when they come back from the system dialog.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF17351F))
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.CheckCircle,
-                contentDescription = null,
-                tint = Color(0xFF4ADE80),
-                modifier = Modifier.size(30.dp),
-            )
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.recset_background_on_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF4ADE80),
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    stringResource(R.string.recset_background_on_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        SetRow(
+            stringResource(R.string.recset_background_on_title),
+            stringResource(R.string.recset_background_on_desc),
+            R.drawable.ic_set_shield_check,
+            titleColor = Color(0xFF4ADE80),
+        )
     } else {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    stringResource(R.string.recset_background_not_allowed),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f),
-                )
-                Button(onClick = { context.requestIgnoreBatteryOptimizations() }) {
-                    Text(stringResource(R.string.recset_background_fix))
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                stringResource(R.string.recset_background_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        SetRow(
+            stringResource(R.string.recset_background_not_allowed),
+            stringResource(R.string.recset_background_desc),
+            R.drawable.ic_set_warning,
+            titleColor = MaterialTheme.colorScheme.error,
+        ) {
+            Pill(stringResource(R.string.recset_background_fix), on = true) { context.requestIgnoreBatteryOptimizations() }
         }
-    }
-}
-
-@Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(8.dp))
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) { content() }
-    }
-}
-
-@Composable
-private fun TargetRow(label: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            if (selected) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
-            contentDescription = null,
-            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (selected) Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
     }
 }
 

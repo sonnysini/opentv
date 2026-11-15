@@ -125,7 +125,7 @@ fun ChannelManagerScreen(
     Column(Modifier.fillMaxSize()) {
         // Top bar: title + Done (Back also exits via BackHandler). Kept out of the two panes so
         // pressing RIGHT from a category lands in the channel list, not on this button.
-        Row(
+        if (!app.opentv.ui.settings.LocalSettingsEmbedded.current) Row(
             Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

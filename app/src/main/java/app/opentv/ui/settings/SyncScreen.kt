@@ -36,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
@@ -56,38 +58,30 @@ fun SyncScreen(
     onBack: () -> Unit,
     viewModel: SyncViewModel = viewModel(),
 ) {
-    var mode by remember { mutableStateOf(Mode.SHARE) }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_sync_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.sync_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
+    // Each way of syncing opens in a window over the page.
+    var mode by remember { mutableStateOf<Mode?>(null) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetNote(stringResource(R.string.sync_desc))
+        SetActionRow(stringResource(R.string.sync_share_from_here), icon = R.drawable.ic_set_arrows_clockwise) { mode = Mode.SHARE }
+        SetActionRow(stringResource(R.string.sync_receive), icon = R.drawable.ic_set_download) { mode = Mode.RECEIVE }
+        SetActionRow(stringResource(R.string.sync_nas), icon = R.drawable.ic_set_hard_drives) { mode = Mode.NAS }
+    }
+    mode?.let { m ->
+        val title = stringResource(
+            when (m) {
+                Mode.SHARE -> R.string.sync_share_from_here
+                Mode.RECEIVE -> R.string.sync_receive
+                Mode.NAS -> R.string.sync_nas
+            },
         )
-
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ModeChip(stringResource(R.string.sync_share_from_here), mode == Mode.SHARE) { mode = Mode.SHARE }
-            ModeChip(stringResource(R.string.sync_receive), mode == Mode.RECEIVE) { mode = Mode.RECEIVE }
-            ModeChip(stringResource(R.string.sync_nas), mode == Mode.NAS) { mode = Mode.NAS }
-        }
-        Spacer(Modifier.height(20.dp))
-
-        when (mode) {
-            Mode.SHARE -> SharePane(viewModel)
-            Mode.RECEIVE -> ReceivePane(viewModel)
-            Mode.NAS -> NasPane(viewModel)
+        SetDialog(title, onDismiss = { mode = null }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                when (m) {
+                    Mode.SHARE -> SharePane(viewModel)
+                    Mode.RECEIVE -> ReceivePane(viewModel)
+                    Mode.NAS -> NasPane(viewModel)
+                }
+            }
         }
     }
 }
@@ -97,8 +91,8 @@ private enum class Mode { SHARE, RECEIVE, NAS }
 @Composable
 private fun SharePane(viewModel: SyncViewModel) {
     val state by viewModel.serverState.collectAsStateWithLifecycle()
-    Card {
-        Column(Modifier.padding(20.dp).widthIn(max = 640.dp)) {
+    Column {
+        Column(Modifier.widthIn(max = 640.dp)) {
             when (val s = state) {
                 is SyncServer.State.Sharing -> {
                     Text(stringResource(R.string.sync_ready_to_share), style = MaterialTheme.typography.titleMedium)
@@ -138,8 +132,8 @@ private fun ReceivePane(viewModel: SyncViewModel) {
     var entry by remember { mutableStateOf("") }
 
     Row {
-        Card {
-            Column(Modifier.padding(20.dp).widthIn(max = 520.dp)) {
+        Column {
+            Column(Modifier.widthIn(max = 520.dp)) {
                 Text(stringResource(R.string.sync_type_what_shows), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -194,8 +188,8 @@ private fun NasPane(viewModel: SyncViewModel) {
     val smbHost by viewModel.smbHost.collectAsStateWithLifecycle()
     val configured = smbHost.isNotBlank()
 
-    Card {
-        Column(Modifier.padding(20.dp).widthIn(max = 640.dp)) {
+    Column {
+        Column(Modifier.widthIn(max = 640.dp)) {
             Text(stringResource(R.string.sync_nas_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
