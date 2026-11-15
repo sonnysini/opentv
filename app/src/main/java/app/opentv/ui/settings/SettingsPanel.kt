@@ -84,6 +84,8 @@ private class Entry(
     @DrawableRes val icon: Int,
     // A long list (categories, channels): the drop-down takes the page's height and scrolls inside.
     val tall: Boolean = false,
+    // Opens in a window over the page instead of a drop-down (the phone QR).
+    val window: Boolean = false,
     val body: @Composable (close: () -> Unit) -> Unit,
 )
 
@@ -163,7 +165,7 @@ private fun SectionBody(section: SettingsSection, slots: SettingsSlots, onBackTo
                 Entry("channels", stringResource(R.string.common_channels), stringResource(R.string.settings_channels_subtitle), R.drawable.ic_set_list_bullets, tall = true) { ChannelManagerScreen(onBack = it) },
                 Entry("grouping", stringResource(R.string.settings_grouping_title), stringResource(R.string.settings_grouping_subtitle), R.drawable.ic_set_link_simple) { GroupingScreen(onBack = it) },
                 Entry("logos", stringResource(R.string.settings_logos_title), stringResource(R.string.settings_logos_subtitle), R.drawable.ic_set_image) { LogoSettingsScreen(onBack = it) },
-                Entry("web", stringResource(R.string.settings_webmanager_title), stringResource(R.string.settings_webmanager_subtitle), R.drawable.ic_set_device_mobile) { WebManagerScreen(onBack = it) },
+                Entry("web", stringResource(R.string.settings_webmanager_title), stringResource(R.string.settings_webmanager_subtitle), R.drawable.ic_set_device_mobile, window = true) { WebManagerScreen(onBack = it) },
             ),
         )
         SettingsSection.SYSTEM -> Accordions(
@@ -191,6 +193,7 @@ private fun Embedded(content: @Composable () -> Unit) {
 @Composable
 private fun Accordions(entries: List<Entry>) {
     var open by remember { mutableStateOf<String?>(null) }
+    var window by remember { mutableStateOf<Entry?>(null) }
     val headers = remember { HashMap<String, FocusRequester>() }
     val first = LocalSettingsFirstFocus.current
     val close: () -> Unit = {
@@ -210,6 +213,15 @@ private fun Accordions(entries: List<Entry>) {
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             entries.forEach { e ->
+                if (e.window) {
+                    SetActionRow(
+                        e.title, e.subtitle, icon = e.icon,
+                        modifier = Modifier
+                            .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                            .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
+                    ) { open = null; window = e }
+                    return@forEach
+                }
                 val isOpen = open == e.key
                 val bring = remember { BringIntoViewRequester() }
                 LaunchedEffect(isOpen) {
@@ -236,6 +248,13 @@ private fun Accordions(entries: List<Entry>) {
                 }
             }
             Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    window?.let { e ->
+        val shut = { window = null; runCatching { headers[e.key]?.requestFocus() }; Unit }
+        SetDialog(e.title, onDismiss = shut, wide = true) {
+            CompositionLocalProvider(LocalSettingsEmbedded provides true) { e.body(shut) }
         }
     }
 }

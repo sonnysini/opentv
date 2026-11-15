@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.opentv.R
+import app.opentv.ui.focusOnEnter
 
 /**
  * True inside the settings page's drop-downs: a settings screen shown there leaves out its own
@@ -113,20 +114,13 @@ internal fun SetRow(
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.graphics.Shape = RowShape,
     onClick: (() -> Unit)? = null,
+    // Many pills (six qualities) would squeeze the title to a sliver: they go on a line of their own.
+    below: Boolean = false,
+    titleColor: Color? = null,
     trailing: @Composable (focused: Boolean) -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 58.dp)
-            .onFocusChanged { focused = if (onClick != null) it.isFocused else it.hasFocus }
-            .clip(shape)
-            .background(if (focused) SetFocus else SetCard)
-            .then(if (onClick != null) Modifier.clickable(interactionSource = null, indication = null, onClick = onClick) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val head: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         if (icon != null) {
             Icon(ImageVector.vectorResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
             Spacer(Modifier.width(15.dp))
@@ -136,13 +130,93 @@ internal fun SetRow(
                 title,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (focused) MaterialTheme.colorScheme.primary else SetOn,
+                color = if (focused) MaterialTheme.colorScheme.primary else titleColor ?: SetOn,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             if (!subtitle.isNullOrBlank()) {
                 Text(subtitle, fontSize = 13.sp, color = SetDim, modifier = Modifier.padding(top = 2.dp))
             }
         }
-        trailing(focused)
+    }
+    val frame = modifier
+        .fillMaxWidth()
+        .heightIn(min = 58.dp)
+        .onFocusChanged { focused = if (onClick != null) it.isFocused else it.hasFocus }
+        .clip(shape)
+        .background(if (focused) SetFocus else SetCard)
+        .then(if (onClick != null) Modifier.clickable(interactionSource = null, indication = null, onClick = onClick) else Modifier)
+        .padding(horizontal = 18.dp, vertical = 10.dp)
+    if (below) {
+        Column(frame) {
+            Row(verticalAlignment = Alignment.CenterVertically, content = head)
+            Box(Modifier.padding(top = 10.dp)) { trailing(focused) }
+        }
+    } else {
+        Row(frame, verticalAlignment = Alignment.CenterVertically) {
+            head()
+            trailing(focused)
+        }
+    }
+}
+
+/** A row that does one thing on OK (opens a window, starts a sync): a value or label on the right and a caret. */
+@Composable
+internal fun SetActionRow(
+    title: String,
+    subtitle: String? = null,
+    value: String? = null,
+    @DrawableRes icon: Int? = null,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    SetRow(title, subtitle, icon, modifier = modifier, onClick = { if (enabled) onClick() }) { focused ->
+        if (!value.isNullOrBlank()) {
+            Text(
+                value, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = if (focused) MaterialTheme.colorScheme.primary else SetDim,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+        }
+        Icon(
+            ImageVector.vectorResource(R.drawable.ic_set_caret_down),
+            contentDescription = null,
+            tint = if (focused) MaterialTheme.colorScheme.primary else SetDim,
+            modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = -90f },
+        )
+    }
+}
+
+/**
+ * A window over the settings page (adding a provider, the phone QR, syncing): dark card in the
+ * middle, the page dimmed behind. Back closes it.
+ */
+@Composable
+internal fun SetDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    wide: Boolean = false,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth(if (wide) 0.86f else 0.62f)
+                .heightIn(max = 620.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color(0xFF0E1513))
+                .border(1.dp, SetChipEdge, RoundedCornerShape(22.dp))
+                .padding(horizontal = 32.dp, vertical = 26.dp)
+                // Into the window with the d-pad: on its first control unless it put the focus somewhere itself.
+                .focusOnEnter(),
+        ) {
+            Text(title.uppercase(), fontFamily = SetOswald, fontSize = 30.sp, color = SetOn, modifier = Modifier.padding(bottom = 14.dp))
+            content()
+        }
     }
 }
 
@@ -186,8 +260,8 @@ internal fun SetValueRow(title: String, subtitle: String? = null, value: String,
 
 /** One choice among a few, as pills on the row: ◀/▶ move between them, OK picks. */
 @Composable
-internal fun SetPillsRow(title: String, subtitle: String? = null, options: List<String>, selected: Int, first: Boolean = false, onSelect: (Int) -> Unit) {
-    SetRow(title, subtitle) {
+internal fun SetPillsRow(title: String, subtitle: String? = null, options: List<String>, selected: Int, first: Boolean = false, @DrawableRes icon: Int? = null, onSelect: (Int) -> Unit) {
+    SetRow(title, subtitle, icon, below = options.size > 4) {
         Pills(options, isOn = { it == selected }, first = first, onClick = onSelect)
     }
 }
@@ -195,7 +269,7 @@ internal fun SetPillsRow(title: String, subtitle: String? = null, options: List<
 /** Several choices that can each be on (multi-select pills). */
 @Composable
 internal fun SetMultiPillsRow(title: String, subtitle: String? = null, options: List<String>, isOn: (Int) -> Boolean, onClick: (Int) -> Unit) {
-    SetRow(title, subtitle) { Pills(options, isOn, onClick = onClick) }
+    SetRow(title, subtitle, below = options.size > 4) { Pills(options, isOn, onClick = onClick) }
 }
 
 /** A number stepped with − and +: "− 100% +" with the value between, as in the mock. */
@@ -211,7 +285,7 @@ internal fun SetStepRow(title: String, subtitle: String? = null, value: String, 
 }
 
 @Composable
-private fun Pills(options: List<String>, isOn: (Int) -> Boolean, first: Boolean = false, onClick: (Int) -> Unit) {
+internal fun Pills(options: List<String>, isOn: (Int) -> Boolean, first: Boolean = false, onClick: (Int) -> Unit) {
     val firstFocus = if (first) LocalSettingsFirstFocus.current else null
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
@@ -304,3 +378,11 @@ internal fun SetAccordion(
 internal fun SetNote(text: String) {
     Text(text, fontSize = 13.sp, color = SetDim, modifier = Modifier.padding(start = 6.dp, top = 2.dp, bottom = 6.dp))
 }
+
+/** A text button in the settings style: an outlined pill. */
+@Composable
+internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Unit) =
+    Pill(label, on = false, modifier = modifier, onClick = onClick)
+
+@Composable
+internal fun HubTextButton(label: String, onClick: () -> Unit) = HubTextButton(label, Modifier, onClick)

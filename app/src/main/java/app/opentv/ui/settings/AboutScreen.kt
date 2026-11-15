@@ -62,126 +62,59 @@ fun AboutScreen(onBack: () -> Unit) {
     var updateLine by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
 
-    val embedded = LocalSettingsEmbedded.current
-    Column(
-        Modifier
-            .then(if (embedded) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
-            .verticalScroll(rememberScrollState())
-            .then(if (embedded) Modifier.padding(top = 4.dp) else Modifier.padding(horizontal = 32.dp, vertical = 24.dp)),
-    ) {
-        if (!embedded) Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.about_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        Section(stringResource(R.string.about_version)) {
-            Text("MyTV ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.about_based_on),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    enabled = !checking,
-                    onClick = {
-                        checking = true
-                        updateLine = null
-                        scope.launch {
-                            val graph = ServiceLocator.get(context)
-                            val update = runCatching {
-                                UpdateChecker(graph.httpClient, BuildConfig.VERSION_NAME).check()
-                            }.getOrNull()
-                            updateLine = when {
-                                update != null -> context.getString(R.string.about_update_available, update.versionName)
-                                else -> context.getString(R.string.about_up_to_date)
-                            }
-                            // Raise the shared update prompt right here — UpdateGate overlays every
-                            // screen, so the install dialog appears over About immediately.
-                            if (update != null) {
-                                app.opentv.update.UpdateHub.state.value =
-                                    app.opentv.update.UpdateUiState.Available(update)
-                            }
-                            checking = false
-                        }
-                    },
-                ) { Text(if (checking) stringResource(R.string.about_checking) else stringResource(R.string.about_check_updates)) }
-                updateLine?.let {
-                    Spacer(Modifier.width(16.dp))
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+    var supportWindow by remember { mutableStateOf(false) }
+    val open: (String) -> Unit = { url ->
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { Toast.makeText(context, url, Toast.LENGTH_LONG).show() }
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetRow("MyTV ${BuildConfig.VERSION_NAME}", updateLine ?: stringResource(R.string.about_based_on), R.drawable.ic_set_info) {
+            Pill(
+                stringResource(if (checking) R.string.about_checking else R.string.about_check_updates),
+                on = false,
+                enabled = !checking,
+            ) {
+                checking = true
+                updateLine = null
+                scope.launch {
+                    val graph = ServiceLocator.get(context)
+                    val update = runCatching { UpdateChecker(graph.httpClient, BuildConfig.VERSION_NAME).check() }.getOrNull()
+                    updateLine = if (update != null) context.getString(R.string.about_update_available, update.versionName)
+                    else context.getString(R.string.about_up_to_date)
+                    // The shared update prompt overlays every screen, so the install dialog shows at once.
+                    if (update != null) app.opentv.update.UpdateHub.state.value = app.opentv.update.UpdateUiState.Available(update)
+                    checking = false
                 }
             }
         }
+        SetActionRow(stringResource(R.string.about_source_code), value = "github.com/sonnysini/opentv", icon = R.drawable.ic_set_code) { open("https://github.com/sonnysini/opentv") }
+        SetActionRow(stringResource(R.string.about_report_bug), icon = R.drawable.ic_set_warning) { open("https://github.com/sonnysini/opentv/issues") }
+        SetActionRow(stringResource(R.string.about_install_page), icon = R.drawable.ic_set_download) { open("https://github.com/sonnysini/opentv/releases") }
+        SetActionRow(stringResource(R.string.about_licence_label), value = "GPL v3.0", icon = R.drawable.ic_set_info) { open("https://www.gnu.org/licenses/gpl-3.0.html") }
+        SetActionRow(stringResource(R.string.about_support_title), icon = R.drawable.ic_set_heart) { supportWindow = true }
+    }
 
-        Spacer(Modifier.height(16.dp))
-
-        Section(stringResource(R.string.about_what_is_title)) {
-            Text(
-                stringResource(R.string.about_what_is_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Section(stringResource(R.string.about_built_open_title)) {
-            Text(
-                stringResource(R.string.about_built_open_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Section(stringResource(R.string.about_support_title)) {
-            Text(
-                stringResource(R.string.about_support_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            LinkLine(stringResource(R.string.about_sponsor_github), "github.com/sponsors/legionnaireneyland")
-            Spacer(Modifier.height(12.dp))
-            LinkLine(
-                stringResource(R.string.about_donate_paypal),
-                "leetobin1982@gmail.com",
-                url = "https://www.paypal.com/donate/?business=leetobin1982@gmail.com&item_name=Support+OpenTV&no_recurring=0&currency_code=GBP",
-            )
-            Spacer(Modifier.height(12.dp))
-            val donateQr = remember { QrCodes.render("https://github.com/sponsors/legionnaireneyland", 400) }
-            donateQr?.let { bmp ->
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = stringResource(R.string.about_scan_to_donate),
-                    modifier = Modifier.size(180.dp).clip(RoundedCornerShape(8.dp)),
+    if (supportWindow) {
+        SetDialog(stringResource(R.string.about_support_title), onDismiss = { supportWindow = false }) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                SetNote(stringResource(R.string.about_support_body))
+                LinkLine(stringResource(R.string.about_sponsor_github), "github.com/sponsors/legionnaireneyland")
+                LinkLine(
+                    stringResource(R.string.about_donate_paypal),
+                    "leetobin1982@gmail.com",
+                    url = "https://www.paypal.com/donate/?business=leetobin1982@gmail.com&item_name=Support+OpenTV&no_recurring=0&currency_code=GBP",
                 )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    stringResource(R.string.about_scan_to_donate),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(Modifier.height(12.dp))
+                val donateQr = remember { QrCodes.render("https://github.com/sponsors/legionnaireneyland", 400) }
+                donateQr?.let { bmp ->
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = stringResource(R.string.about_scan_to_donate),
+                        modifier = Modifier.size(180.dp).clip(RoundedCornerShape(8.dp)),
+                    )
+                }
             }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Section(stringResource(R.string.about_licence_links_title)) {
-            LinkLine(
-                stringResource(R.string.about_licence_label),
-                "GNU General Public License v3.0",
-                url = "https://www.gnu.org/licenses/gpl-3.0.html",
-            )
-            LinkLine(stringResource(R.string.about_source_code), "github.com/sonnysini/opentv")
-            LinkLine(stringResource(R.string.about_report_bug), "github.com/sonnysini/opentv/issues")
-            LinkLine(stringResource(R.string.about_install_page), "github.com/sonnysini/opentv/releases")
         }
     }
 }

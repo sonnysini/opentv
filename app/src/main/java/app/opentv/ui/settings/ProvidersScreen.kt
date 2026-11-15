@@ -5,25 +5,14 @@
  */
 package app.opentv.ui.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,20 +20,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
+import app.opentv.core.AppSettings
 import app.opentv.data.model.LiveStreamFormat
 import app.opentv.data.model.Source
 import app.opentv.data.model.SourceKind
+import app.opentv.data.work.SyncWorker
 import app.opentv.ui.SourcesViewModel
+import app.opentv.ui.onboarding.AddSourceScreen
 
 /**
- * The provider list: what's connected, with the plumbing to add another or remove one. Removing
- * a source deletes its channels and guide with it — the confirm step is here because that is a
- * lot of data to lose to a stray click on a remote.
+ * The provider list as settings rows: one row per provider with its actions as pills (edit, on/off,
+ * remove — remove asks once more, it takes the channels and guide with it), the stream format for
+ * Xtream ones, then what to download. Adding or editing a provider opens a window over the page.
  */
 @Composable
 fun ProvidersScreen(
@@ -54,53 +47,50 @@ fun ProvidersScreen(
     viewModel: SourcesViewModel = viewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    var pendingRemove by remember { mutableStateOf<Source?>(null) }
+    var pendingRemove by remember { mutableStateOf<Long?>(null) }
+    // The add/edit window: null closed, 0 a new provider, else the id being edited.
+    var form by remember { mutableStateOf<Long?>(null) }
 
-    val embedded = LocalSettingsEmbedded.current
-    Column(Modifier.settingsRoot(embedded)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!embedded) Text(stringResource(R.string.settings_providers_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onAddSource) { Text(stringResource(R.string.providers_add)) }
-            if (!embedded) {
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        if (ui.sources.isEmpty()) {
-            Text(
-                stringResource(R.string.providers_empty),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        if (ui.sources.isEmpty()) SetNote(stringResource(R.string.providers_empty))
+        ui.sources.forEach { source ->
+            ProviderRow(
+                source = source,
+                confirming = pendingRemove == source.id,
+                onEdit = { form = source.id },
+                onAskRemove = { pendingRemove = source.id },
+                onCancelRemove = { pendingRemove = null },
+                onConfirmRemove = { viewModel.delete(source); pendingRemove = null },
+                onToggleEnabled = { viewModel.setEnabled(source, !source.enabled) },
             )
-            return@Column
-        }
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            items(ui.sources, key = { it.id }) { source ->
-                ProviderRow(
-                    source = source,
-                    confirming = pendingRemove?.id == source.id,
-                    onEdit = { onEditSource(source) },
-                    onAskRemove = { pendingRemove = source },
-                    onCancelRemove = { pendingRemove = null },
-                    onConfirmRemove = {
-                        viewModel.delete(source)
-                        pendingRemove = null
-                    },
-                    onSetLiveFormat = { viewModel.setLiveFormat(source, it) },
-                    onToggleEnabled = { viewModel.setEnabled(source, !source.enabled) },
-                )
+            // Stream format is an Xtream-panel concept — M3U sources carry their own URLs.
+            if (source.kind == SourceKind.XTREAM && source.enabled) {
+                val formats = listOf(LiveStreamFormat.HLS, LiveStreamFormat.MPEG_TS)
+                SetPillsRow(
+                    stringResource(R.string.provider_stream_format),
+                    stringResource(R.string.provider_stream_format_hint),
+                    listOf(stringResource(R.string.provider_stream_format_hls), stringResource(R.string.provider_stream_format_ts)),
+                    formats.indexOf(source.liveFormat),
+                ) { viewModel.setLiveFormat(source, formats[it]) }
             }
-            item(key = "content") {
-                Spacer(Modifier.height(8.dp))
-                ContentSection()
+        }
+        SetActionRow(stringResource(R.string.providers_add), icon = R.drawable.ic_set_plus) { form = 0L }
+
+        ContentRows()
+    }
+
+    form?.let { id ->
+        SetDialog(
+            title = stringResource(if (id == 0L) R.string.providers_add else R.string.common_edit),
+            onDismiss = { form = null },
+            wide = true,
+        ) {
+            Box(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                AddSourceScreen(
+                    viewModel = viewModel,
+                    editingSourceId = id.takeIf { it != 0L },
+                    onFinished = { form = null },
+                )
             }
         }
     }
@@ -114,98 +104,50 @@ private fun ProviderRow(
     onAskRemove: () -> Unit,
     onCancelRemove: () -> Unit,
     onConfirmRemove: () -> Unit,
-    onSetLiveFormat: (LiveStreamFormat) -> Unit,
     onToggleEnabled: () -> Unit,
 ) {
-    Card(Modifier.alpha(if (source.enabled) 1f else 0.6f)) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(source.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (source.enabled) "${source.kind.name} · ${hostOf(source.url)}"
-                        else "${stringResource(R.string.providers_disabled)} · ${hostOf(source.url)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                if (confirming) {
-                    Text(
-                        stringResource(R.string.providers_remove_confirm),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onConfirmRemove) { Text(stringResource(R.string.providers_yes_remove)) }
-                    TextButton(onClick = onCancelRemove) { Text(stringResource(R.string.common_cancel)) }
-                } else {
-                    TextButton(onClick = onToggleEnabled) {
-                        Text(stringResource(if (source.enabled) R.string.providers_disable else R.string.providers_enable))
-                    }
-                    TextButton(onClick = onEdit) { Text(stringResource(R.string.common_edit)) }
-                    TextButton(onClick = onAskRemove) { Text(stringResource(R.string.common_remove)) }
-                }
-            }
-
-            // Stream format is an Xtream-panel concept — M3U sources carry their own URLs, so the
-            // choice is meaningless there and hidden.
-            if (source.kind == SourceKind.XTREAM && source.enabled) {
-                Spacer(Modifier.height(14.dp))
-                StreamFormatSelector(selected = source.liveFormat, onSelect = onSetLiveFormat)
+    val sub = if (source.enabled) "${source.kind.name} · ${hostOf(source.url)}"
+    else "${stringResource(R.string.providers_disabled)} · ${hostOf(source.url)}"
+    SetRow(source.name, sub, R.drawable.ic_set_hard_drives, modifier = Modifier.alpha(if (source.enabled) 1f else 0.7f)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (confirming) {
+                Pill(stringResource(R.string.providers_yes_remove), on = false, onClick = onConfirmRemove)
+                Pill(stringResource(R.string.common_cancel), on = false, onClick = onCancelRemove)
+            } else {
+                Pill(stringResource(R.string.common_edit), on = false, onClick = onEdit)
+                Pill(stringResource(if (source.enabled) R.string.providers_disable else R.string.providers_enable), on = false, onClick = onToggleEnabled)
+                Pill(stringResource(R.string.common_remove), on = false, onClick = onAskRemove)
             }
         }
     }
 }
 
-/**
- * The per-source HLS / MPEG-TS picker. A compact two-option segmented control (the selected
- * container is a filled button, the other outlined) with a one-line hint on when to reach for it.
- */
+/** What to download (live, films, series), and a refresh that re-reads the catalogue now. */
 @Composable
-private fun StreamFormatSelector(
-    selected: LiveStreamFormat,
-    onSelect: (LiveStreamFormat) -> Unit,
-) {
-    Column {
-        Text(
-            stringResource(R.string.provider_stream_format),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FormatSegment(
-                label = stringResource(R.string.provider_stream_format_hls),
-                selected = selected == LiveStreamFormat.HLS,
-                onClick = { onSelect(LiveStreamFormat.HLS) },
-            )
-            FormatSegment(
-                label = stringResource(R.string.provider_stream_format_ts),
-                selected = selected == LiveStreamFormat.MPEG_TS,
-                onClick = { onSelect(LiveStreamFormat.MPEG_TS) },
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            stringResource(R.string.provider_stream_format_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
+private fun ContentRows() {
+    val context = LocalContext.current
+    val settings = remember { AppSettings.get(context) }
+    val liveEnabled by settings.liveEnabled.collectAsStateWithLifecycle()
+    val moviesEnabled by settings.moviesEnabled.collectAsStateWithLifecycle()
+    val seriesEnabled by settings.seriesEnabled.collectAsStateWithLifecycle()
+    val refreshing = stringResource(R.string.settings_content_refreshing)
 
-/** One option of the stream-format control: filled when chosen, outlined otherwise. */
-@Composable
-private fun FormatSegment(label: String, selected: Boolean, onClick: () -> Unit) {
-    if (selected) {
-        Button(onClick = onClick) { Text(label) }
-    } else {
-        OutlinedButton(onClick = onClick) { Text(label) }
+    SetGroup(stringResource(R.string.settings_section_content))
+    SetMultiPillsRow(
+        stringResource(R.string.set_content_title),
+        stringResource(R.string.settings_content_note),
+        listOf(stringResource(R.string.nav_live_tv), stringResource(R.string.nav_movies), stringResource(R.string.nav_shows)),
+        isOn = { listOf(liveEnabled, moviesEnabled, seriesEnabled)[it] },
+    ) {
+        when (it) {
+            0 -> settings.setLiveEnabled(!liveEnabled)
+            1 -> settings.setMoviesEnabled(!moviesEnabled)
+            else -> settings.setSeriesEnabled(!seriesEnabled)
+        }
+    }
+    SetActionRow(stringResource(R.string.set_content_refresh), stringResource(R.string.set_content_refresh_desc), icon = R.drawable.ic_set_arrows_clockwise) {
+        SyncWorker.refreshNow(context)
+        Toast.makeText(context, refreshing, Toast.LENGTH_SHORT).show()
     }
 }
 

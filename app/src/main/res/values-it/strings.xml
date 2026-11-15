@@ -918,4 +918,14 @@
     <string name="set_ui_scale_title">Dimensione interfaccia</string>
     <string name="set_sleep_short">%1$d min</string>
     <string name="set_seconds">%1$s s</string>
+    <string name="set_on">Attiva</string>
+    <string name="set_off">Spenta</string>
+    <string name="set_content_title">Cosa scaricare</string>
+    <string name="set_content_refresh">Aggiorna il catalogo ora</string>
+    <string name="set_content_refresh_desc">Riscarica canali, film e serie da tutti i fornitori</string>
+    <string name="set_rec_save_to">Salva su</string>
+    <string name="set_rec_internal">Questo dispositivo</string>
+    <string name="set_rec_nas">NAS</string>
+    <string name="set_rec_usb">USB</string>
+    <string name="set_rec_nas_setup">Da configurare</string>
 </resources>

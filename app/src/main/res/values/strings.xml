@@ -968,4 +968,14 @@
     <string name="set_ui_scale_title">Interface size</string>
     <string name="set_sleep_short">%1$d min</string>
     <string name="set_seconds">%1$s s</string>
+    <string name="set_on">On</string>
+    <string name="set_off">Off</string>
+    <string name="set_content_title">What to download</string>
+    <string name="set_content_refresh">Refresh the catalogue now</string>
+    <string name="set_content_refresh_desc">Downloads channels, films and series again from every provider</string>
+    <string name="set_rec_save_to">Save to</string>
+    <string name="set_rec_internal">This device</string>
+    <string name="set_rec_nas">NAS</string>
+    <string name="set_rec_usb">USB</string>
+    <string name="set_rec_nas_setup">To set up</string>
 </resources>

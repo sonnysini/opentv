@@ -70,133 +70,70 @@ fun EpgSettingsScreen(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
-    var newName by remember { mutableStateOf("") }
-    var newUrl by remember { mutableStateOf("") }
 
-    val embedded = LocalSettingsEmbedded.current
-    Column(Modifier.settingsRoot(embedded)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!embedded) Text(stringResource(R.string.settings_guide_title), style = MaterialTheme.typography.headlineMedium)
-            if (!embedded) Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = { viewModel.refresh() }, enabled = !ui.syncing) {
-                Text(if (ui.syncing) stringResource(R.string.epg_updating) else stringResource(R.string.epg_update_now))
-            }
-            if (!embedded) {
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-            }
-        }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetNote(stringResource(R.string.epg_desc))
+        SetActionRow(
+            title = stringResource(if (ui.syncing) R.string.epg_updating else R.string.epg_update_now),
+            subtitle = ui.statusLine,
+            icon = R.drawable.ic_set_arrows_clockwise,
+            enabled = !ui.syncing,
+        ) { viewModel.refresh() }
+        ui.feeds.forEach { feed -> FeedRow(feed, onToggle = { viewModel.setEnabled(feed, it) }, onRemove = { viewModel.remove(feed) }) }
+        SetActionRow(stringResource(R.string.epg_add_own), icon = R.drawable.ic_set_plus) { showAdd = true }
+    }
 
-        ui.statusLine?.let { line ->
-            Spacer(Modifier.height(8.dp))
-            Text(
-                line,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
+    if (showAdd) AddFeedDialog(onDismiss = { showAdd = false }) { name, url -> viewModel.addCustom(name, url); showAdd = false }
+}
 
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.epg_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(16.dp))
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ui.feeds, key = { it.id }) { feed ->
-                FeedRow(
-                    feed = feed,
-                    onToggle = { enabled -> viewModel.setEnabled(feed, enabled) },
-                    onRemove = { viewModel.remove(feed) },
-                )
-            }
-
-            item {
-                Spacer(Modifier.height(8.dp))
-                if (!showAdd) {
-                    OutlinedButton(onClick = { showAdd = true }) { Text(stringResource(R.string.epg_add_own)) }
-                } else {
-                    // Opening the form puts focus in it — not back on the top bar.
-                    val nameFocus = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { runCatching { nameFocus.requestFocus() } }
-                    Card {
-                        Column(Modifier.padding(16.dp)) {
-                            OutlinedTextField(
-                                value = newName,
-                                onValueChange = { newName = it },
-                                label = { Text(stringResource(R.string.epg_name_optional)) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
-                                modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).dpadLeavesField(focusManager),
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = newUrl,
-                                onValueChange = { newUrl = it },
-                                label = { Text(stringResource(R.string.epg_xmltv_url)) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { focusManager.moveFocus(FocusDirection.Down) }),
-                                modifier = Modifier.fillMaxWidth().dpadLeavesField(focusManager),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = {
-                                        viewModel.addCustom(newName, newUrl)
-                                        newName = ""; newUrl = ""; showAdd = false
-                                    },
-                                    enabled = newUrl.isNotBlank(),
-                                ) { Text(stringResource(R.string.epg_add_guide)) }
-                                TextButton(onClick = { newName = ""; newUrl = ""; showAdd = false }) {
-                                    Text(stringResource(R.string.common_cancel))
-                                }
-                            }
-                        }
-                    }
-                }
+/** A guide: the switch turns it on or off; one the user added has a Remove pill as well. */
+@Composable
+private fun FeedRow(feed: EpgFeed, onToggle: (Boolean) -> Unit, onRemove: () -> Unit) {
+    // The last sync outcome, verbatim — a guide that fails must say so where the user can see it.
+    val sub = feed.lastResult.takeIf { it.isNotEmpty() }
+    if (!feed.builtIn && feed.providerSourceId == null) {
+        SetRow(feed.name, sub) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Pill(stringResource(R.string.common_remove), on = false, onClick = onRemove)
+                Pill(stringResource(if (feed.enabled) R.string.set_on else R.string.set_off), on = feed.enabled) { onToggle(!feed.enabled) }
             }
         }
+    } else {
+        SetSwitchRow(feed.name, sub, feed.enabled, onToggle = onToggle)
     }
 }
 
 @Composable
-private fun FeedRow(
-    feed: EpgFeed,
-    onToggle: (Boolean) -> Unit,
-    onRemove: () -> Unit,
-) {
-    Card {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(feed.name, style = MaterialTheme.typography.titleMedium)
-                // The last sync outcome, verbatim — success counts or the actual error.
-                // A guide that fails must say so where the user can see it.
-                if (feed.lastResult.isNotEmpty()) {
-                    Text(
-                        feed.lastResult,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            // User-added feeds can be removed; provider and built-in ones only toggled.
-            if (!feed.builtIn && feed.providerSourceId == null) {
-                TextButton(onClick = onRemove) { Text(stringResource(R.string.common_remove)) }
-                Spacer(Modifier.width(4.dp))
-            }
-            Switch(checked = feed.enabled, onCheckedChange = onToggle)
+private fun AddFeedDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
+    val focusManager = LocalFocusManager.current
+    var newName by remember { mutableStateOf("") }
+    var newUrl by remember { mutableStateOf("") }
+    val nameFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { nameFocus.requestFocus() } }
+    SetDialog(stringResource(R.string.epg_add_own), onDismiss) {
+        OutlinedTextField(
+            value = newName,
+            onValueChange = { newName = it },
+            label = { Text(stringResource(R.string.epg_name_optional)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
+            modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).dpadLeavesField(focusManager),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = newUrl,
+            onValueChange = { newUrl = it },
+            label = { Text(stringResource(R.string.epg_xmltv_url)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.moveFocus(FocusDirection.Down) }),
+            modifier = Modifier.fillMaxWidth().dpadLeavesField(focusManager),
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Pill(stringResource(R.string.epg_add_guide), on = newUrl.isNotBlank(), enabled = newUrl.isNotBlank()) { onAdd(newName, newUrl) }
+            Pill(stringResource(R.string.common_cancel), on = false, onClick = onDismiss)
         }
     }
 }

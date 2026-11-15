@@ -90,7 +90,6 @@ import app.opentv.ui.settings.ParentalControlsScreen
 import app.opentv.ui.settings.ProfilesScreen
 import app.opentv.ui.settings.ProvidersScreen
 import app.opentv.ui.settings.RecordingSettingsScreen
-import app.opentv.ui.settings.SettingsHubScreen
 import app.opentv.ui.settings.StremioAddonsScreen
 import app.opentv.ui.settings.SyncScreen
 import app.opentv.ui.settings.WebManagerScreen
@@ -300,23 +299,6 @@ object Routes {
     const val ADD_SOURCE = "add-source"
     const val PLAYER = "player/{channelId}"
     const val SEARCH = "search"
-    const val EPG_SETTINGS = "epg-settings"
-    const val APPEARANCE = "appearance"
-    const val PLAYBACK = "playback"
-    const val TMDB = "tmdb"
-    const val LOGOS = "logos"
-    const val SETTINGS_HUB = "settings"
-    const val PROVIDERS = "providers"
-    const val ADDONS = "addons"
-    const val CHANNELS = "channels"
-    const val WEB_MANAGER = "web-manager"
-    const val PROFILES = "profiles"
-    const val PARENTAL = "parental"
-    const val CATEGORIES = "categories"
-    const val GROUPING = "grouping"
-    const val SYNC = "sync"
-    const val REC_SETTINGS = "recording-settings"
-    const val ABOUT = "about"
     const val SERIES_DETAIL = "series/{seriesId}"
     const val MOVIE_DETAIL = "movie/{movieId}"
     const val EDIT_SOURCE = "edit-source/{sourceId}"
@@ -527,12 +509,6 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            screen(Routes.PROFILES) {
-                ProfilesScreen(
-                    viewModel = profilesViewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
 
             screen(Routes.SEARCH) {
                 SearchScreen(
@@ -553,93 +529,20 @@ private fun OpenTvApp(isTelevision: Boolean) {
                 )
             }
 
-            screen(Routes.SETTINGS_HUB) {
-                SettingsHubScreen(
-                    accountName = activeProfileName,
-                    onOpenAccount = { navController.navigate(Routes.PROFILES) },
-                    onOpenProviders = { navController.navigate(Routes.PROVIDERS) },
-                    onOpenAddons = { navController.navigate(Routes.ADDONS) },
-                    onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },
-                    onOpenChannels = { navController.navigate(Routes.CHANNELS) },
-                    onOpenCategories = { navController.navigate(Routes.CATEGORIES) },
-                    onOpenGrouping = { navController.navigate(Routes.GROUPING) },
-                    onOpenWebManager = { navController.navigate(Routes.WEB_MANAGER) },
-                    onOpenLogos = { navController.navigate(Routes.LOGOS) },
-                    onOpenTmdb = { navController.navigate(Routes.TMDB) },
-                    onOpenAppearance = { navController.navigate(Routes.APPEARANCE) },
-                    onOpenPlayback = { navController.navigate(Routes.PLAYBACK) },
-                    onOpenParental = { navController.navigate(Routes.PARENTAL) },
-                    onOpenSync = { navController.navigate(Routes.SYNC) },
-                    onOpenRecordings = { navController.navigate(Routes.REC_SETTINGS) },
-                    onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                    onBack = { navController.popBackStack() },
-                )
-            }
 
-            screen(Routes.SYNC) {
-                SyncScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.REC_SETTINGS) {
-                RecordingSettingsScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.CHANNELS) {
-                ChannelManagerScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.WEB_MANAGER) {
-                WebManagerScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.CATEGORIES) {
-                CategoriesScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.GROUPING) {
-                GroupingScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.PARENTAL) {
-                ParentalControlsScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.PROVIDERS) {
-                ProvidersScreen(
-                    viewModel = sourcesViewModel,
-                    onAddSource = { navController.navigate(Routes.ADD_SOURCE) },
-                    onEditSource = { src -> navController.navigate(Routes.editSource(src.id)) },
-                    onBack = { navController.popBackStack() },
-                )
-            }
 
-            screen(Routes.ADDONS) {
-                StremioAddonsScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.ABOUT) {
-                AboutScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.EPG_SETTINGS) {
-                EpgSettingsScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.APPEARANCE) {
-                AppearanceSettingsScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.PLAYBACK) {
-                PlaybackSettingsScreen(onBack = { navController.popBackStack() })
-            }
 
-            screen(Routes.TMDB) {
-                TmdbSettingsScreen(onBack = { navController.popBackStack() })
-            }
-
-            screen(Routes.LOGOS) {
-                LogoSettingsScreen(onBack = { navController.popBackStack() })
-            }
 
             composable(Routes.PLAYER) { entry ->
                 val channelId = entry.arguments?.getString("channelId")?.toLongOrNull()

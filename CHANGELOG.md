@@ -13,6 +13,14 @@
   Channels…) open in place under the row, one at a time; Back closes them.
 - **Choices on the row.** Appearance and Playback pick right on the row, with pills (Theme:
   System / Dark / Light), switches and − / + steppers instead of lists of radio buttons.
+- **Every section in the same rows.** Providers (with edit / on-off / remove as pills and what
+  to download), Guide, Categories (Live / Films / Series pills over the search), Parental,
+  Recordings (*Save to*: This device / NAS / USB as pills, everything applied at once), Sync and
+  About are now rows like Appearance and Playback. Six qualities no longer squeeze their title:
+  long rows of pills go under it.
+- **Windows over the page.** Adding or editing a provider, a guide, the PIN, the NAS login, the
+  phone QR and each way of syncing open in a window over the settings; Back closes it.
+- The old settings list and its separate pages are gone.
 
 ## 0.61.0 — 12 November 2026
 
