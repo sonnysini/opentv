@@ -978,4 +978,5 @@
     <string name="set_rec_nas">NAS</string>
     <string name="set_rec_usb">USB</string>
     <string name="set_rec_nas_setup">To set up</string>
+    <string name="set_pin_set">Set PIN</string>
 </resources>

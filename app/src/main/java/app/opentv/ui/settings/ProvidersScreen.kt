@@ -85,12 +85,14 @@ fun ProvidersScreen(
             onDismiss = { form = null },
             wide = true,
         ) {
-            Box(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+            Box(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+              androidx.compose.runtime.CompositionLocalProvider(LocalSettingsEmbedded provides true) {
                 AddSourceScreen(
                     viewModel = viewModel,
                     editingSourceId = id.takeIf { it != 0L },
                     onFinished = { form = null },
                 )
+              }
             }
         }
     }

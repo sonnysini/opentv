@@ -206,7 +206,8 @@ internal fun SetDialog(
         Column(
             Modifier
                 .fillMaxWidth(if (wide) 0.86f else 0.62f)
-                .heightIn(max = 620.dp)
+                // Never taller than the screen (a 1080p Fire is 540 dp high).
+                .heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.9f).dp)
                 .clip(RoundedCornerShape(22.dp))
                 .background(Color(0xFF0E1513))
                 .border(1.dp, SetChipEdge, RoundedCornerShape(22.dp))

@@ -87,7 +87,7 @@ fun ParentalControlsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val first = LocalSettingsFirstFocus.current
                 Pill(
-                    stringResource(if (pinIsSet) R.string.parental_change_pin else R.string.parental_save_pin),
+                    stringResource(if (pinIsSet) R.string.parental_change_pin else R.string.set_pin_set),
                     on = false,
                     modifier = if (first != null) Modifier.focusRequester(first) else Modifier,
                 ) { pinWindow = true }
