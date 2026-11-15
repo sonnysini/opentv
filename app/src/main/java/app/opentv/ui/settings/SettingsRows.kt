@@ -195,7 +195,7 @@ internal fun SetPillsRow(title: String, subtitle: String? = null, options: List<
 /** Several choices that can each be on (multi-select pills). */
 @Composable
 internal fun SetMultiPillsRow(title: String, subtitle: String? = null, options: List<String>, isOn: (Int) -> Boolean, onClick: (Int) -> Unit) {
-    SetRow(title, subtitle) { Pills(options, isOn, onClick) }
+    SetRow(title, subtitle) { Pills(options, isOn, onClick = onClick) }
 }
 
 /** A number stepped with − and +: "− 100% +" with the value between, as in the mock. */
