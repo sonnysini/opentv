@@ -66,7 +66,8 @@ fun WebManagerScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+    val embedded = LocalSettingsEmbedded.current
+    Box(if (embedded) Modifier.fillMaxWidth().padding(8.dp) else Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         when (val current = state) {
             is ManagerServer.State.Listening -> Listening(current.session, onBack)
 

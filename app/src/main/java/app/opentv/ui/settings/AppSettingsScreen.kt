@@ -480,18 +480,21 @@ internal fun ContentSection() {
 /** A scrolling settings page: title and Done on top, [content] below. */
 @Composable
 internal fun SettingsPage(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+    val embedded = LocalSettingsEmbedded.current
     Column(
         Modifier
-            .fillMaxSize()
+            .then(if (embedded) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
+            .then(if (embedded) Modifier.padding(top = 4.dp) else Modifier.padding(horizontal = 32.dp, vertical = 24.dp)),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+        if (!embedded) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.weight(1f))
+                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            }
+            Spacer(Modifier.height(20.dp))
         }
-        Spacer(Modifier.height(20.dp))
         content()
     }
 }
@@ -915,3 +918,218 @@ private fun ContentToggleRow(
 
 /** Fewer stutters than this in a minute is just a live stream being a live stream. */
 private const val MIN_HICCUP_LIMIT = 2
+
+/**
+ * Settings › Appearance as rows on the settings page: every choice right on its row, as pills or a
+ * switch — no radio lists, no page behind.
+ */
+@Composable
+internal fun AppearanceRows() {
+    val context = LocalContext.current
+    val settings = remember { AppSettings.get(context) }
+    val themeMode by settings.themeMode.collectAsStateWithLifecycle()
+    val appStyle by settings.appStyle.collectAsStateWithLifecycle()
+    val menuStyle by settings.menuStyle.collectAsStateWithLifecycle()
+    val uiScale by settings.uiScalePercent.collectAsStateWithLifecycle()
+    val channelLayout by settings.channelLayout.collectAsStateWithLifecycle()
+    val previewVideo by settings.guidePreviewVideo.collectAsStateWithLifecycle()
+    val previewSound by settings.guidePreviewSound.collectAsStateWithLifecycle()
+    val language by settings.languageTag.collectAsStateWithLifecycle()
+    var showLanguagePicker by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetGroup(stringResource(R.string.settings_style_title))
+        val styles = listOf(AppSettings.AppStyle.OWNTV, AppSettings.AppStyle.CLASSIC)
+        SetPillsRow(
+            stringResource(R.string.settings_style_title), null,
+            listOf(stringResource(R.string.set_style_owntv), stringResource(R.string.set_style_classic)),
+            styles.indexOf(appStyle),
+        ) { settings.setAppStyle(styles[it]) }
+        val themes = listOf(AppSettings.ThemeMode.SYSTEM, AppSettings.ThemeMode.DARK, AppSettings.ThemeMode.LIGHT)
+        SetPillsRow(
+            stringResource(R.string.set_theme_title), stringResource(R.string.settings_theme_note),
+            listOf(stringResource(R.string.settings_theme_system), stringResource(R.string.settings_theme_dark), stringResource(R.string.settings_theme_light)),
+            themes.indexOf(themeMode),
+        ) { settings.setThemeMode(themes[it]) }
+        SetStepRow(
+            stringResource(R.string.set_ui_scale_title), stringResource(R.string.settings_ui_scale_note),
+            value = "$uiScale%",
+            canDown = uiScale > AppSettings.MIN_UI_SCALE,
+            canUp = uiScale < AppSettings.MAX_UI_SCALE,
+            onDown = { settings.setUiScalePercent(uiScale - AppSettings.UI_SCALE_STEP) },
+            onUp = { settings.setUiScalePercent(uiScale + AppSettings.UI_SCALE_STEP) },
+        )
+
+        SetGroup(stringResource(R.string.set_group_menu_guide))
+        val menus = listOf(AppSettings.MenuStyle.BAR, AppSettings.MenuStyle.HIDDEN, AppSettings.MenuStyle.COMPACT)
+        SetPillsRow(
+            stringResource(R.string.settings_menu_style_title), stringResource(R.string.settings_menu_style_note),
+            listOf(stringResource(R.string.settings_menu_style_bar), stringResource(R.string.settings_menu_style_hidden), stringResource(R.string.settings_menu_style_compact)),
+            menus.indexOf(menuStyle),
+        ) { settings.setMenuStyle(menus[it]) }
+        val layouts = listOf(AppSettings.ChannelLayout.GRID, AppSettings.ChannelLayout.LIST, AppSettings.ChannelLayout.FULLSCREEN)
+        SetPillsRow(
+            stringResource(R.string.settings_channel_layout_title), null,
+            listOf(stringResource(R.string.set_layout_grid), stringResource(R.string.set_layout_list), stringResource(R.string.set_layout_fullscreen)),
+            layouts.indexOf(channelLayout),
+        ) { settings.setChannelLayout(layouts[it]) }
+        SetSwitchRow(
+            stringResource(R.string.settings_live_preview_title), stringResource(R.string.settings_live_preview_subtitle),
+            checked = previewVideo, onToggle = settings::setGuidePreviewVideo,
+        )
+        SetSwitchRow(
+            stringResource(R.string.settings_preview_sound_title), stringResource(R.string.settings_preview_sound_subtitle),
+            checked = previewSound, onToggle = settings::setGuidePreviewSound,
+        )
+        val systemLabel = stringResource(R.string.settings_language_system)
+        SetValueRow(
+            stringResource(R.string.settings_section_language), stringResource(R.string.settings_language_note),
+            value = OpenTvLanguages.firstOrNull { it.first == language }?.second ?: systemLabel,
+        ) { showLanguagePicker = true }
+    }
+
+    if (showLanguagePicker) {
+        LanguagePickerDialog(
+            current = language,
+            onPick = { tag ->
+                showLanguagePicker = false
+                changeLanguage(context, settings, tag)
+            },
+            onDismiss = { showLanguagePicker = false },
+        )
+    }
+}
+
+/** Settings › Playback as rows on the settings page: switches, pills and − / + steppers. */
+@Composable
+internal fun PlaybackRows() {
+    val context = LocalContext.current
+    val settings = remember { AppSettings.get(context) }
+    val captions by settings.subtitlesEnabled.collectAsStateWithLifecycle()
+    val resumeLast by settings.resumeLastChannel.collectAsStateWithLifecycle()
+    val preferredQuality by settings.preferredQuality.collectAsStateWithLifecycle()
+    val qualityFallback by settings.qualityFallback.collectAsStateWithLifecycle()
+    val fallbackMillis by settings.qualityFallbackMillis.collectAsStateWithLifecycle()
+    val stallFallback by settings.stallFallback.collectAsStateWithLifecycle()
+    val stallMillis by settings.stallFallbackMillis.collectAsStateWithLifecycle()
+    val hiccupLimit by settings.hiccupLimit.collectAsStateWithLifecycle()
+    val liveOffset by settings.liveOffsetSeconds.collectAsStateWithLifecycle()
+    val manualSourceMode by settings.manualSourceMode.collectAsStateWithLifecycle()
+    val controlsTimeout by settings.controlsTimeoutSeconds.collectAsStateWithLifecycle()
+    val matchFrameRate by settings.matchFrameRate.collectAsStateWithLifecycle()
+    val rememberPicks by settings.rememberPicks.collectAsStateWithLifecycle()
+    val pickedCount = settings.pickedVariants.collectAsStateWithLifecycle().value.size
+    val deadline by SleepTimer.deadline.collectAsStateWithLifecycle()
+    val seconds = { millis: Int -> context.getString(R.string.set_seconds, DecimalFormat("0.#").format(millis / 1_000.0)) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetGroup(stringResource(R.string.settings_section_player))
+        SetSwitchRow(stringResource(R.string.settings_resume_title), stringResource(R.string.settings_resume_subtitle), resumeLast, onToggle = settings::setResumeLastChannel)
+        SetSwitchRow(stringResource(R.string.settings_match_frame_rate_title), stringResource(R.string.settings_match_frame_rate_subtitle), matchFrameRate, onToggle = settings::setMatchFrameRate)
+        SetSwitchRow(stringResource(R.string.settings_subtitles_title), stringResource(R.string.settings_subtitles_subtitle), captions, onToggle = settings::setSubtitlesEnabled)
+        SetStepRow(
+            stringResource(R.string.set_controls_timeout_title), null,
+            value = "$controlsTimeout s",
+            canDown = controlsTimeout > AppSettings.MIN_CONTROLS_TIMEOUT_SECONDS,
+            canUp = controlsTimeout < AppSettings.MAX_CONTROLS_TIMEOUT_SECONDS,
+            onDown = { settings.setControlsTimeoutSeconds(controlsTimeout - 1) },
+            onUp = { settings.setControlsTimeoutSeconds(controlsTimeout + 1) },
+        )
+        // The sleep timer: Off, or one of the presets (counting down from when it's picked).
+        val remaining = deadline?.let {
+            val left = it - System.currentTimeMillis()
+            if (left <= 0L) 0 else ((left + 59_999L) / 60_000L).toInt()
+        }
+        SetMultiPillsRow(
+            stringResource(R.string.settings_sleep_timer),
+            if (remaining == null) stringResource(R.string.settings_sleep_off_desc) else stringResource(R.string.settings_sleep_on_desc, remaining),
+            listOf(stringResource(R.string.settings_sleep_off)) + SleepTimer.presets.map { stringResource(R.string.set_sleep_short, it) },
+            isOn = { it == 0 && remaining == null },
+        ) { i -> if (i == 0) SleepTimer.clear() else SleepTimer.armMinutes(SleepTimer.presets[i - 1]) }
+
+        SetGroup(stringResource(R.string.set_group_quality))
+        val qualities = PreferredQuality.values().toList()
+        SetPillsRow(
+            stringResource(R.string.settings_quality_title), stringResource(R.string.settings_quality_note),
+            qualities.map { if (it == PreferredQuality.BEST) stringResource(R.string.settings_quality_best) else it.name },
+            qualities.indexOf(preferredQuality),
+        ) { settings.setPreferredQuality(qualities[it]) }
+        PreferredSourcesPills(settings)
+        SetSwitchRow(stringResource(R.string.settings_quality_fallback_title), stringResource(R.string.settings_quality_fallback_subtitle), qualityFallback, onToggle = settings::setQualityFallback)
+        if (qualityFallback) {
+            SetStepRow(
+                stringResource(R.string.set_quality_timeout_title), null, seconds(fallbackMillis),
+                canDown = fallbackMillis > AppSettings.MIN_FALLBACK_MILLIS, canUp = fallbackMillis < AppSettings.MAX_FALLBACK_MILLIS,
+                onDown = { settings.setQualityFallbackMillis((fallbackMillis - AppSettings.FALLBACK_STEP_MILLIS).coerceAtLeast(AppSettings.MIN_FALLBACK_MILLIS)) },
+                onUp = { settings.setQualityFallbackMillis((fallbackMillis + AppSettings.FALLBACK_STEP_MILLIS).coerceAtMost(AppSettings.MAX_FALLBACK_MILLIS)) },
+            )
+        }
+        SetSwitchRow(stringResource(R.string.settings_stall_fallback_title), stringResource(R.string.settings_stall_fallback_subtitle), stallFallback, onToggle = settings::setStallFallback)
+        if (stallFallback) {
+            SetStepRow(
+                stringResource(R.string.set_stall_timeout_title), null, seconds(stallMillis),
+                canDown = stallMillis > AppSettings.MIN_FALLBACK_MILLIS, canUp = stallMillis < AppSettings.MAX_FALLBACK_MILLIS,
+                onDown = { settings.setStallFallbackMillis((stallMillis - AppSettings.FALLBACK_STEP_MILLIS).coerceAtLeast(AppSettings.MIN_FALLBACK_MILLIS)) },
+                onUp = { settings.setStallFallbackMillis((stallMillis + AppSettings.FALLBACK_STEP_MILLIS).coerceAtMost(AppSettings.MAX_FALLBACK_MILLIS)) },
+            )
+        }
+        SetSwitchRow(
+            stringResource(R.string.settings_hiccup_title), stringResource(R.string.settings_hiccup_subtitle), hiccupLimit > 0,
+            onToggle = { on -> settings.setHiccupLimit(if (on) AppSettings.DEFAULT_HICCUP_LIMIT else 0) },
+        )
+        if (hiccupLimit > 0) {
+            SetStepRow(
+                stringResource(R.string.set_hiccup_limit_title), null, "$hiccupLimit",
+                canDown = hiccupLimit > MIN_HICCUP_LIMIT, canUp = hiccupLimit < AppSettings.MAX_HICCUP_LIMIT,
+                onDown = { settings.setHiccupLimit((hiccupLimit - 1).coerceAtLeast(MIN_HICCUP_LIMIT)) },
+                onUp = { settings.setHiccupLimit((hiccupLimit + 1).coerceAtMost(AppSettings.MAX_HICCUP_LIMIT)) },
+            )
+        }
+        SetStepRow(
+            stringResource(R.string.set_live_offset_title), stringResource(R.string.settings_live_offset_note),
+            value = if (liveOffset == 0) stringResource(R.string.set_auto) else "$liveOffset s",
+            canDown = liveOffset > 0, canUp = liveOffset < AppSettings.MAX_LIVE_OFFSET_SECONDS,
+            onDown = { settings.setLiveOffsetSeconds((liveOffset - AppSettings.LIVE_OFFSET_STEP_SECONDS).coerceAtLeast(0)) },
+            onUp = { settings.setLiveOffsetSeconds((liveOffset + AppSettings.LIVE_OFFSET_STEP_SECONDS).coerceAtMost(AppSettings.MAX_LIVE_OFFSET_SECONDS)) },
+        )
+        val modes = listOf(ManualSourceMode.STAY, ManualSourceMode.STUTTER_ONLY, ManualSourceMode.AUTO)
+        SetPillsRow(
+            stringResource(R.string.settings_manual_source_title), stringResource(R.string.settings_manual_source_note),
+            listOf(stringResource(R.string.settings_manual_source_stay), stringResource(R.string.settings_manual_source_stutter), stringResource(R.string.settings_manual_source_auto)),
+            modes.indexOf(manualSourceMode),
+        ) { settings.setManualSourceMode(modes[it]) }
+        SetSwitchRow(stringResource(R.string.settings_remember_picks_title), stringResource(R.string.settings_remember_picks_subtitle), rememberPicks, onToggle = settings::setRememberPicks)
+        if (pickedCount > 0) {
+            SetRow(stringResource(R.string.settings_remember_picks_reset, pickedCount), onClick = settings::clearPickedVariants)
+        }
+        // Last: on Fire TV a text field opens the keyboard as soon as it takes focus.
+        Spacer(Modifier.height(8.dp))
+        ScanServerRow(settings)
+    }
+}
+
+/** The preferred restream sources as pills: OK adds one to the end of the order or takes it off. */
+@Composable
+private fun PreferredSourcesPills(settings: AppSettings) {
+    val context = LocalContext.current
+    val preferred by settings.preferredSources.collectAsStateWithLifecycle()
+    val known by remember {
+        ServiceLocator.get(context).catalogRepository.observeAllCategories(StreamKind.LIVE).map { categories ->
+            categories.mapNotNull { CategoryFamily.of(it.name).source }
+                .distinctBy { it.lowercase() }
+                .sortedBy { it.lowercase() }
+        }
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val gone = preferred.filter { p -> known.none { it.equals(p, ignoreCase = true) } }
+    val sources = known + gone
+    if (sources.isEmpty()) return
+    val place = { s: String -> preferred.indexOfFirst { it.equals(s, ignoreCase = true) } }
+    SetMultiPillsRow(
+        stringResource(R.string.settings_sources_title), stringResource(R.string.settings_sources_note),
+        sources.map { s -> place(s).let { if (it >= 0) "${it + 1}. $s" else s } },
+        isOn = { place(sources[it]) >= 0 },
+    ) { i ->
+        val s = sources[i]
+        settings.setPreferredSources(if (place(s) >= 0) preferred.filterNot { it.equals(s, ignoreCase = true) } else preferred + s)
+    }
+}

@@ -140,13 +140,16 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
         settings.setRecordingTarget(safeTarget)
     }
 
+    val embedded = LocalSettingsEmbedded.current
+    // In the settings page there is no Done: what was typed is kept when the drop-down closes.
+    if (embedded) androidx.compose.runtime.DisposableEffect(Unit) { onDispose { persist() } }
     Column(
         Modifier
-            .fillMaxSize()
+            .then(if (embedded) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
+            .then(if (embedded) Modifier.padding(top = 4.dp) else Modifier.padding(horizontal = 32.dp, vertical = 24.dp)),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!embedded) Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.settings_recording_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = { persist(); onBack() }) { Text(stringResource(R.string.common_done)) }

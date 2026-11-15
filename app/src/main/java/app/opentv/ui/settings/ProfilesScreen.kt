@@ -66,17 +66,16 @@ fun ProfilesScreen(
         return
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.profiles_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
+            if (!embedded) Text(stringResource(R.string.profiles_title), style = MaterialTheme.typography.headlineMedium)
+            if (!embedded) Spacer(Modifier.weight(1f))
             Button(onClick = { editing = NEW }) { Text(stringResource(R.string.profiles_add)) }
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            if (!embedded) {
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            }
         }
 
         Spacer(Modifier.height(20.dp))

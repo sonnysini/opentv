@@ -56,17 +56,16 @@ fun ProvidersScreen(
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     var pendingRemove by remember { mutableStateOf<Source?>(null) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_providers_title), style = MaterialTheme.typography.headlineMedium)
+            if (!embedded) Text(stringResource(R.string.settings_providers_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = onAddSource) { Text(stringResource(R.string.providers_add)) }
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            if (!embedded) {
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            }
         }
 
         Spacer(Modifier.height(16.dp))

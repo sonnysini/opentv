@@ -67,21 +67,20 @@ fun CategoriesScreen(
     val italianOnly by viewModel.italianOnly.collectAsStateWithLifecycle()
     val foreignSportOff by viewModel.foreignSportOff.collectAsStateWithLifecycle()
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 28.dp, vertical = 20.dp),
-    ) {
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded, 28.dp, 20.dp).then(if (embedded) Modifier.fillMaxSize() else Modifier)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_categories_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.width(24.dp))
+            if (!embedded) {
+                Text(stringResource(R.string.settings_categories_title), style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.width(24.dp))
+            }
             KindChip(stringResource(R.string.nav_live_tv), kind == StreamKind.LIVE) { viewModel.selectKind(StreamKind.LIVE) }
             Spacer(Modifier.width(8.dp))
             KindChip(stringResource(R.string.nav_movies), kind == StreamKind.MOVIE) { viewModel.selectKind(StreamKind.MOVIE) }
             Spacer(Modifier.width(8.dp))
             KindChip(stringResource(R.string.nav_shows), kind == StreamKind.SERIES) { viewModel.selectKind(StreamKind.SERIES) }
             Spacer(Modifier.weight(1f))
-            HubTextButton(stringResource(R.string.common_done), onBack)
+            if (!embedded) HubTextButton(stringResource(R.string.common_done), onBack)
         }
 
         Spacer(Modifier.height(8.dp))

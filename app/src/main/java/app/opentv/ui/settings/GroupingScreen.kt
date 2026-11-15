@@ -77,13 +77,10 @@ fun GroupingScreen(
         refocusIndex = null
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_grouping_title), style = MaterialTheme.typography.headlineMedium)
+            if (!embedded) Text(stringResource(R.string.settings_grouping_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
             if (busy) {
                 Text(
@@ -93,7 +90,7 @@ fun GroupingScreen(
                 )
                 Spacer(Modifier.width(16.dp))
             }
-            HubTextButton(stringResource(R.string.common_done), Modifier.focusRequester(doneFocus), onBack)
+            if (!embedded) HubTextButton(stringResource(R.string.common_done), Modifier.focusRequester(doneFocus), onBack)
         }
         Spacer(Modifier.height(8.dp))
         Text(

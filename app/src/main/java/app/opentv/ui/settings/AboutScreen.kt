@@ -62,13 +62,14 @@ fun AboutScreen(onBack: () -> Unit) {
     var updateLine by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
 
+    val embedded = LocalSettingsEmbedded.current
     Column(
         Modifier
-            .fillMaxSize()
+            .then(if (embedded) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 24.dp),
+            .then(if (embedded) Modifier.padding(top = 4.dp) else Modifier.padding(horizontal = 32.dp, vertical = 24.dp)),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!embedded) Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.about_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }

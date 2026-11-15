@@ -945,4 +945,27 @@
     <string name="settings_menu_style_hidden">Full screen</string>
     <string name="settings_menu_style_compact">Compact only</string>
     <string name="settings_menu_style_note">Bar: icons when closed; LEFT opens it with the names and pushes the page aside. Full screen: no menu at rest, the page takes the whole width; LEFT from the page\'s edge brings it in. Compact only: icons only, it never opens.</string>
+    <!-- Settings page: rail beside drop-downs (0.62.0) -->
+    <string name="set_rail_parental">Parental</string>
+    <string name="set_sources_desc">Where channels, movies and the guide come from</string>
+    <string name="set_channels_desc">What you see in live TV and how it is organised</string>
+    <string name="set_system_desc">Sync, version and updates</string>
+    <string name="set_account_desc">Switch or manage profiles</string>
+    <string name="set_theme_title">Theme</string>
+    <string name="set_style_owntv">OwnTV</string>
+    <string name="set_style_classic">Classic</string>
+    <string name="set_layout_grid">Grid</string>
+    <string name="set_layout_list">List</string>
+    <string name="set_layout_fullscreen">Full screen</string>
+    <string name="set_group_menu_guide">Menu and guide</string>
+    <string name="set_group_quality">Quality and sources</string>
+    <string name="set_live_offset_title">Delay from live</string>
+    <string name="set_auto">Auto</string>
+    <string name="set_hiccup_limit_title">Stutters in a minute</string>
+    <string name="set_quality_timeout_title">Wait before switching</string>
+    <string name="set_stall_timeout_title">Frozen for</string>
+    <string name="set_controls_timeout_title">Player bar hides after</string>
+    <string name="set_ui_scale_title">Interface size</string>
+    <string name="set_sleep_short">%1$d min</string>
+    <string name="set_seconds">%1$s s</string>
 </resources>

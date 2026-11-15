@@ -74,19 +74,18 @@ fun EpgSettingsScreen(
     var newName by remember { mutableStateOf("") }
     var newUrl by remember { mutableStateOf("") }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
+    val embedded = LocalSettingsEmbedded.current
+    Column(Modifier.settingsRoot(embedded)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.settings_guide_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
+            if (!embedded) Text(stringResource(R.string.settings_guide_title), style = MaterialTheme.typography.headlineMedium)
+            if (!embedded) Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = { viewModel.refresh() }, enabled = !ui.syncing) {
                 Text(if (ui.syncing) stringResource(R.string.epg_updating) else stringResource(R.string.epg_update_now))
             }
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            if (!embedded) {
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            }
         }
 
         ui.statusLine?.let { line ->

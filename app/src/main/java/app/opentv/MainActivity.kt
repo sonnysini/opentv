@@ -508,7 +508,17 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onAddSource = { navController.navigate(Routes.ADD_SOURCE) },
                     onRefresh = sourcesViewModel::refreshAll,
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                    onOpenSettings = { navController.navigate(Routes.SETTINGS_HUB) },
+                    settingsSlots = app.opentv.ui.settings.SettingsSlots(
+                        providers = { back ->
+                            ProvidersScreen(
+                                viewModel = sourcesViewModel,
+                                onAddSource = { navController.navigate(Routes.ADD_SOURCE) },
+                                onEditSource = { src -> navController.navigate(Routes.editSource(src.id)) },
+                                onBack = back,
+                            )
+                        },
+                        account = { back -> ProfilesScreen(viewModel = profilesViewModel, onBack = back) },
+                    ),
                     onPlayRecording = playRecording,
                     onPlayCatchup = { key, url, title, ua ->
                         // Catch-up is a seekable archive stream — plays through the VOD player.

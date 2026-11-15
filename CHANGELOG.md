@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.62.0 — 15 November 2026
+
+- **Settings open in the menu.** Settings no longer is a page of its own: picking it, the menu
+  stays where it is and becomes the settings menu — the app's entries slide out, *Settings* rises
+  to the top as the title, the sections come in (Sources, Channels, Appearance, Playback,
+  Recordings; Parental, System and Account at the bottom) — while the page fades into the
+  section. Moving through the menu previews each section, dimmed; OK or ▶ goes in and the menu
+  closes to icons. Back returns to the menu, and from the menu the same animation in reverse
+  brings back the page you were on. The settings open on the section used last.
+- **Drop-downs instead of pages.** Rows with more inside (Providers, Guide, Categories,
+  Channels…) open in place under the row, one at a time; Back closes them.
+- **Choices on the row.** Appearance and Playback pick right on the row, with pills (Theme:
+  System / Dark / Light), switches and − / + steppers instead of lists of radio buttons.
+
 ## 0.61.0 — 12 November 2026
 
 - **A shelf for every provider category.** Movies and Shows now end their *Featured* page with a
