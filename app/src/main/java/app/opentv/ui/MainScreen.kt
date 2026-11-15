@@ -541,6 +541,10 @@ private fun NavRail(
     // them already there.
     val labelAlpha = { if (hidden) 1f else ((open - 0.4f) / 0.6f).coerceIn(0f, 1f) }
     val shift = with(density) { ITEM_SHIFT.toPx() }
+    // Composition only hears when the change into the settings starts and ends; each frame of it
+    // is read in the layers.
+    val settingsShown by remember { androidx.compose.runtime.derivedStateOf { settingsK() > 0f } }
+    val flying by remember { androidx.compose.runtime.derivedStateOf { settingsK().let { it > 0f && it < 1f } } }
 
     // Full screen: the slot it takes beside the page grows from nothing as it slides in, so the page
     // is pushed by as much as the menu shows.
@@ -680,7 +684,7 @@ private fun NavRail(
         }
 
         // ---- the settings menu ----------------------------------------------------------------
-        if (settingsOpen || settingsK() > 0f) {
+        if (settingsOpen || settingsShown) {
             Column(Modifier.fillMaxSize().padding(vertical = BAR_PAD)) {
                 // The title, where the logo is: the gear in the accent, "Settings" in white. It
                 // shows once the flying copy has landed on it.
@@ -733,19 +737,22 @@ private fun NavRail(
             }
 
             // The Settings entry flying from the bottom of the menu to the title's place, turning from
-            // the accent to white on the way.
-            val k = settingsK()
-            if (k > 0f && k < 1f) {
+            // the accent to white on the way. Everything that moves is read in the layers, so the
+            // menu isn't composed again on every frame.
+            if (flying) {
                 val from = barHeight - BAR_PAD - ITEM_PITCH
                 val to = BAR_PAD + (LOGO_BLOCK - ITEM_PITCH) / 2
-                val mv = inOut((k - 0.08f) / 0.55f)
-                val tw = ease((k - 0.55f) / 0.2f)
                 val primary = MaterialTheme.colorScheme.primary
+                val label = stringResource(R.string.nav_settings)
+                val tw = { ease((settingsK() - 0.55f) / 0.2f) }
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(ITEM_PITCH)
-                        .graphicsLayer { translationY = (from + (to - from) * mv).toPx() },
+                        .graphicsLayer {
+                            val mv = inOut((settingsK() - 0.08f) / 0.55f)
+                            translationY = (from + (to - from) * mv).toPx()
+                        },
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     // The focus pill travels with it for a while, then fades.
@@ -754,28 +761,34 @@ private fun NavRail(
                             .padding(horizontal = PILL_INSET)
                             .fillMaxWidth()
                             .height(PILL_HEIGHT)
-                            .graphicsLayer { alpha = if (k < 0.62f) 1f - ease((k - 0.4f) / 0.2f) else 0f }
+                            .graphicsLayer { val k = settingsK(); alpha = if (k < 0.62f) 1f - ease((k - 0.4f) / 0.2f) else 0f }
                             .clip(RoundedCornerShape(PILL_RADIUS))
                             .background(primary.copy(alpha = FOCUS_VEIL_ALPHA)),
                     )
                     Row(Modifier.wrapContentWidth(Alignment.Start, unbounded = true), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.width(BAR_CLOSED), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.width(BAR_CLOSED).graphicsLayer { val g = 1f + (LOGO_SIZE / ICON_SIZE - 1f) * tw(); scaleX = g; scaleY = g },
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Icon(
-                                ImageVector.vectorResource(if (tw > 0.5f) R.drawable.ic_nav_settings else R.drawable.ic_nav_settings_fill),
+                                ImageVector.vectorResource(R.drawable.ic_nav_settings_fill),
                                 contentDescription = null,
                                 tint = primary,
-                                modifier = Modifier.size(ICON_SIZE + (LOGO_SIZE - ICON_SIZE) * tw),
+                                modifier = Modifier.size(ICON_SIZE).graphicsLayer { alpha = 1f - tw() },
+                            )
+                            Icon(
+                                ImageVector.vectorResource(R.drawable.ic_nav_settings),
+                                contentDescription = null,
+                                tint = primary,
+                                modifier = Modifier.size(ICON_SIZE).graphicsLayer { alpha = tw() },
                             )
                         }
-                        Text(
-                            stringResource(R.string.nav_settings),
-                            style = labelStyle,
-                            color = androidx.compose.ui.graphics.lerp(primary, Color.White, tw),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.graphicsLayer { alpha = labelAlpha() },
-                        )
+                        Box(Modifier.graphicsLayer { alpha = labelAlpha() }) {
+                            Text(label, style = labelStyle, color = primary, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false,
+                                modifier = Modifier.graphicsLayer { alpha = 1f - tw() })
+                            Text(label, style = labelStyle, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false,
+                                modifier = Modifier.graphicsLayer { alpha = tw() })
+                        }
                     }
                 }
             }
