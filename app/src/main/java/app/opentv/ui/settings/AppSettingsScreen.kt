@@ -944,6 +944,7 @@ internal fun AppearanceRows() {
             stringResource(R.string.settings_style_title), null,
             listOf(stringResource(R.string.set_style_owntv), stringResource(R.string.set_style_classic)),
             styles.indexOf(appStyle),
+            first = true,
         ) { settings.setAppStyle(styles[it]) }
         val themes = listOf(AppSettings.ThemeMode.SYSTEM, AppSettings.ThemeMode.DARK, AppSettings.ThemeMode.LIGHT)
         SetPillsRow(
@@ -1024,7 +1025,11 @@ internal fun PlaybackRows() {
 
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         SetGroup(stringResource(R.string.settings_section_player))
-        SetSwitchRow(stringResource(R.string.settings_resume_title), stringResource(R.string.settings_resume_subtitle), resumeLast, onToggle = settings::setResumeLastChannel)
+        SetSwitchRow(
+            stringResource(R.string.settings_resume_title), stringResource(R.string.settings_resume_subtitle), resumeLast,
+            modifier = LocalSettingsFirstFocus.current?.let { Modifier.focusRequester(it) } ?: Modifier,
+            onToggle = settings::setResumeLastChannel,
+        )
         SetSwitchRow(stringResource(R.string.settings_match_frame_rate_title), stringResource(R.string.settings_match_frame_rate_subtitle), matchFrameRate, onToggle = settings::setMatchFrameRate)
         SetSwitchRow(stringResource(R.string.settings_subtitles_title), stringResource(R.string.settings_subtitles_subtitle), captions, onToggle = settings::setSubtitlesEnabled)
         SetStepRow(

@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -59,6 +61,13 @@ import app.opentv.R
  * content needs.
  */
 val LocalSettingsEmbedded = staticCompositionLocalOf { false }
+
+/**
+ * Where the focus lands coming into the settings page: put on the page's first row (or its first
+ * pill). Without it the page picks the focusable nearest its left edge — a whole-row switch half
+ * way down rather than the pills at the top.
+ */
+val LocalSettingsFirstFocus = staticCompositionLocalOf<androidx.compose.ui.focus.FocusRequester?> { null }
 
 /** The root of a settings screen: the whole screen on its own, just its width in a drop-down. */
 internal fun Modifier.settingsRoot(embedded: Boolean, horizontal: androidx.compose.ui.unit.Dp = 32.dp, vertical: androidx.compose.ui.unit.Dp = 24.dp): Modifier =
@@ -139,8 +148,8 @@ internal fun SetRow(
 
 /** An on/off row: OK anywhere on it flips the switch. */
 @Composable
-internal fun SetSwitchRow(title: String, subtitle: String? = null, checked: Boolean, @DrawableRes icon: Int? = null, onToggle: (Boolean) -> Unit) {
-    SetRow(title, subtitle, icon, onClick = { onToggle(!checked) }) { SetSwitch(checked) }
+internal fun SetSwitchRow(title: String, subtitle: String? = null, checked: Boolean, @DrawableRes icon: Int? = null, modifier: Modifier = Modifier, onToggle: (Boolean) -> Unit) {
+    SetRow(title, subtitle, icon, modifier = modifier, onClick = { onToggle(!checked) }) { SetSwitch(checked) }
 }
 
 /** The switch as drawn in the mock: a teal track with a dark knob on, grey off. */
@@ -177,9 +186,9 @@ internal fun SetValueRow(title: String, subtitle: String? = null, value: String,
 
 /** One choice among a few, as pills on the row: ◀/▶ move between them, OK picks. */
 @Composable
-internal fun SetPillsRow(title: String, subtitle: String? = null, options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+internal fun SetPillsRow(title: String, subtitle: String? = null, options: List<String>, selected: Int, first: Boolean = false, onSelect: (Int) -> Unit) {
     SetRow(title, subtitle) {
-        Pills(options, isOn = { it == selected }, onClick = onSelect)
+        Pills(options, isOn = { it == selected }, first = first, onClick = onSelect)
     }
 }
 
@@ -202,18 +211,21 @@ internal fun SetStepRow(title: String, subtitle: String? = null, value: String, 
 }
 
 @Composable
-private fun Pills(options: List<String>, isOn: (Int) -> Boolean, onClick: (Int) -> Unit) {
+private fun Pills(options: List<String>, isOn: (Int) -> Boolean, first: Boolean = false, onClick: (Int) -> Unit) {
+    val firstFocus = if (first) LocalSettingsFirstFocus.current else null
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        options.forEachIndexed { i, label -> Pill(label, on = isOn(i)) { onClick(i) } }
+        options.forEachIndexed { i, label ->
+            Pill(label, on = isOn(i), modifier = if (i == 0 && firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier) { onClick(i) }
+        }
     }
 }
 
 @Composable
-internal fun Pill(label: String, on: Boolean, enabled: Boolean = true, small: Boolean = false, onClick: () -> Unit) {
+internal fun Pill(label: String, on: Boolean, enabled: Boolean = true, small: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val primary = MaterialTheme.colorScheme.primary
     val shape = CircleShape
@@ -228,7 +240,7 @@ internal fun Pill(label: String, on: Boolean, enabled: Boolean = true, small: Bo
             !enabled -> SetDim.copy(alpha = 0.4f)
             else -> SetDim
         },
-        modifier = Modifier
+        modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { val s = if (focused) 1.06f else 1f; scaleX = s; scaleY = s }
             .clip(shape)

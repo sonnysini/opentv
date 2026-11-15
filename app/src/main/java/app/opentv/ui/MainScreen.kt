@@ -212,14 +212,26 @@ fun MainScreen(
     // fades into the settings page. [settingsK] runs that change, 0 = app, 1 = settings.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf(LastSettings.section) }
-    val settingsAnim = animateFloatAsState(
-        targetValue = if (settingsOpen) 1f else 0f,
-        animationSpec = tween(SETTINGS_MILLIS, easing = androidx.compose.animation.core.LinearEasing),
-        label = "settings",
-    )
+    val settingsAnim = remember { Animatable(if (settingsOpen) 1f else 0f) }
+    // The page under the settings is let go once they cover it (no live preview playing behind
+    // them), and built again — still hidden — before the way back starts: building the Live page
+    // takes a moment, and doing it mid-animation swallowed the animation.
+    var pageAlive by remember { mutableStateOf(!settingsOpen) }
+    LaunchedEffect(settingsOpen) {
+        val spec = tween<Float>(SETTINGS_MILLIS, easing = androidx.compose.animation.core.LinearEasing)
+        if (settingsOpen) {
+            settingsAnim.animateTo(1f, spec)
+            pageAlive = false
+        } else if (settingsAnim.value > 0f) {
+            pageAlive = true
+            repeat(3) { androidx.compose.runtime.withFrameNanos { } }
+            settingsAnim.animateTo(0f, spec)
+        } else {
+            pageAlive = true
+        }
+    }
     // Read per frame only in layers; composition only hears when the change starts and ends.
     val settingsShown by remember { androidx.compose.runtime.derivedStateOf { settingsAnim.value > 0f } }
-    val pageCovered by remember { androidx.compose.runtime.derivedStateOf { settingsAnim.value >= 1f } }
     var enterSettings by remember { mutableIntStateOf(0) }
     val settingsFocus = remember { FocusRequester() }
     val appSettingsFocus = remember { FocusRequester() }
@@ -355,7 +367,7 @@ fun MainScreen(
                       .requiredWidth(screenWidth - if (hidden) 0.dp else BAR_PAGE_START)
                       .fillMaxHeight()
                   // The page goes once the settings cover it (no live preview playing behind them).
-                  if (!pageCovered) {
+                  if (pageAlive) {
                       Box(
                           width.then(pageModifier).graphicsLayer {
                               val k = ease(settingsAnim.value / 0.35f)
@@ -371,14 +383,14 @@ fun MainScreen(
                           dimmed = menuFocused.value,
                           slots = settingsSlots,
                           onBackToRail = { runCatching { settingsFocus.requestFocus() } },
+                          enterKey = if (settingsOpen) enterSettings else 0,
                           modifier = Modifier
                               .fillMaxSize()
                               .graphicsLayer {
                                   val k = ease((settingsAnim.value - 0.4f) / 0.4f)
                                   alpha = k
                                   translationX = (1f - k) * SETTINGS_SHIFT.toPx()
-                              }
-                              .focusOnEnter(key = enterSettings, enabled = enterSettings > 0 && settingsOpen),
+                              },
                       )
                   }
               }
@@ -519,6 +531,12 @@ private fun NavRail(
     val sectionRequesters = remember { List(sections.size) { FocusRequester() } }
     var focusedIndex by remember { mutableIntStateOf(-1) }
     var focusedSection by remember { mutableIntStateOf(-1) }
+    // Which menu holds the focus. The one being left stays focusable until the focus has moved to
+    // the other: taking it away first dropped the focus on the page for a moment, and the menu
+    // closed and opened again.
+    var focusInSettings by remember { mutableStateOf(settingsOpen) }
+    val appFocusable = !settingsOpen || !focusInSettings
+    val settingsFocusable = settingsOpen || focusInSettings
     // The names fade in over the second half of the opening; the full-screen menu slides in with
     // them already there.
     val labelAlpha = { if (hidden) 1f else ((open - 0.4f) / 0.6f).coerceIn(0f, 1f) }
@@ -628,10 +646,10 @@ private fun NavRail(
                     labelAlpha = labelAlpha,
                     closed = BAR_CLOSED,
                     selected = current == t,
-                    canFocus = !settingsOpen,
+                    canFocus = appFocusable,
                     modifier = leave(i).focusRequester(requesters[i])
                         .then(if (current == t && currentFocus != null) Modifier.focusRequester(currentFocus) else Modifier),
-                    onFocused = { focusedIndex = i },
+                    onFocused = { focusedIndex = i; focusInSettings = false },
                 ) { onSelect(t) }
             }
 
@@ -642,21 +660,21 @@ private fun NavRail(
             RailItem(
                 R.drawable.ic_nav_search, R.drawable.ic_nav_search_fill, stringResource(R.string.nav_search), labelStyle, labelAlpha,
                 closed = BAR_CLOSED,
-                canFocus = !settingsOpen,
+                canFocus = appFocusable,
                 modifier = leave(tabs.size).focusRequester(requesters[tabs.size]),
-                onFocused = { focusedIndex = tabs.size },
+                onFocused = { focusedIndex = tabs.size; focusInSettings = false },
                 onClick = onOpenSearch,
             )
             // Settings itself: while the menu changes, its copy flies to the top (below).
             RailItem(
                 R.drawable.ic_nav_settings, R.drawable.ic_nav_settings_fill, stringResource(R.string.nav_settings), labelStyle, labelAlpha,
                 closed = BAR_CLOSED,
-                canFocus = !settingsOpen,
+                canFocus = appFocusable,
                 modifier = Modifier
                     .graphicsLayer { alpha = if (settingsK() > 0f) 0f else 1f }
                     .focusRequester(requesters[tabs.size + 1])
                     .then(if (appSettingsFocus != null) Modifier.focusRequester(appSettingsFocus) else Modifier),
-                onFocused = { focusedIndex = tabs.size + 1 },
+                onFocused = { focusedIndex = tabs.size + 1; focusInSettings = false },
                 onClick = onOpenSettings,
             )
         }
@@ -705,11 +723,11 @@ private fun NavRail(
                         s.icon, s.iconFill, stringResource(s.label), labelStyle, labelAlpha,
                         closed = BAR_CLOSED,
                         selected = s == section,
-                        canFocus = settingsOpen,
+                        canFocus = settingsFocusable,
                         modifier = arrive(i)
                             .focusRequester(sectionRequesters[i])
                             .then(if (s == section && settingsFocus != null) Modifier.focusRequester(settingsFocus) else Modifier),
-                        onFocused = { focusedSection = i; onSectionFocus(s) },
+                        onFocused = { focusedSection = i; focusInSettings = true; onSectionFocus(s) },
                     ) { onSectionSelect(s) }
                 }
             }

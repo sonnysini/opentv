@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.opentv.R
 import app.opentv.ui.channels.ChannelManagerScreen
+import app.opentv.ui.focusOnEnter
 import kotlinx.coroutines.delay
 
 /**
@@ -98,10 +99,21 @@ fun SettingsPanel(
     dimmed: Boolean,
     slots: SettingsSlots,
     onBackToRail: () -> Unit,
+    // Bumped to move the focus into the page (OK or ▶ in the menu).
+    enterKey: Int,
     modifier: Modifier = Modifier,
 ) {
     val alpha by animateFloatAsState(if (dimmed) 0.55f else 1f, tween(220), label = "settingsDim")
-    Crossfade(targetState = section, animationSpec = tween(180), label = "settingsSection", modifier = modifier.graphicsLayer { this.alpha = alpha }) { s ->
+    val firsts = remember { SettingsSection.values().associateWith { FocusRequester() } }
+    Crossfade(
+        targetState = section,
+        animationSpec = tween(180),
+        label = "settingsSection",
+        modifier = modifier
+            .graphicsLayer { this.alpha = alpha }
+            .focusOnEnter(key = enterKey, enabled = enterKey > 0, enter = { runCatching { firsts.getValue(section).requestFocus() }.isSuccess }),
+    ) { s ->
+      CompositionLocalProvider(LocalSettingsFirstFocus provides firsts.getValue(s)) {
         Column(Modifier.fillMaxSize().padding(start = 44.dp, end = 36.dp, top = 30.dp)) {
             Text(
                 stringResource(R.string.nav_settings).uppercase(),
@@ -124,6 +136,7 @@ fun SettingsPanel(
                 SectionBody(s, slots, onBackToRail)
             }
         }
+      }
     }
 }
 
@@ -179,6 +192,7 @@ private fun Embedded(content: @Composable () -> Unit) {
 private fun Accordions(entries: List<Entry>) {
     var open by remember { mutableStateOf<String?>(null) }
     val headers = remember { HashMap<String, FocusRequester>() }
+    val first = LocalSettingsFirstFocus.current
     val close: () -> Unit = {
         val was = open
         open = null
@@ -211,7 +225,9 @@ private fun Accordions(entries: List<Entry>) {
                         icon = e.icon,
                         open = isOpen,
                         onToggle = { if (isOpen) close() else open = e.key },
-                        headerModifier = Modifier.focusRequester(headers.getOrPut(e.key) { FocusRequester() }),
+                        headerModifier = Modifier
+                            .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                            .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
                     ) {
                         Box(if (e.tall) Modifier.fillMaxWidth().height(bodyMax) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
                             e.body(close)
