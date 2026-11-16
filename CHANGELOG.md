@@ -11,8 +11,8 @@
   a window) and Account (profiles as rows with *Use* / *Rename* / *Remove*, the name in a window).
 - **Home country from a list.** Grouping › Home country opens a window with Automatic and the
   countries by name, each with its flag, on the current choice; OK picks it.
-- Opening Categories or Channels keeps their row and search box on screen (the page used to
-  scroll them out of sight).
+- Categories and Channels open on the whole page, their row on top and the search box always in
+  sight (the page used to scroll it away).
 - **Leaving the settings is instant.** The page you came from stays alive under the settings
   (hidden, its preview stopped), so Back goes straight into the animation instead of waiting about
   a second for the page to be built again.

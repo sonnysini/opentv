@@ -38,8 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -198,28 +196,38 @@ private fun Accordions(entries: List<Entry>) {
     var window by remember { mutableStateOf<Entry?>(null) }
     val headers = remember { HashMap<String, FocusRequester>() }
     val first = LocalSettingsFirstFocus.current
+    // The row to put the focus back on once a drop-down closes: after a tall one the other rows
+    // come back first, so it waits a frame for them.
+    var refocus by remember { mutableStateOf<String?>(null) }
     val close: () -> Unit = {
-        val was = open
+        refocus = open
         open = null
-        was?.let { k -> runCatching { headers[k]?.requestFocus() } }
+    }
+    LaunchedEffect(refocus) {
+        val k = refocus ?: return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { headers[k]?.requestFocus() }
+        refocus = null
     }
     // Back with a drop-down open closes it (and leaves the focus on its row). Composed after the
     // shell's own Back, so it is asked first; a screen inside one with its own Back is asked before.
     BackHandler(enabled = open != null) { close() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        // An open drop-down fits under its row on screen: the page's height less the row and the
-        // drop-down's own padding. A tall one (Categories, Channels) then shows whole with its row
-        // at the top — a little taller and the page scrolled its search box out of sight.
-        val bodyMax = (maxHeight - 92.dp).coerceAtLeast(160.dp)
+        // An open drop-down fits under its row on screen: the page's height less the row.
+        val bodyMax = (maxHeight - 72.dp).coerceAtLeast(160.dp)
+        // A tall one (Categories, Channels) has the page to itself while open: its row at the top,
+        // the rows around it gone, nothing to scroll — so its search box can't slide out of sight.
+        val tallOpen = entries.firstOrNull { it.key == open && it.tall }
+        val tallBody = (maxHeight - 120.dp).coerceAtLeast(160.dp)
         val scroll = rememberScrollState()
-        // Where each row starts in the page, to bring a tall drop-down's row to the top.
-        val tops = remember { HashMap<String, Int>() }
+        LaunchedEffect(tallOpen) { if (tallOpen != null) scroll.scrollTo(0) }
         Column(
             Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             entries.forEach { e ->
+                if (tallOpen != null && e !== tallOpen) return@forEach
                 if (e.window) {
                     SetActionRow(
                         e.title, e.subtitle, icon = e.icon,
@@ -234,22 +242,10 @@ private fun Accordions(entries: List<Entry>) {
                 LaunchedEffect(isOpen) {
                     if (isOpen) {
                         delay(260)
-                        // A tall one (Categories, Channels) goes with its row at the top of the page, so
-                        // its search box shows; it is sized to fit there. Moving the focus into it can
-                        // scroll the page as well, so this comes after that.
-                        if (e.tall) {
-                            delay(140)
-                            tops[e.key]?.let { scroll.animateScrollTo(it) }
-                        } else {
-                            runCatching { bring.bringIntoView() }
-                        }
+                        if (!e.tall) runCatching { bring.bringIntoView() }
                     }
                 }
-                Box(
-                    Modifier
-                        .onPlaced { tops[e.key] = it.positionInParent().y.toInt() }
-                        .bringIntoViewRequester(bring),
-                ) {
+                Box(Modifier.bringIntoViewRequester(bring)) {
                     SetAccordion(
                         title = e.title,
                         subtitle = e.subtitle,
@@ -260,7 +256,7 @@ private fun Accordions(entries: List<Entry>) {
                             .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
                             .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
                     ) {
-                        Box(if (e.tall) Modifier.fillMaxWidth().height(bodyMax) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
+                        Box(if (e.tall) Modifier.fillMaxWidth().height(tallBody) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
                             e.body(close)
                         }
                     }
