@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +79,7 @@ fun GroupingScreen(
         refocusIndex = null
     }
 
+    var pickingCountry by remember { mutableStateOf(false) }
     val embedded = LocalSettingsEmbedded.current
     Column(Modifier.settingsRoot(embedded)) {
         if (!embedded) {
@@ -101,11 +104,7 @@ fun GroupingScreen(
                     stringResource(R.string.grouping_home_country_desc),
                     value = if (auto) stringResource(R.string.grouping_home_country_auto, country) else country,
                     modifier = if (embedded) Modifier.focusRequester(doneFocus) else Modifier,
-                ) {
-                    // Automatic, then the countries one by one, then back to automatic.
-                    val i = HOME_COUNTRIES.indexOf(homeCountry)
-                    viewModel.setHomeCountry(HOME_COUNTRIES[(i + 1) % HOME_COUNTRIES.size])
-                }
+                ) { pickingCountry = true }
             }
             item(key = "merge_sources") {
                 SetSwitchRow(
@@ -182,6 +181,14 @@ fun GroupingScreen(
             }
         }
     }
+
+    if (pickingCountry) {
+        HomeCountryDialog(
+            current = homeCountry,
+            onPick = { viewModel.setHomeCountry(it); pickingCountry = false },
+            onDismiss = { pickingCountry = false },
+        )
+    }
 }
 
 private fun reasonLabel(reason: MergeSuggester.Reason): Int = when (reason) {
@@ -197,3 +204,46 @@ private val HOME_COUNTRIES = listOf(
 
 private fun countryName(code: String): String =
     java.util.Locale("", code).getDisplayCountry(java.util.Locale.getDefault()).ifBlank { code }
+
+/** The flag emoji of a two-letter country code (regional indicator letters). */
+private fun flagOf(code: String): String =
+    if (code.length != 2) "" else String(Character.toChars(0x1F1E6 + code[0].uppercaseChar().code - 'A'.code)) +
+        String(Character.toChars(0x1F1E6 + code[1].uppercaseChar().code - 'A'.code))
+
+/**
+ * The home country in a window: Automatic on top, then the countries by name with their flag.
+ * It opens on the current choice (ticked); OK picks and closes, Back closes without a change.
+ */
+@Composable
+private fun HomeCountryDialog(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val countries = remember { HOME_COUNTRIES.filter { it.isNotEmpty() }.sortedBy { countryName(it) } }
+    val options = remember(countries) { listOf("") + countries }
+    val selected = options.indexOf(current).coerceAtLeast(0)
+    val state = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (selected - 3).coerceAtLeast(0))
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val autoLabel = stringResource(R.string.grouping_home_country_auto, countryName(ChannelCountry.deviceDefault()))
+    SetDialog(stringResource(R.string.grouping_home_country), onDismiss) {
+        LazyColumn(state = state, verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+            items(options.size) { i ->
+                val code = options[i]
+                val on = i == selected
+                SetRow(
+                    title = if (code.isEmpty()) autoLabel else "${flagOf(code)}   ${countryName(code)}",
+                    modifier = if (on) Modifier.focusRequester(focus) else Modifier,
+                    titleColor = if (on) MaterialTheme.colorScheme.primary else null,
+                    onClick = { onPick(code) },
+                ) { focused ->
+                    if (on) {
+                        androidx.compose.material3.Icon(
+                            androidx.compose.ui.graphics.vector.ImageVector.vectorResource(R.drawable.ic_act_check),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

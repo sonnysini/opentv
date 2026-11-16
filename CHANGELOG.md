@@ -9,6 +9,8 @@
   each channel with *Favourite* and *Show* pills), Grouping, Logos (where logos come from as pills,
   the logo pack in a window), Add-ons (one row each, *Add add-on* opens a window), TMDB (the key in
   a window) and Account (profiles as rows with *Use* / *Rename* / *Remove*, the name in a window).
+- **Home country from a list.** Grouping › Home country opens a window with Automatic and the
+  countries by name, each with its flag, on the current choice; OK picks it.
 - **Leaving the settings is instant.** The page you came from stays alive under the settings
   (hidden, its preview stopped), so Back goes straight into the animation instead of waiting about
   a second for the page to be built again.
