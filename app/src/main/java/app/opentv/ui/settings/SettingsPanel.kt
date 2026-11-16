@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -210,8 +212,11 @@ private fun Accordions(entries: List<Entry>) {
         // drop-down's own padding. A tall one (Categories, Channels) then shows whole with its row
         // at the top — a little taller and the page scrolled its search box out of sight.
         val bodyMax = (maxHeight - 92.dp).coerceAtLeast(160.dp)
+        val scroll = rememberScrollState()
+        // Where each row starts in the page, to bring a tall drop-down's row to the top.
+        val tops = remember { HashMap<String, Int>() }
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
+            Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             entries.forEach { e ->
@@ -229,10 +234,22 @@ private fun Accordions(entries: List<Entry>) {
                 LaunchedEffect(isOpen) {
                     if (isOpen) {
                         delay(260)
-                        runCatching { bring.bringIntoView() }
+                        // A tall one (Categories, Channels) goes with its row at the top of the page, so
+                        // its search box shows; it is sized to fit there. Moving the focus into it can
+                        // scroll the page as well, so this comes after that.
+                        if (e.tall) {
+                            delay(140)
+                            tops[e.key]?.let { scroll.animateScrollTo(it) }
+                        } else {
+                            runCatching { bring.bringIntoView() }
+                        }
                     }
                 }
-                Box(Modifier.bringIntoViewRequester(bring)) {
+                Box(
+                    Modifier
+                        .onPlaced { tops[e.key] = it.positionInParent().y.toInt() }
+                        .bringIntoViewRequester(bring),
+                ) {
                     SetAccordion(
                         title = e.title,
                         subtitle = e.subtitle,
