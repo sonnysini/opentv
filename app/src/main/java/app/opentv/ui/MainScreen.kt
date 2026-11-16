@@ -273,10 +273,21 @@ fun MainScreen(
         )
     // Under the settings the page must not take the focus by itself: it is told the menu has it.
     val coveredMenuFocus = remember { { true } }
+    // …nor answer Back: its own Back handlers go to a dispatcher nobody calls while it is covered
+    // (composed after the settings' handlers, they would be asked first and Back would never leave).
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val coveredBack = remember(lifecycleOwner) {
+        object : androidx.activity.OnBackPressedDispatcherOwner {
+            override val onBackPressedDispatcher = androidx.activity.OnBackPressedDispatcher()
+            override val lifecycle get() = lifecycleOwner.lifecycle
+        }
+    }
+    val realBack = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current
     val page: @Composable () -> Unit = {
         CompositionLocalProvider(
             LocalMenuHasFocus provides if (settingsOpen) coveredMenuFocus else menuHasFocus,
             LocalPageCovered provides settingsOpen,
+            androidx.activity.compose.LocalOnBackPressedDispatcherOwner provides if (settingsOpen || realBack == null) coveredBack else realBack,
         ) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
