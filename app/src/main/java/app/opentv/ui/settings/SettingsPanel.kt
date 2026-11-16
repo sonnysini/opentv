@@ -227,40 +227,44 @@ private fun Accordions(entries: List<Entry>) {
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             entries.forEach { e ->
-                if (tallOpen != null && e !== tallOpen) return@forEach
-                if (e.window) {
-                    SetActionRow(
-                        e.title, e.subtitle, icon = e.icon,
-                        modifier = Modifier
-                            .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
-                            .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
-                    ) { open = null; window = e }
-                    return@forEach
-                }
-                val isOpen = open == e.key
-                val bring = remember { BringIntoViewRequester() }
-                LaunchedEffect(isOpen) {
-                    if (isOpen) {
-                        delay(260)
-                        if (!e.tall) runCatching { bring.bringIntoView() }
-                    }
-                }
-                Box(Modifier.bringIntoViewRequester(bring)) {
-                    SetAccordion(
-                        title = e.title,
-                        subtitle = e.subtitle,
-                        icon = e.icon,
-                        open = isOpen,
-                        onToggle = { if (isOpen) close() else open = e.key },
-                        headerModifier = Modifier
-                            .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
-                            .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
-                    ) {
-                        Box(if (e.tall) Modifier.fillMaxWidth().height(tallBody) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
-                            e.body(close)
-                        }
-                    }
-                }
+              // Keyed: hiding the rows around a tall drop-down must not rebuild its row (the focus
+              // on it would be lost and fall into the menu).
+              if (tallOpen != null && e !== tallOpen) return@forEach
+              androidx.compose.runtime.key(e.key) {
+                  if (e.window) {
+                      SetActionRow(
+                          e.title, e.subtitle, icon = e.icon,
+                          modifier = Modifier
+                              .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                              .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
+                      ) { open = null; window = e }
+                      return@key
+                  }
+                  val isOpen = open == e.key
+                  val bring = remember { BringIntoViewRequester() }
+                  LaunchedEffect(isOpen) {
+                      if (isOpen) {
+                          delay(260)
+                          if (!e.tall) runCatching { bring.bringIntoView() }
+                      }
+                  }
+                  Box(Modifier.bringIntoViewRequester(bring)) {
+                      SetAccordion(
+                          title = e.title,
+                          subtitle = e.subtitle,
+                          icon = e.icon,
+                          open = isOpen,
+                          onToggle = { if (isOpen) close() else open = e.key },
+                          headerModifier = Modifier
+                              .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                              .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
+                      ) {
+                          Box(if (e.tall) Modifier.fillMaxWidth().height(tallBody) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
+                              e.body(close)
+                          }
+                      }
+                  }
+              }
             }
             Spacer(Modifier.height(8.dp))
         }
