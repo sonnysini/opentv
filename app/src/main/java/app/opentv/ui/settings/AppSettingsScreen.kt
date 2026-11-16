@@ -803,6 +803,9 @@ private fun ToggleRow(
     }
 }
 
+/** Fewer stutters than this in a minute is just a live stream being a live stream. */
+private const val MIN_HICCUP_LIMIT = 2
+
 /**
  * Settings › Appearance as rows on the settings page: every choice right on its row, as pills or a
  * switch — no radio lists, no page behind.
