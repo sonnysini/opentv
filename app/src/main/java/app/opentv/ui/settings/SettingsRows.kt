@@ -447,7 +447,10 @@ internal fun SetSearchField(
             .background(if (focused) primary.copy(alpha = 0.16f) else SetCard)
             .border(1.5.dp, if (focused) primary else SetChipEdge, shape)
             .onPreviewKeyEvent(leaveVertically)
-            .clickable(interactionSource = null, indication = null) { if (editing) keyboard?.show() else editing = true },
+            .clickable(interactionSource = null, indication = null) {
+                if (editing) keyboard?.show() else editing = true
+                Unit
+            }
             .padding(horizontal = 18.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
