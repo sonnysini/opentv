@@ -406,6 +406,7 @@ internal fun SetSearchField(
 ) {
     var editing by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
+    var fieldHadFocus by remember { mutableStateOf(false) }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val boxFocus = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -480,7 +481,11 @@ internal fun SetSearchField(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(fieldFocus)
-                        .onFocusChanged { if (!it.isFocused && editing) editing = false }
+                        // Called once unfocused as the field comes in: only a focus it had and lost ends the typing.
+                        .onFocusChanged {
+                            if (it.isFocused) fieldHadFocus = true
+                            else if (fieldHadFocus) { fieldHadFocus = false; editing = false }
+                        }
                         .onPreviewKeyEvent { e ->
                             when (e.key) {
                                 androidx.compose.ui.input.key.Key.DirectionCenter, androidx.compose.ui.input.key.Key.Enter, androidx.compose.ui.input.key.Key.NumPadEnter -> {
