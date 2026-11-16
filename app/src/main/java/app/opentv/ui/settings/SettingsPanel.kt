@@ -206,8 +206,10 @@ private fun Accordions(entries: List<Entry>) {
     BackHandler(enabled = open != null) { close() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        // An open drop-down fits under its row on screen: the page's height less a row.
-        val bodyMax = (maxHeight - 72.dp).coerceAtLeast(160.dp)
+        // An open drop-down fits under its row on screen: the page's height less the row and the
+        // drop-down's own padding. A tall one (Categories, Channels) then shows whole with its row
+        // at the top — a little taller and the page scrolled its search box out of sight.
+        val bodyMax = (maxHeight - 92.dp).coerceAtLeast(160.dp)
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
