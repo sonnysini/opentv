@@ -189,7 +189,7 @@
     <string name="addons_checking">Verifica in corso…</string>
     <string name="addons_invalid">Non sembra un URL manifest di add-on valido.</string>
     <string name="addons_added">%1$s aggiunto</string>
-    <string name="addons_empty">Ancora nessun add-on. Incolla un URL manifest qui sopra per aggiungerne uno.</string>
+    <string name="addons_empty">Ancora nessun add-on.</string>
     <string name="settings_guide_title">Guida TV</string>
     <string name="settings_guide_subtitle">Sorgenti guida e feed XMLTV gratuiti</string>
     <string name="settings_channels_subtitle">Nascondi o aggiungi ai preferiti i singoli canali</string>

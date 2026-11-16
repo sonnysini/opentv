@@ -206,7 +206,7 @@
     <string name="addons_checking">Checking…</string>
     <string name="addons_invalid">That doesn\'t look like a valid add-on manifest URL.</string>
     <string name="addons_added">Added %1$s</string>
-    <string name="addons_empty">No add-ons yet. Paste a manifest URL above to add one.</string>
+    <string name="addons_empty">No add-ons yet.</string>
     <string name="settings_guide_title">TV guide</string>
     <string name="settings_guide_subtitle">Guide sources and free XMLTV feeds</string>
     <string name="settings_channels_subtitle">Hide or favourite individual channels</string>
