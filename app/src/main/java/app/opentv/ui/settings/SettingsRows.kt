@@ -43,6 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -387,3 +390,125 @@ internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Uni
 
 @Composable
 internal fun HubTextButton(label: String, onClick: () -> Unit) = HubTextButton(label, Modifier, onClick)
+
+/**
+ * A search box in the settings style, typed with the system keyboard (Fire TV's own): OK opens the
+ * keyboard, its Search/Next closes it, ▲/▼ leave the box — a text field otherwise keeps the d-pad.
+ */
+@Composable
+internal fun SetSearchField(
+    value: String,
+    onValue: (String) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val primary = MaterialTheme.colorScheme.primary
+    val shape = CircleShape
+    val close = { keyboard?.hide(); Unit }
+    androidx.compose.foundation.text.BasicTextField(
+        value = value,
+        onValueChange = { onValue(it.take(40)) },
+        singleLine = true,
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = SetOn),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(primary),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+            autoCorrectEnabled = false,
+        ),
+        // Fire TV's "Next" key closes its keyboard with ImeAction.Next whatever was asked.
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            onSearch = { close() }, onDone = { close() }, onGo = { close() }, onNext = { close() },
+        ),
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { e ->
+                when (e.key) {
+                    androidx.compose.ui.input.key.Key.DirectionDown, androidx.compose.ui.input.key.Key.DirectionUp -> {
+                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) {
+                            focusManager.moveFocus(
+                                if (e.key == androidx.compose.ui.input.key.Key.DirectionDown) androidx.compose.ui.focus.FocusDirection.Down
+                                else androidx.compose.ui.focus.FocusDirection.Up,
+                            )
+                        }
+                        true
+                    }
+                    androidx.compose.ui.input.key.Key.DirectionCenter, androidx.compose.ui.input.key.Key.Enter, androidx.compose.ui.input.key.Key.NumPadEnter -> {
+                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) keyboard?.show()
+                        true
+                    }
+                    else -> false
+                }
+            },
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(if (focused) primary.copy(alpha = 0.16f) else SetCard)
+                    .border(1.5.dp, if (focused) primary else SetChipEdge, shape)
+                    .padding(horizontal = 18.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    ImageVector.vectorResource(R.drawable.ic_nav_search),
+                    contentDescription = null,
+                    tint = if (focused) primary else SetDim,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Text(hint, fontSize = 16.sp, color = SetDim, maxLines = 1)
+                    inner()
+                }
+                if (focused) {
+                    Text(androidx.compose.ui.res.stringResource(R.string.search_ok_to_type), fontSize = 13.sp, color = SetDim, maxLines = 1)
+                }
+            }
+        },
+    )
+}
+
+/**
+ * A text field for the settings windows, typed with the system keyboard. ▲/▼ leave it (a text
+ * field otherwise keeps the d-pad); the keyboard's Done/Next runs [onDone].
+ */
+@Composable
+internal fun SetTextField(
+    value: String,
+    onValue: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    uri: Boolean = false,
+    onDone: () -> Unit = {},
+) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    androidx.compose.material3.OutlinedTextField(
+        value = value,
+        onValueChange = onValue,
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = if (uri) androidx.compose.ui.text.input.KeyboardType.Uri else androidx.compose.ui.text.input.KeyboardType.Text,
+            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+            autoCorrectEnabled = false,
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            onDone = { onDone() }, onNext = { onDone() }, onGo = { onDone() },
+        ),
+        modifier = modifier.fillMaxWidth().dpadLeavesField(focusManager),
+    )
+}
+
+/** A short status line under a control: teal when it went well, red when it did not. */
+@Composable
+internal fun SetStatus(text: String, error: Boolean = false) {
+    Text(
+        text,
+        fontSize = 13.sp,
+        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 6.dp, top = 4.dp),
+    )
+}

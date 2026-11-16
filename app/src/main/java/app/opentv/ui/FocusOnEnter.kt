@@ -50,3 +50,9 @@ fun Modifier.focusOnEnter(
         .focusRequester(requester)
         .focusGroup()
 }
+
+/**
+ * True while the settings cover the page: the page stays composed underneath (so leaving the
+ * settings is instant) but stops anything it plays — the guide's and the football preview.
+ */
+val LocalPageCovered = androidx.compose.runtime.compositionLocalOf { false }

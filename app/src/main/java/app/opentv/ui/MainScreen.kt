@@ -112,6 +112,7 @@ enum class Tab(val labelRes: Int, val icon: Int, val iconSelected: Int) {
 }
 
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen(
     isTelevision: Boolean,
@@ -213,22 +214,11 @@ fun MainScreen(
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf(LastSettings.section) }
     val settingsAnim = remember { Animatable(if (settingsOpen) 1f else 0f) }
-    // The page under the settings is let go once they cover it (no live preview playing behind
-    // them), and built again — still hidden — before the way back starts: building the Live page
-    // takes a moment, and doing it mid-animation swallowed the animation.
-    var pageAlive by remember { mutableStateOf(!settingsOpen) }
+    // The page stays alive under the settings (hidden, its preview stopped — [LocalPageCovered]), so
+    // the way back is the animation alone: building the Live page again took about a second.
     LaunchedEffect(settingsOpen) {
         val spec = tween<Float>(SETTINGS_MILLIS, easing = androidx.compose.animation.core.LinearEasing)
-        if (settingsOpen) {
-            settingsAnim.animateTo(1f, spec)
-            pageAlive = false
-        } else if (settingsAnim.value > 0f) {
-            pageAlive = true
-            repeat(3) { androidx.compose.runtime.withFrameNanos { } }
-            settingsAnim.animateTo(0f, spec)
-        } else {
-            pageAlive = true
-        }
+        settingsAnim.animateTo(if (settingsOpen) 1f else 0f, spec)
     }
     // Read per frame only in layers; composition only hears when the change starts and ends.
     val settingsShown by remember { androidx.compose.runtime.derivedStateOf { settingsAnim.value > 0f } }
@@ -281,8 +271,13 @@ fun MainScreen(
             // Live TV: into the groups, as RIGHT out of the rail does.
             enter = { tab == Tab.LIVE && liveNavExit?.invoke() == true },
         )
+    // Under the settings the page must not take the focus by itself: it is told the menu has it.
+    val coveredMenuFocus = remember { { true } }
     val page: @Composable () -> Unit = {
-        CompositionLocalProvider(LocalMenuHasFocus provides menuHasFocus) {
+        CompositionLocalProvider(
+            LocalMenuHasFocus provides if (settingsOpen) coveredMenuFocus else menuHasFocus,
+            LocalPageCovered provides settingsOpen,
+        ) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
                     isTelevision = isTelevision,
@@ -367,10 +362,13 @@ fun MainScreen(
                       .wrapContentWidth(Alignment.Start, unbounded = true)
                       .requiredWidth(screenWidth - if (hidden) 0.dp else BAR_PAGE_START)
                       .fillMaxHeight()
-                  // The page goes once the settings cover it (no live preview playing behind them).
-                  if (pageAlive) {
+                  // Kept under the settings, hidden; the d-pad never goes into it while they are open.
+                  run {
                       Box(
-                          width.then(pageModifier).graphicsLayer {
+                          width.then(pageModifier)
+                              .focusProperties { if (settingsOpen) enter = { FocusRequester.Cancel } }
+                              .focusGroup()
+                              .graphicsLayer {
                               val k = ease(settingsAnim.value / 0.35f)
                               alpha = 1f - k
                               scaleX = 1f - 0.02f * k

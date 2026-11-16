@@ -144,7 +144,9 @@ fun HomeScreen(
     val channelLayout by settings.channelLayout.collectAsStateWithLifecycle()
     val fullscreen = channelLayout == AppSettings.ChannelLayout.FULLSCREEN
     // The full-screen list has no preview pane, so it never runs the preview player either.
-    val previewEnabled = previewSetting && !fullscreen
+    // Under the settings the page stays alive but plays nothing.
+    val covered = app.opentv.ui.LocalPageCovered.current
+    val previewEnabled = previewSetting && !fullscreen && !covered
 
     val categories by viewModel.visibleCategoryGroups.collectAsStateWithLifecycle()
     val fullscreenCategories by viewModel.nonEmptyCategoryGroups.collectAsStateWithLifecycle()

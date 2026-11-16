@@ -211,6 +211,8 @@ fun FootballScreen(
             onPlayChannel(it)
         }
     }
+    // Under the settings the page stays alive but plays nothing.
+    val covered = app.opentv.ui.LocalPageCovered.current
     // Feeds get looked at only while this screen is up: the player needs the one connection.
     val lifecycleOwner = LocalLifecycleOwner.current
     var resumed by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
@@ -358,7 +360,7 @@ fun FootballScreen(
     var heroTouched by remember { mutableStateOf(0) }
     val previewFeed = heroBest?.feed?.takeIf {
         val m = heroItem?.match ?: return@takeIf false
-        previewSetting && resumed && heroFocused && recordings.isEmpty() &&
+        previewSetting && resumed && !covered && heroFocused && recordings.isEmpty() &&
             scan == null && progress == null && picking == null && opening == null &&
             (m.phase == Phase.LIVE || (m.phase == Phase.SCHEDULED && m.kickoffUtcMillis - System.currentTimeMillis() <= PREVIEW_AHEAD_MILLIS))
     }

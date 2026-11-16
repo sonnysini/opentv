@@ -45,7 +45,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
 import app.opentv.data.model.StreamKind
 import app.opentv.ui.CategoriesViewModel
-import app.opentv.ui.channels.OnScreenKeyboard
 import app.opentv.ui.theme.focusLift
 
 /**
@@ -53,7 +52,7 @@ import app.opentv.ui.theme.focusLift
  * channels or titles aren't stored at all — which is what keeps a 25k-channel, 70k-film provider
  * usable on a low-RAM stick: turn off the countries and shelves you never watch.
  *
- * The keyboard filters the list, and "switch all off/on" acts on exactly what the filter shows,
+ * The search box filters the list, and "switch all off/on" acts on exactly what the filter shows,
  * so "XXX → all off" or "SPAIN → all off" is a handful of key presses instead of 400 toggles.
  */
 @Composable
@@ -71,6 +70,7 @@ fun CategoriesScreen(
 
     val embedded = LocalSettingsEmbedded.current
     Column(Modifier.settingsRoot(embedded, 28.dp, 20.dp).then(if (embedded) Modifier.fillMaxSize() else Modifier)) {
+        // Top line: Live / Movies / Series, the search box (Fire TV's own keyboard), how many are off.
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!embedded) {
                 Text(stringResource(R.string.settings_categories_title), style = MaterialTheme.typography.headlineMedium)
@@ -81,94 +81,77 @@ fun CategoriesScreen(
                 listOf(stringResource(R.string.nav_live_tv), stringResource(R.string.nav_movies), stringResource(R.string.nav_shows)),
                 isOn = { kinds[it] == kind },
             ) { viewModel.selectKind(kinds[it]) }
-            Spacer(Modifier.weight(1f))
-            if (!embedded) HubTextButton(stringResource(R.string.common_done), onBack)
+            Spacer(Modifier.width(14.dp))
+            SetSearchField(
+                value = query,
+                onValue = { viewModel.query.value = it },
+                hint = stringResource(R.string.categories_filter_hint),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                stringResource(R.string.categories_off_count, offCount, totalCount),
+                fontSize = 13.sp,
+                color = SetDim,
+                maxLines = 1,
+            )
+            if (!embedded) {
+                Spacer(Modifier.width(14.dp))
+                HubTextButton(stringResource(R.string.common_done), onBack)
+            }
         }
 
         Spacer(Modifier.height(6.dp))
         SetNote(stringResource(R.string.categories_desc))
-        Spacer(Modifier.height(8.dp))
 
-        Row(Modifier.fillMaxSize()) {
-            OnScreenKeyboard(
-                onKey = { if (query.length < 40) viewModel.query.value = query + it },
-                onSpace = { if (query.length < 40) viewModel.query.value = "$query " },
-                onBackspace = { viewModel.query.value = query.dropLast(1) },
-                onClear = { viewModel.query.value = "" },
+        if (kind == StreamKind.LIVE && query.isEmpty()) {
+            RuleRow(
+                stringResource(R.string.categories_italian_only),
+                stringResource(R.string.categories_italian_only_desc),
+                checked = italianOnly,
+                onToggle = viewModel::setItalianOnly,
             )
-
-            Spacer(Modifier.width(28.dp))
-
-            Column(Modifier.weight(1f).fillMaxSize()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        query.ifEmpty { stringResource(R.string.categories_filter_hint) },
-                        fontSize = 20.sp,
-                        color = if (query.isEmpty()) SetDim
-                        else MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        stringResource(R.string.categories_off_count, offCount, totalCount),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                if (kind == StreamKind.LIVE && query.isEmpty()) {
-                    RuleRow(
-                        stringResource(R.string.categories_italian_only),
-                        stringResource(R.string.categories_italian_only_desc),
-                        checked = italianOnly,
-                        onToggle = viewModel::setItalianOnly,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    // Worded as "keep", so on = channels kept, like every other switch here.
-                    RuleRow(
-                        stringResource(R.string.categories_foreign_sport),
-                        stringResource(R.string.categories_foreign_sport_desc),
-                        checked = !foreignSportOff,
-                        onToggle = { keep -> viewModel.setForeignSportOff(!keep) },
-                    )
-                    Spacer(Modifier.height(10.dp))
-                }
-                // Only the bulk action that would change something is offered.
-                val shownOn = entries.count { it.enabled }
-                val shownOff = entries.size - shownOn
-                if (shownOn > 0 || shownOff > 0) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (shownOn > 0) {
-                            Pill(stringResource(R.string.categories_all_off, shownOn), on = false) {
-                                viewModel.setEnabled(entries.filter { it.enabled }.map { it.key }, enabled = false)
-                            }
-                        }
-                        if (shownOff > 0) {
-                            Pill(stringResource(R.string.categories_all_on, shownOff), on = false) {
-                                viewModel.setEnabled(entries.filter { !it.enabled }.map { it.key }, enabled = true)
-                            }
-                        }
+            Spacer(Modifier.height(6.dp))
+            // Worded as "keep", so on = channels kept, like every other switch here.
+            RuleRow(
+                stringResource(R.string.categories_foreign_sport),
+                stringResource(R.string.categories_foreign_sport_desc),
+                checked = !foreignSportOff,
+                onToggle = { keep -> viewModel.setForeignSportOff(!keep) },
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        // Only the bulk action that would change something is offered; it acts on what the search shows.
+        val shownOn = entries.count { it.enabled }
+        val shownOff = entries.size - shownOn
+        if (shownOn > 0 || shownOff > 0) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (shownOn > 0) {
+                    Pill(stringResource(R.string.categories_all_off, shownOn), on = false) {
+                        viewModel.setEnabled(entries.filter { it.enabled }.map { it.key }, enabled = false)
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                if (shownOff > 0) {
+                    Pill(stringResource(R.string.categories_all_on, shownOff), on = false) {
+                        viewModel.setEnabled(entries.filter { !it.enabled }.map { it.key }, enabled = true)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
 
-                if (entries.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            stringResource(
-                                if (totalCount == 0) R.string.categories_none else R.string.categories_no_match,
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(entries, key = { it.key }) { entry ->
-                            CategoryRow(entry) { on -> viewModel.setEnabled(listOf(entry.key), on) }
-                        }
-                    }
+        if (entries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(if (totalCount == 0) R.string.categories_none else R.string.categories_no_match),
+                    fontSize = 16.sp,
+                    color = SetDim,
+                )
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(entries, key = { it.key }) { entry ->
+                    CategoryRow(entry) { on -> viewModel.setEnabled(listOf(entry.key), on) }
                 }
             }
         }

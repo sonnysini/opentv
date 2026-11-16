@@ -184,6 +184,7 @@
     <string name="settings_addons_subtitle">Riproduci contenuti dagli add-on Stremio che configuri tu stesso</string>
     <string name="addons_note">Aggiungi un add-on Stremio incollando l\'URL del suo manifest. MyTV non ne include nessuno: porti i tuoi. Se l\'add-on si basa su un servizio debrid, imposta la tua chiave debrid sul sito dell\'add-on e incolla l\'URL personalizzato che ti fornisce; la tua chiave resta lì, mai in MyTV.</string>
     <string name="addons_url_label">URL del manifest dell\'add-on</string>
+    <string name="addons_add_row">Aggiungi add-on</string>
     <string name="addons_add">Aggiungi</string>
     <string name="addons_checking">Verifica in corso…</string>
     <string name="addons_invalid">Non sembra un URL manifest di add-on valido.</string>
@@ -307,6 +308,7 @@
     <string name="profiles_rename_heading">Rinomina profilo</string>
     <string name="profiles_title">Chi guarda?</string>
     <string name="profiles_add">Aggiungi profilo</string>
+    <string name="profiles_name_label">Nome</string>
     <string name="profiles_active">Attivo</string>
     <string name="profiles_use">Usa</string>
     <string name="profiles_rename">Rinomina</string>
@@ -471,6 +473,7 @@
     <string name="webmanager_stopped">Gestione chiusa</string>
     <string name="channels_manager_title">Gestione canali</string>
     <string name="channels_manager_hint">Cerca per nascondere o aggiungere canali ai preferiti</string>
+    <string name="channels_manager_search_box">Cerca un canale</string>
     <string name="channels_manager_search_hint">Cerca un canale, poi nascondilo dalla guida o contrassegnalo con una stella.</string>
     <string name="channels_manager_no_match">Nessun canale corrisponde a “%1$s”.</string>
     <string name="channels_manager_all_sources">Tutte le sorgenti</string>
@@ -598,6 +601,7 @@
     <string name="settings_tmdb_key_label">Chiave API TMDB</string>
     <string name="settings_tmdb_save">Salva chiave</string>
     <string name="settings_tmdb_saved">Chiave TMDB salvata</string>
+    <string name="settings_tmdb_none">Non impostata</string>
     <string name="settings_tmdb_active">Attiva</string>
     <string name="settings_categories_title">Categorie</string>
     <string name="settings_categories_subtitle">Spegni le categorie intere che non guardi mai</string>

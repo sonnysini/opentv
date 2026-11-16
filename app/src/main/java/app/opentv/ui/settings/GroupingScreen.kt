@@ -79,36 +79,28 @@ fun GroupingScreen(
 
     val embedded = LocalSettingsEmbedded.current
     Column(Modifier.settingsRoot(embedded)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!embedded) Text(stringResource(R.string.settings_grouping_title), style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            if (busy) {
-                Text(
-                    stringResource(R.string.grouping_applying),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(16.dp))
+        if (!embedded) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.settings_grouping_title), style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.weight(1f))
+                HubTextButton(stringResource(R.string.common_done), Modifier.focusRequester(doneFocus), onBack)
             }
-            if (!embedded) HubTextButton(stringResource(R.string.common_done), Modifier.focusRequester(doneFocus), onBack)
+            Spacer(Modifier.height(8.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.grouping_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
+        SetNote(stringResource(R.string.grouping_desc))
+        if (busy) SetStatus(stringResource(R.string.grouping_applying))
+        Spacer(Modifier.height(6.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
             item(key = "home_country") {
                 val auto = homeCountry.isBlank()
                 val code = if (auto) ChannelCountry.deviceDefault() else homeCountry
                 val country = countryName(code)
-                ValueRow(
+                SetActionRow(
                     stringResource(R.string.grouping_home_country),
                     stringResource(R.string.grouping_home_country_desc),
                     value = if (auto) stringResource(R.string.grouping_home_country_auto, country) else country,
+                    modifier = if (embedded) Modifier.focusRequester(doneFocus) else Modifier,
                 ) {
                     // Automatic, then the countries one by one, then back to automatic.
                     val i = HOME_COUNTRIES.indexOf(homeCountry)
@@ -116,76 +108,75 @@ fun GroupingScreen(
                 }
             }
             item(key = "merge_sources") {
-                SwitchRow(
+                SetSwitchRow(
                     stringResource(R.string.categories_merge_sources),
                     stringResource(R.string.categories_merge_sources_desc),
                     checked = mergeSources,
                     onToggle = viewModel::setMergeSources,
-                    emphasised = true,
                 )
             }
             item(key = "strip_sources") {
-                SwitchRow(
+                SetSwitchRow(
                     stringResource(R.string.categories_strip_sources),
                     stringResource(R.string.categories_strip_sources_desc),
                     checked = stripSources,
                     onToggle = viewModel::setStripSources,
-                    emphasised = true,
                 )
             }
             item(key = "recent_groups") {
-                SwitchRow(
+                SetSwitchRow(
                     stringResource(R.string.categories_recent_groups),
                     stringResource(R.string.categories_recent_groups_desc),
                     checked = showRecentGroups,
                     onToggle = viewModel::setShowRecentGroups,
-                    emphasised = true,
                 )
             }
 
             val list = suggestions
             item(key = "suggestions_header") {
-                SectionHeader(
+                SetGroup(
                     if (list == null) stringResource(R.string.grouping_suggestions_loading)
                     else stringResource(R.string.grouping_suggestions_header, list.size),
                 )
             }
             if (list != null && list.isEmpty()) {
-                item(key = "suggestions_none") { Note(stringResource(R.string.grouping_suggestions_none)) }
+                item(key = "suggestions_none") { SetNote(stringResource(R.string.grouping_suggestions_none)) }
             }
             if (list != null) {
                 items(list, key = { "s:" + it.pairId }) { s ->
                     val index = list.indexOf(s)
-                    PairRow(
-                        title = "${s.from.name}  →  ${s.into.name}",
-                        subtitle = stringResource(
+                    SetRow(
+                        "${s.from.name}  →  ${s.into.name}",
+                        stringResource(
                             R.string.grouping_channel_count,
                             stringResource(reasonLabel(s.reason)),
                             s.from.channels,
                             s.into.channels,
                         ),
                     ) {
-                        HubTextButton(
-                            stringResource(R.string.grouping_merge),
-                            Modifier.focusRequester(requesters.getOrPut(s.pairId) { FocusRequester() }),
-                        ) {
-                            refocusIndex = index
-                            viewModel.merge(s)
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        HubTextButton(stringResource(R.string.grouping_ignore)) {
-                            refocusIndex = index
-                            viewModel.ignore(s)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Pill(
+                                stringResource(R.string.grouping_merge),
+                                on = false,
+                                modifier = Modifier.focusRequester(requesters.getOrPut(s.pairId) { FocusRequester() }),
+                            ) {
+                                refocusIndex = index
+                                viewModel.merge(s)
+                            }
+                            Pill(stringResource(R.string.grouping_ignore), on = false) {
+                                refocusIndex = index
+                                viewModel.ignore(s)
+                            }
                         }
                     }
                 }
             }
 
             if (merges.isNotEmpty()) {
-                item(key = "merges_header") { SectionHeader(stringResource(R.string.grouping_merged_header, merges.size)) }
+                item(key = "merges_header") { SetGroup(stringResource(R.string.grouping_merged_header, merges.size)) }
                 items(merges, key = { "m:" + it.fromKey }) { m ->
-                    PairRow(title = "${m.fromName}  →  ${m.intoName}", subtitle = null) {
-                        HubTextButton(stringResource(R.string.grouping_undo)) { viewModel.undo(m) }
+                    SetRow("${m.fromName}  →  ${m.intoName}") {
+                        Pill(stringResource(R.string.grouping_undo), on = false) { viewModel.undo(m) }
                     }
                 }
             }
@@ -199,55 +190,6 @@ private fun reasonLabel(reason: MergeSuggester.Reason): Int = when (reason) {
     MergeSuggester.Reason.SPELLING -> R.string.grouping_reason_spelling
 }
 
-@Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
-    )
-}
-
-@Composable
-private fun Note(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-/** The row itself is not a focus target: only its buttons are, one d-pad stop each. */
-@Composable
-private fun PairRow(title: String, subtitle: String?, buttons: @Composable () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        buttons()
-    }
-}
-
 /** Automatic first, then the countries the app knows how to read a list for. */
 private val HOME_COUNTRIES = listOf(
     "", "IT", "GB", "DE", "AT", "CH", "FR", "BE", "NL", "ES", "PT", "PL", "RO", "GR", "AL", "TR", "US", "CA",
@@ -255,46 +197,3 @@ private val HOME_COUNTRIES = listOf(
 
 private fun countryName(code: String): String =
     java.util.Locale("", code).getDisplayCountry(java.util.Locale.getDefault()).ifBlank { code }
-
-@Composable
-private fun ValueRow(label: String, subtitle: String, value: String, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused }
-            .focusLift(focused)
-            .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (focused) focusVeil(MaterialTheme.colorScheme.surfaceVariant)
-                else MaterialTheme.colorScheme.surfaceVariant,
-            )
-            .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.titleLarge,
-                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(16.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
