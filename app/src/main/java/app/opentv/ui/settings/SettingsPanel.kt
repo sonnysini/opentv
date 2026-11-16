@@ -230,16 +230,16 @@ private fun Accordions(entries: List<Entry>) {
               // Keyed: hiding the rows around a tall drop-down must not rebuild its row (the focus
               // on it would be lost and fall into the menu).
               if (tallOpen != null && e !== tallOpen) return@forEach
+              if (e.window) {
+                  SetActionRow(
+                      e.title, e.subtitle, icon = e.icon,
+                      modifier = Modifier
+                          .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                          .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
+                  ) { open = null; window = e }
+                  return@forEach
+              }
               androidx.compose.runtime.key(e.key) {
-                  if (e.window) {
-                      SetActionRow(
-                          e.title, e.subtitle, icon = e.icon,
-                          modifier = Modifier
-                              .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
-                              .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
-                      ) { open = null; window = e }
-                      return@key
-                  }
                   val isOpen = open == e.key
                   val bring = remember { BringIntoViewRequester() }
                   LaunchedEffect(isOpen) {
