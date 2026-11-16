@@ -392,8 +392,10 @@ internal fun HubTextButton(label: String, modifier: Modifier, onClick: () -> Uni
 internal fun HubTextButton(label: String, onClick: () -> Unit) = HubTextButton(label, Modifier, onClick)
 
 /**
- * A search box in the settings style, typed with the system keyboard (Fire TV's own): OK opens the
- * keyboard, its Search/Next closes it, ▲/▼ leave the box — a text field otherwise keeps the d-pad.
+ * A search box in the settings style, typed with the system keyboard (Fire TV's own). Fire TV
+ * opens its keyboard as soon as a text field takes the focus, so moving over the box must not
+ * give it to one: at rest the box is a plain focus stop showing the text, OK swaps in the real
+ * field and opens the keyboard. Its Search/Next (or leaving with ▲/▼) puts the plain box back.
  */
 @Composable
 internal fun SetSearchField(
@@ -402,73 +404,101 @@ internal fun SetSearchField(
     hint: String,
     modifier: Modifier = Modifier,
 ) {
+    var editing by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val boxFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val primary = MaterialTheme.colorScheme.primary
     val shape = CircleShape
-    val close = { keyboard?.hide(); Unit }
-    androidx.compose.foundation.text.BasicTextField(
-        value = value,
-        onValueChange = { onValue(it.take(40)) },
-        singleLine = true,
-        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = SetOn),
-        cursorBrush = androidx.compose.ui.graphics.SolidColor(primary),
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-            imeAction = androidx.compose.ui.text.input.ImeAction.Search,
-            autoCorrectEnabled = false,
-        ),
-        // Fire TV's "Next" key closes its keyboard with ImeAction.Next whatever was asked.
-        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-            onSearch = { close() }, onDone = { close() }, onGo = { close() }, onNext = { close() },
-        ),
-        modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
-            .onPreviewKeyEvent { e ->
-                when (e.key) {
-                    androidx.compose.ui.input.key.Key.DirectionDown, androidx.compose.ui.input.key.Key.DirectionUp -> {
-                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) {
-                            focusManager.moveFocus(
-                                if (e.key == androidx.compose.ui.input.key.Key.DirectionDown) androidx.compose.ui.focus.FocusDirection.Down
-                                else androidx.compose.ui.focus.FocusDirection.Up,
-                            )
-                        }
-                        true
-                    }
-                    androidx.compose.ui.input.key.Key.DirectionCenter, androidx.compose.ui.input.key.Key.Enter, androidx.compose.ui.input.key.Key.NumPadEnter -> {
-                        if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) keyboard?.show()
-                        true
-                    }
-                    else -> false
+    val done = {
+        keyboard?.hide()
+        editing = false
+        runCatching { boxFocus.requestFocus() }
+        Unit
+    }
+    androidx.compose.runtime.LaunchedEffect(editing) {
+        if (editing) {
+            runCatching { fieldFocus.requestFocus() }
+            keyboard?.show()
+        }
+    }
+    val leaveVertically: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { e ->
+        when (e.key) {
+            androidx.compose.ui.input.key.Key.DirectionDown, androidx.compose.ui.input.key.Key.DirectionUp -> {
+                if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) {
+                    editing = false
+                    focusManager.moveFocus(
+                        if (e.key == androidx.compose.ui.input.key.Key.DirectionDown) androidx.compose.ui.focus.FocusDirection.Down
+                        else androidx.compose.ui.focus.FocusDirection.Up,
+                    )
                 }
-            },
-        decorationBox = { inner ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .background(if (focused) primary.copy(alpha = 0.16f) else SetCard)
-                    .border(1.5.dp, if (focused) primary else SetChipEdge, shape)
-                    .padding(horizontal = 18.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    ImageVector.vectorResource(R.drawable.ic_nav_search),
-                    contentDescription = null,
-                    tint = if (focused) primary else SetDim,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Text(hint, fontSize = 16.sp, color = SetDim, maxLines = 1)
-                    inner()
-                }
-                if (focused) {
-                    Text(androidx.compose.ui.res.stringResource(R.string.search_ok_to_type), fontSize = 13.sp, color = SetDim, maxLines = 1)
-                }
+                true
             }
-        },
-    )
+            else -> false
+        }
+    }
+    Row(
+        modifier
+            .focusRequester(boxFocus)
+            .onFocusChanged { focused = it.hasFocus }
+            .clip(shape)
+            .background(if (focused) primary.copy(alpha = 0.16f) else SetCard)
+            .border(1.5.dp, if (focused) primary else SetChipEdge, shape)
+            .onPreviewKeyEvent(leaveVertically)
+            .clickable(interactionSource = null, indication = null) { if (editing) keyboard?.show() else editing = true },
+            .padding(horizontal = 18.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            ImageVector.vectorResource(R.drawable.ic_nav_search),
+            contentDescription = null,
+            tint = if (focused) primary else SetDim,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Box(Modifier.weight(1f)) {
+            if (editing) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = value,
+                    onValueChange = { onValue(it.take(40)) },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = SetOn),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(primary),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                        autoCorrectEnabled = false,
+                    ),
+                    // Fire TV's "Next" key closes its keyboard with ImeAction.Next whatever was asked.
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onSearch = { done() }, onDone = { done() }, onGo = { done() }, onNext = { done() },
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(fieldFocus)
+                        .onFocusChanged { if (!it.isFocused && editing) editing = false }
+                        .onPreviewKeyEvent { e ->
+                            when (e.key) {
+                                androidx.compose.ui.input.key.Key.DirectionCenter, androidx.compose.ui.input.key.Key.Enter, androidx.compose.ui.input.key.Key.NumPadEnter -> {
+                                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) keyboard?.show()
+                                    true
+                                }
+                                else -> false
+                            }
+                        },
+                )
+            }
+            if (value.isEmpty()) {
+                Text(hint, fontSize = 16.sp, color = SetDim, maxLines = 1)
+            } else if (!editing) {
+                Text(value, fontSize = 16.sp, color = SetOn, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (focused && !editing) {
+            Text(androidx.compose.ui.res.stringResource(R.string.search_ok_to_type), fontSize = 13.sp, color = SetDim, maxLines = 1)
+        }
+    }
 }
 
 /**
