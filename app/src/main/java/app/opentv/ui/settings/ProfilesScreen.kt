@@ -36,7 +36,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.opentv.R
 import app.opentv.ui.ProfilesViewModel
-import app.opentv.ui.channels.OnScreenKeyboard
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 
 /**
  * Who's watching. Add, rename, remove and switch between local profiles; the active one decides
@@ -50,11 +54,44 @@ fun ProfilesScreen(
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val activeId by viewModel.activeProfileId.collectAsStateWithLifecycle()
 
-    // null = list; NEW = adding; a positive id = renaming that profile.
+    // null = no window; NEW = adding; a positive id = renaming that profile.
     var editing by remember { mutableStateOf<Long?>(null) }
 
+    val embedded = LocalSettingsEmbedded.current
+    Column(
+        Modifier.settingsRoot(embedded).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        if (!embedded) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.profiles_title), style = MaterialTheme.typography.headlineMedium)
+                Spacer(Modifier.weight(1f))
+                HubTextButton(stringResource(R.string.common_done), onBack)
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        val first = LocalSettingsFirstFocus.current
+        profiles.forEachIndexed { i, profile ->
+            val active = profile.id == activeId
+            SetRow(
+                profile.name,
+                if (active) stringResource(R.string.profiles_active) else null,
+                icon = R.drawable.ic_set_user_circle,
+                titleColor = if (active) MaterialTheme.colorScheme.primary else null,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val firstPill = if (i == 0 && first != null) Modifier.focusRequester(first) else Modifier
+                    if (!active) Pill(stringResource(R.string.profiles_use), on = false, modifier = firstPill) { viewModel.select(profile.id) }
+                    Pill(stringResource(R.string.profiles_rename), on = false, modifier = if (active) firstPill else Modifier) { editing = profile.id }
+                    if (profile.id != 1L) Pill(stringResource(R.string.common_remove), on = false) { viewModel.remove(profile.id) }
+                }
+            }
+        }
+        SetActionRow(stringResource(R.string.profiles_add), icon = R.drawable.ic_set_plus) { editing = NEW }
+    }
+
     editing?.let { target ->
-        NameEntry(
+        NameDialog(
             initial = if (target == NEW) "" else profiles.firstOrNull { it.id == target }?.name.orEmpty(),
             heading = if (target == NEW) stringResource(R.string.profiles_new_heading) else stringResource(R.string.profiles_rename_heading),
             onCancel = { editing = null },
@@ -63,95 +100,34 @@ fun ProfilesScreen(
                 editing = null
             },
         )
-        return
-    }
-
-    val embedded = LocalSettingsEmbedded.current
-    Column(Modifier.settingsRoot(embedded)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!embedded) Text(stringResource(R.string.profiles_title), style = MaterialTheme.typography.headlineMedium)
-            if (!embedded) Spacer(Modifier.weight(1f))
-            Button(onClick = { editing = NEW }) { Text(stringResource(R.string.profiles_add)) }
-            if (!embedded) {
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            items(profiles, key = { it.id }) { profile ->
-                val active = profile.id == activeId
-                Card {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                profile.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            if (active) {
-                                Text(
-                                    stringResource(R.string.profiles_active),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-                        if (!active) {
-                            TextButton(onClick = { viewModel.select(profile.id) }) { Text(stringResource(R.string.profiles_use)) }
-                        }
-                        TextButton(onClick = { editing = profile.id }) { Text(stringResource(R.string.profiles_rename)) }
-                        if (profile.id != 1L) {
-                            TextButton(onClick = { viewModel.remove(profile.id) }) { Text(stringResource(R.string.common_remove)) }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
+/** The profile's name in a window, typed with the system keyboard. */
 @Composable
-private fun NameEntry(
+private fun NameDialog(
     initial: String,
     heading: String,
     onCancel: () -> Unit,
     onSave: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf(initial) }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(heading, style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.width(20.dp))
-            Text(
-                name.ifEmpty { "…" },
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.weight(1f))
-            Button(enabled = name.isNotBlank(), onClick = { onSave(name) }) { Text(stringResource(R.string.common_save)) }
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.common_cancel)) }
-        }
-        Spacer(Modifier.height(24.dp))
-        OnScreenKeyboard(
-            onKey = { if (name.length < 24) name += it },
-            onSpace = { if (name.length < 24) name += " " },
-            onBackspace = { name = name.dropLast(1) },
-            onClear = { name = "" },
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val ok = name.isNotBlank()
+    SetDialog(heading, onDismiss = onCancel) {
+        SetTextField(
+            value = name,
+            onValue = { name = it.take(24) },
+            label = stringResource(R.string.profiles_name_label),
+            modifier = Modifier.focusRequester(focus),
+            onDone = { if (ok) onSave(name.trim()) },
         )
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Pill(stringResource(R.string.common_save), on = ok, enabled = ok) { onSave(name.trim()) }
+            Pill(stringResource(R.string.common_cancel), on = false, onClick = onCancel)
+        }
     }
 }
 

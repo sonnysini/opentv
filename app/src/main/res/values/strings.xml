@@ -201,11 +201,12 @@
     <string name="settings_addons_subtitle">Play from Stremio add-ons you set up yourself</string>
     <string name="addons_note">Add a Stremio add-on by pasting its manifest URL. MyTV ships with none — you bring your own. If the add-on is debrid-backed, set your debrid key up on the add-on\'s own site and paste the personalised URL it gives you; your key stays there, never in MyTV.</string>
     <string name="addons_url_label">Add-on manifest URL</string>
+    <string name="addons_add_row">Add add-on</string>
     <string name="addons_add">Add</string>
     <string name="addons_checking">Checking…</string>
     <string name="addons_invalid">That doesn\'t look like a valid add-on manifest URL.</string>
     <string name="addons_added">Added %1$s</string>
-    <string name="addons_empty">No add-ons yet. Paste a manifest URL above to add one.</string>
+    <string name="addons_empty">No add-ons yet.</string>
     <string name="settings_guide_title">TV guide</string>
     <string name="settings_guide_subtitle">Guide sources and free XMLTV feeds</string>
     <string name="settings_channels_subtitle">Hide or favourite individual channels</string>
@@ -330,6 +331,7 @@
     <string name="profiles_rename_heading">Rename profile</string>
     <string name="profiles_title">Who\'s watching?</string>
     <string name="profiles_add">Add profile</string>
+    <string name="profiles_name_label">Name</string>
     <string name="profiles_active">Active</string>
     <string name="profiles_use">Use</string>
     <string name="profiles_rename">Rename</string>
@@ -518,6 +520,7 @@
     <!-- ============================ Channel manager ============================ -->
     <string name="channels_manager_title">Channel manager</string>
     <string name="channels_manager_hint">Search to hide or favourite channels</string>
+    <string name="channels_manager_search_box">Search a channel</string>
     <string name="channels_manager_search_hint">Search for a channel, then hide it from the guide or star it.</string>
     <string name="channels_manager_no_match">No channels match “%1$s”.</string>
     <string name="channels_manager_all_sources">All sources</string>
@@ -665,6 +668,7 @@
     <string name="settings_tmdb_key_label">TMDB API key</string>
     <string name="settings_tmdb_save">Save key</string>
     <string name="settings_tmdb_saved">TMDB key saved</string>
+    <string name="settings_tmdb_none">Not set</string>
     <string name="settings_tmdb_active">Active</string>
     <string name="settings_categories_title">Categories</string>
     <string name="settings_categories_subtitle">Switch off whole categories you never watch</string>

@@ -425,58 +425,6 @@ fun TmdbSettingsScreen(onBack: () -> Unit) {
     }
 }
 
-/**
- * Settings › Providers › What to download: live, movies and series on or off, each with a refresh.
- * Less to download makes a sync quicker.
- */
-@Composable
-internal fun ContentSection() {
-    val context = LocalContext.current
-    val settings = remember { AppSettings.get(context) }
-    val liveEnabled by settings.liveEnabled.collectAsStateWithLifecycle()
-    val moviesEnabled by settings.moviesEnabled.collectAsStateWithLifecycle()
-    val seriesEnabled by settings.seriesEnabled.collectAsStateWithLifecycle()
-
-    // A refresh next to each content toggle kicks a full catalogue re-sync (which now honours the
-    // toggles, so a type just switched on is fetched). Runs as background work so it isn't cut short
-    // if you leave this screen; a quick Toast confirms it started.
-    val refreshingMessage = stringResource(R.string.settings_content_refreshing)
-    val onRefreshContent: () -> Unit = {
-        SyncWorker.refreshNow(context)
-        Toast.makeText(context, refreshingMessage, Toast.LENGTH_SHORT).show()
-    }
-
-    SettingsSection(stringResource(R.string.settings_section_content)) {
-        Text(
-            stringResource(R.string.settings_content_note),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(4.dp))
-        ContentToggleRow(
-            title = stringResource(R.string.nav_live_tv),
-            subtitle = stringResource(R.string.settings_content_live_subtitle),
-            checked = liveEnabled,
-            onToggle = settings::setLiveEnabled,
-            onRefresh = onRefreshContent,
-        )
-        ContentToggleRow(
-            title = stringResource(R.string.nav_movies),
-            subtitle = stringResource(R.string.settings_content_movies_subtitle),
-            checked = moviesEnabled,
-            onToggle = settings::setMoviesEnabled,
-            onRefresh = onRefreshContent,
-        )
-        ContentToggleRow(
-            title = stringResource(R.string.nav_shows),
-            subtitle = stringResource(R.string.settings_content_series_subtitle),
-            checked = seriesEnabled,
-            onToggle = settings::setSeriesEnabled,
-            onRefresh = onRefreshContent,
-        )
-    }
-}
-
 /** A scrolling settings page: title and Done on top, [content] below. */
 @Composable
 internal fun SettingsPage(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
@@ -545,58 +493,40 @@ private fun LanguagePickerDialog(current: String, onPick: (String) -> Unit, onDi
 /**
  * Optional TMDB back-fill. The user pastes their own free key; it is stored on-device in
  * [AppSettings] and used to fill posters/backdrops/synopsis/cast a provider left blank. Empty by
- * default, so the feature is off until opted into.
+ * default, so the feature is off until opted into. A row with the state; the key goes in a window.
  */
 @Composable
 private fun TmdbKeySection(settings: AppSettings) {
     val context = LocalContext.current
     val savedKey by settings.tmdbApiKey.collectAsStateWithLifecycle()
-    var field by remember(savedKey) { mutableStateOf(savedKey) }
+    var editing by remember { mutableStateOf(false) }
     val savedMessage = stringResource(R.string.settings_tmdb_saved)
 
-    SettingsSection(stringResource(R.string.settings_section_metadata)) {
-        Text(
-            stringResource(R.string.settings_tmdb_note),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        SetNote(stringResource(R.string.settings_tmdb_note))
+        SetActionRow(
+            stringResource(R.string.settings_tmdb_key_label),
+            value = stringResource(if (savedKey.isNotBlank()) R.string.settings_tmdb_active else R.string.settings_tmdb_none),
+            icon = R.drawable.ic_set_film_slate,
+            modifier = LocalSettingsFirstFocus.current?.let { Modifier.focusRequester(it) } ?: Modifier,
+        ) { editing = true }
+    }
+
+    if (editing) {
+        var field by remember { mutableStateOf(savedKey) }
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
         val save = {
-            settings.setTmdbApiKey(field)
+            settings.setTmdbApiKey(field.trim())
             Toast.makeText(context, savedMessage, Toast.LENGTH_SHORT).show()
+            editing = false
         }
-        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-        OutlinedTextField(
-            value = field,
-            onValueChange = { field = it.trim() },
-            singleLine = true,
-            label = { Text(stringResource(R.string.settings_tmdb_key_label)) },
-            // The TV keyboard's Next/Done saves, and DOWN leaves the field for the button: a
-            // text field otherwise keeps the d-pad, and the key never got saved from a remote.
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onPreviewKeyEvent { e ->
-                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
-                        e.key == androidx.compose.ui.input.key.Key.DirectionDown
-                    ) {
-                        focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
-                    } else {
-                        false
-                    }
-                },
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = save) { Text(stringResource(R.string.settings_tmdb_save)) }
-            if (savedKey.isNotBlank()) {
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    stringResource(R.string.settings_tmdb_active),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+        SetDialog(stringResource(R.string.settings_tmdb_key_label), onDismiss = { editing = false }) {
+            SetTextField(field, { field = it.trim() }, stringResource(R.string.settings_tmdb_key_label), Modifier.focusRequester(focus), onDone = save)
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Pill(stringResource(R.string.settings_tmdb_save), on = true, onClick = save)
+                Pill(stringResource(R.string.common_cancel), on = false) { editing = false }
             }
         }
     }
@@ -869,49 +799,6 @@ private fun ToggleRow(
             )
         }
         Spacer(Modifier.width(16.dp))
-        Switch(checked = checked, onCheckedChange = onToggle)
-    }
-}
-
-/**
- * A [ToggleRow] with a refresh button in front of the switch: toggle the content type on/off, or
- * tap refresh to re-sync it now. Only the label column toggles on tap, so the refresh button and
- * switch stay independently focusable for d-pad users.
- */
-@Composable
-private fun ContentToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onToggle: (Boolean) -> Unit,
-    onRefresh: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            Modifier
-                .weight(1f)
-                .widthIn(max = 640.dp)
-                .clickable { onToggle(!checked) }
-                .padding(8.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onRefresh) {
-            Icon(
-                Icons.Filled.Refresh,
-                contentDescription = stringResource(R.string.settings_content_refresh),
-            )
-        }
-        Spacer(Modifier.width(8.dp))
         Switch(checked = checked, onCheckedChange = onToggle)
     }
 }

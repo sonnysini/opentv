@@ -5,35 +5,25 @@
  */
 package app.opentv.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.opentv.R
 import app.opentv.core.LogoPack
@@ -50,105 +40,85 @@ import kotlinx.coroutines.launch
 @Composable
 fun LogoSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val settings = remember { ServiceLocator.get(context).settings }
+    val graph = remember { ServiceLocator.get(context) }
+    val settings = graph.settings
     val source by settings.logoSource.collectAsStateWithLifecycle()
     val externalGroups by settings.externalGroupLogos.collectAsStateWithLifecycle()
+    val packUrl by settings.logoPackUrl.collectAsStateWithLifecycle()
+    val pack by settings.logoPack.collectAsStateWithLifecycle()
+    var packWindow by remember { mutableStateOf(false) }
 
     SettingsPage(stringResource(R.string.settings_logos_title), onBack) {
-        SettingsSection(stringResource(R.string.logos_channels_title)) {
-            ThemeOption(stringResource(R.string.logos_source_provider), source == LogoSource.PROVIDER) {
-                settings.setLogoSource(LogoSource.PROVIDER)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            val sources = listOf(LogoSource.PROVIDER, LogoSource.PROVIDER_THEN_EXTERNAL, LogoSource.EXTERNAL_THEN_PROVIDER)
+            // Three long labels: the pills go on a line of their own under the title.
+            SetRow(stringResource(R.string.logos_channels_title), stringResource(R.string.logos_source_note), below = true) {
+                Pills(
+                    listOf(
+                        stringResource(R.string.logos_source_provider),
+                        stringResource(R.string.logos_source_provider_then_external),
+                        stringResource(R.string.logos_source_external_then_provider),
+                    ),
+                    isOn = { sources[it] == source },
+                    first = true,
+                ) { settings.setLogoSource(sources[it]) }
             }
-            ThemeOption(stringResource(R.string.logos_source_provider_then_external), source == LogoSource.PROVIDER_THEN_EXTERNAL) {
-                settings.setLogoSource(LogoSource.PROVIDER_THEN_EXTERNAL)
-            }
-            ThemeOption(stringResource(R.string.logos_source_external_then_provider), source == LogoSource.EXTERNAL_THEN_PROVIDER) {
-                settings.setLogoSource(LogoSource.EXTERNAL_THEN_PROVIDER)
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.logos_source_note),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-        SettingsSection(stringResource(R.string.logos_groups_title)) {
-            SwitchRow(
+            SetSwitchRow(
                 stringResource(R.string.logos_groups_external),
                 stringResource(R.string.logos_groups_external_desc),
                 checked = externalGroups,
                 onToggle = settings::setExternalGroupLogos,
             )
-        }
-
-        // The pack only matters once outside logos are in play. It goes last: on Fire TV a text
-        // field opens the keyboard as soon as it takes focus, so nothing should sit below it.
-        if (source != LogoSource.PROVIDER) {
-            Spacer(Modifier.height(16.dp))
-            LogoPackRow()
+            // The pack only matters once outside logos are in play.
+            if (source != LogoSource.PROVIDER) {
+                SetActionRow(
+                    stringResource(R.string.logo_pack_title),
+                    stringResource(R.string.logo_pack_desc),
+                    value = if (packUrl.isNotEmpty() && pack.byKey.isNotEmpty()) stringResource(R.string.logo_pack_loaded, pack.byKey.size) else null,
+                    icon = R.drawable.ic_set_image,
+                ) { packWindow = true }
+            }
         }
     }
+
+    if (packWindow) LogoPackDialog(onDismiss = { packWindow = false })
 }
 
-/** Settings › Logos › Logo pack: the address, a Load button and how the last load went. */
+/** Settings › Logos › Logo pack, in a window: the address, Load, and how the last load went. */
 @Composable
-private fun LogoPackRow() {
+private fun LogoPackDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val graph = remember { ServiceLocator.get(context) }
     val saved by graph.settings.logoPackUrl.collectAsStateWithLifecycle()
     val pack by graph.settings.logoPack.collectAsStateWithLifecycle()
-    val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     var url by remember(saved) { mutableStateOf(saved) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
-    Card {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(stringResource(R.string.logo_pack_title), style = MaterialTheme.typography.titleMedium)
-            Text(
-                stringResource(R.string.logo_pack_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.logo_pack_url)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.moveFocus(FocusDirection.Right) }),
-                    modifier = Modifier.weight(1f).dpadLeavesField(focusManager),
-                )
-                Spacer(Modifier.width(12.dp))
-                Button(
-                    enabled = !loading,
-                    onClick = {
-                        graph.settings.setLogoPackUrl(url)
-                        error = null
-                        if (url.isBlank()) return@Button
-                        loading = true
-                        scope.launch {
-                            runCatching { LogoPack.refresh(graph.settings, graph.httpClient) }
-                                .onFailure { error = it.message ?: it.javaClass.simpleName }
-                            loading = false
-                        }
-                    },
-                ) { Text(stringResource(R.string.logo_pack_load)) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val load = {
+        graph.settings.setLogoPackUrl(url)
+        error = null
+        if (url.isNotBlank() && !loading) {
+            loading = true
+            scope.launch {
+                runCatching { LogoPack.refresh(graph.settings, graph.httpClient) }
+                    .onFailure { error = it.message ?: it.javaClass.simpleName }
+                loading = false
             }
-            val status = error?.let { stringResource(R.string.logo_pack_failed, it) }
-                ?: if (saved.isNotEmpty() && pack.byKey.isNotEmpty()) stringResource(R.string.logo_pack_loaded, pack.byKey.size) else null
-            if (status != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    status,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-            }
+        }
+    }
+    SetDialog(stringResource(R.string.logo_pack_title), onDismiss) {
+        SetNote(stringResource(R.string.logo_pack_desc))
+        SetTextField(url, { url = it }, stringResource(R.string.logo_pack_url), Modifier.focusRequester(focus), uri = true, onDone = load)
+        val status = error?.let { stringResource(R.string.logo_pack_failed, it) }
+            ?: if (saved.isNotEmpty() && pack.byKey.isNotEmpty()) stringResource(R.string.logo_pack_loaded, pack.byKey.size) else null
+        if (status != null) SetStatus(status, error = error != null)
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Pill(stringResource(R.string.logo_pack_load), on = !loading, enabled = !loading) { load() }
+            Pill(stringResource(R.string.common_cancel), on = false, onClick = onDismiss)
         }
     }
 }

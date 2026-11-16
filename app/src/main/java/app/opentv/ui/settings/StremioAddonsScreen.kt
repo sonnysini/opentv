@@ -33,6 +33,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -90,121 +92,64 @@ class StremioAddonsViewModel(app: Application) : AndroidViewModel(app) {
  * Manage Stremio add-ons: paste a manifest URL, it's validated against the live add-on and stored
  * on-device. OpenTV bundles none and points at none — the user brings their own. A short note makes
  * the debrid model explicit: the key lives in the add-on's own personalised URL, not in OpenTV.
+ * In the settings style: one row per add-on with Remove, and "Add add-on" opens a window.
  */
 @Composable
 fun StremioAddonsScreen(onBack: () -> Unit) {
     val viewModel: StremioAddonsViewModel = viewModel()
     val addons by viewModel.addons.collectAsStateWithLifecycle()
-    val status by viewModel.status.collectAsStateWithLifecycle()
-    var input by remember { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
 
-    // Clear the field once an add-on validates and is stored — done as an effect, not during
-    // composition, so it's a single clean side effect rather than a write mid-layout.
-    LaunchedEffect(status) {
-        if (status is StremioAddonsViewModel.Status.Added) input = ""
-    }
-
-    val embedded = LocalSettingsEmbedded.current
-    Column(Modifier.settingsRoot(embedded)) {
-        if (!embedded) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.settings_addons_title), style = MaterialTheme.typography.headlineMedium)
-                Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-        Text(
-            stringResource(R.string.addons_note),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = input,
-            onValueChange = {
-                input = it
-                if (status !is StremioAddonsViewModel.Status.Idle) viewModel.clearStatus()
-            },
-            label = { Text(stringResource(R.string.addons_url_label)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(Modifier.height(10.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = {
-                    viewModel.add(input)
-                },
-                enabled = input.isNotBlank() && status !is StremioAddonsViewModel.Status.Checking,
-            ) { Text(stringResource(R.string.addons_add)) }
-            Spacer(Modifier.width(14.dp))
-            when (val s = status) {
-                is StremioAddonsViewModel.Status.Checking -> {
-                    CircularProgressIndicator(modifier = Modifier.height(20.dp).width(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.addons_checking), style = MaterialTheme.typography.bodyMedium)
+    SettingsPage(stringResource(R.string.settings_addons_title), onBack) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            SetNote(stringResource(R.string.addons_note))
+            if (addons.isEmpty()) SetNote(stringResource(R.string.addons_empty))
+            addons.forEach { addon ->
+                SetRow(addon.name, hostOf(addon.manifestUrl), icon = R.drawable.ic_set_puzzle_piece) {
+                    Pill(stringResource(R.string.common_remove), on = false) { viewModel.remove(addon) }
                 }
-                is StremioAddonsViewModel.Status.Added ->
-                    Text(
-                        stringResource(R.string.addons_added, s.name),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                is StremioAddonsViewModel.Status.Invalid ->
-                    Text(
-                        stringResource(R.string.addons_invalid),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                StremioAddonsViewModel.Status.Idle -> {}
             }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        if (addons.isEmpty()) {
-            Text(
-                stringResource(R.string.addons_empty),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                items(addons, key = { it.manifestUrl }) { addon ->
-                    AddonRow(addon = addon, onRemove = { viewModel.remove(addon) })
-                }
+            SetActionRow(stringResource(R.string.addons_add_row), icon = R.drawable.ic_set_plus) {
+                viewModel.clearStatus()
+                adding = true
             }
         }
     }
+
+    if (adding) AddAddonDialog(viewModel, onDismiss = { adding = false; viewModel.clearStatus() })
 }
 
 @Composable
-private fun AddonRow(addon: StremioAddon, onRemove: () -> Unit) {
-    Card {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(addon.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    hostOf(addon.manifestUrl),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            TextButton(onClick = onRemove) { Text(stringResource(R.string.common_remove)) }
+private fun AddAddonDialog(viewModel: StremioAddonsViewModel, onDismiss: () -> Unit) {
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    var input by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // Validated and stored: the window closes by itself.
+    LaunchedEffect(status) { if (status is StremioAddonsViewModel.Status.Added) onDismiss() }
+    val checking = status is StremioAddonsViewModel.Status.Checking
+    val canAdd = input.isNotBlank() && !checking
+    SetDialog(stringResource(R.string.addons_add_row), onDismiss, wide = true) {
+        SetTextField(
+            value = input,
+            onValue = {
+                input = it
+                if (status !is StremioAddonsViewModel.Status.Idle) viewModel.clearStatus()
+            },
+            label = stringResource(R.string.addons_url_label),
+            modifier = Modifier.focusRequester(focus),
+            uri = true,
+            onDone = { if (canAdd) viewModel.add(input) },
+        )
+        when (status) {
+            is StremioAddonsViewModel.Status.Checking -> SetStatus(stringResource(R.string.addons_checking))
+            is StremioAddonsViewModel.Status.Invalid -> SetStatus(stringResource(R.string.addons_invalid), error = true)
+            else -> {}
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Pill(stringResource(R.string.addons_add), on = canAdd, enabled = canAdd) { viewModel.add(input) }
+            Pill(stringResource(R.string.common_cancel), on = false, onClick = onDismiss)
         }
     }
 }

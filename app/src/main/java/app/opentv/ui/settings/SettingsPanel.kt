@@ -196,56 +196,75 @@ private fun Accordions(entries: List<Entry>) {
     var window by remember { mutableStateOf<Entry?>(null) }
     val headers = remember { HashMap<String, FocusRequester>() }
     val first = LocalSettingsFirstFocus.current
+    // The row to put the focus back on once a drop-down closes: after a tall one the other rows
+    // come back first, so it waits a frame for them.
+    var refocus by remember { mutableStateOf<String?>(null) }
     val close: () -> Unit = {
-        val was = open
+        refocus = open
         open = null
-        was?.let { k -> runCatching { headers[k]?.requestFocus() } }
+    }
+    LaunchedEffect(refocus) {
+        val k = refocus ?: return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { headers[k]?.requestFocus() }
+        refocus = null
     }
     // Back with a drop-down open closes it (and leaves the focus on its row). Composed after the
     // shell's own Back, so it is asked first; a screen inside one with its own Back is asked before.
     BackHandler(enabled = open != null) { close() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        // An open drop-down fits under its row on screen: the page's height less a row.
+        // An open drop-down fits under its row on screen: the page's height less the row.
         val bodyMax = (maxHeight - 72.dp).coerceAtLeast(160.dp)
+        // A tall one (Categories, Channels) has the page to itself while open: its row at the top,
+        // the rows around it gone, nothing to scroll — so its search box can't slide out of sight.
+        val tallOpen = entries.firstOrNull { it.key == open && it.tall }
+        val tallBody = (maxHeight - 120.dp).coerceAtLeast(160.dp)
+        val scroll = rememberScrollState()
+        LaunchedEffect(tallOpen) { if (tallOpen != null) scroll.scrollTo(0) }
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
+            Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             entries.forEach { e ->
-                if (e.window) {
-                    SetActionRow(
-                        e.title, e.subtitle, icon = e.icon,
-                        modifier = Modifier
-                            .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
-                            .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
-                    ) { open = null; window = e }
-                    return@forEach
-                }
-                val isOpen = open == e.key
-                val bring = remember { BringIntoViewRequester() }
-                LaunchedEffect(isOpen) {
-                    if (isOpen) {
-                        delay(260)
-                        runCatching { bring.bringIntoView() }
-                    }
-                }
-                Box(Modifier.bringIntoViewRequester(bring)) {
-                    SetAccordion(
-                        title = e.title,
-                        subtitle = e.subtitle,
-                        icon = e.icon,
-                        open = isOpen,
-                        onToggle = { if (isOpen) close() else open = e.key },
-                        headerModifier = Modifier
-                            .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
-                            .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
-                    ) {
-                        Box(if (e.tall) Modifier.fillMaxWidth().height(bodyMax) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
-                            e.body(close)
-                        }
-                    }
-                }
+              // Keyed: hiding the rows around a tall drop-down must not rebuild its row (the focus
+              // on it would be lost and fall into the menu).
+              if (tallOpen != null && e !== tallOpen) return@forEach
+              if (e.window) {
+                  SetActionRow(
+                      e.title, e.subtitle, icon = e.icon,
+                      modifier = Modifier
+                          .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                          .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
+                  ) { open = null; window = e }
+                  return@forEach
+              }
+              androidx.compose.runtime.key(e.key) {
+                  val isOpen = open == e.key
+                  val bring = remember { BringIntoViewRequester() }
+                  LaunchedEffect(isOpen) {
+                      if (isOpen) {
+                          delay(260)
+                          if (!e.tall) runCatching { bring.bringIntoView() }
+                      }
+                  }
+                  Box(Modifier.bringIntoViewRequester(bring)) {
+                      SetAccordion(
+                          title = e.title,
+                          subtitle = e.subtitle,
+                          icon = e.icon,
+                          open = isOpen,
+                          onToggle = { if (isOpen) close() else open = e.key },
+                          headerModifier = Modifier
+                              .focusRequester(headers.getOrPut(e.key) { FocusRequester() })
+                              .then(if (e === entries.first() && first != null) Modifier.focusRequester(first) else Modifier),
+                      ) {
+                          Box(if (e.tall) Modifier.fillMaxWidth().height(tallBody) else Modifier.fillMaxWidth().heightIn(max = bodyMax)) {
+                              e.body(close)
+                          }
+                      }
+                  }
+              }
             }
             Spacer(Modifier.height(8.dp))
         }

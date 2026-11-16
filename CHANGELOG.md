@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.63.0 — 16 November 2026
+
+- **The system keyboard everywhere.** The on-screen QWERTY keyboard is gone: searching
+  categories and channels, and naming a profile, now type with the TV's own keyboard (on Fire TV,
+  Amazon's), like Search already did.
+- **The last sections in the new rows.** Channels (search box on top, categories on the left,
+  each channel with *Favourite* and *Show* pills), Grouping, Logos (where logos come from as pills,
+  the logo pack in a window), Add-ons (one row each, *Add add-on* opens a window), TMDB (the key in
+  a window) and Account (profiles as rows with *Use* / *Rename* / *Remove*, the name in a window).
+- **Home country from a list.** Grouping › Home country opens a window with Automatic and the
+  countries by name, each with its flag, on the current choice; OK picks it.
+- Categories and Channels open on the whole page, their row on top and the search box always in
+  sight (the page used to scroll it away).
+- **Leaving the settings is instant.** The page you came from stays alive under the settings
+  (hidden, its preview stopped), so Back goes straight into the animation instead of waiting about
+  a second for the page to be built again.
+
 ## 0.62.0 — 15 November 2026
 
 - **Settings open in the menu.** Settings no longer is a page of its own: picking it, the menu
