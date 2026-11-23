@@ -302,7 +302,7 @@ fun FootballScreen(
         val highlight = item.highlights
         when {
             item.match.phase == Phase.FINISHED && highlight != null -> openHighlights(item, highlight)
-            item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty() -> {
+            (item.match.phase != Phase.FINISHED || highlight == null) && viewModel.feedsOf(item).isNotEmpty() -> {
                 scanOnTop = false
                 viewModel.autoWatch(item)
             }
@@ -345,7 +345,7 @@ fun FootballScreen(
     }
     val hold: (FootballViewModel.Item) -> Unit = { item ->
         pickedOnTop = false
-        if (item.match.phase != Phase.FINISHED && viewModel.feedsOf(item).isNotEmpty()) picking = item else noChannel(item)
+        if ((item.match.phase != Phase.FINISHED || item.highlights == null) && viewModel.feedsOf(item).isNotEmpty()) picking = item else noChannel(item)
     }
     // The carousel's card on screen: the first (live, else next) one, then wherever it turned to.
     var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
