@@ -556,7 +556,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             m.goals && today.any { g -> !g.goals && g.kickoffUtcMillis == m.kickoffUtcMillis && sameShow(g.league, m.league) && italianIn(g) }
         val goals = FootballRepository.goalShows(today)
         val channels = repo.channelsFor(
-            today.filter { it.phase == Phase.SCHEDULED || it.phase == Phase.LIVE } + upcoming + goals,
+            today.filter { it.phase != Phase.OFF && !(it.phase == Phase.FINISHED && it.league != FootballRepository.SERIE_A) } +
+                upcoming + goals,
         )
         // Highlights already found only: looking up new ones waits until the page is up.
         // The goal show last, like a game kicking off after the others; only with a channel.
@@ -565,7 +566,8 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
             .filter { it.phase != Phase.FINISHED || it.league == FootballRepository.SERIE_A }
             .map { m ->
                 when (m.phase) {
-                    Phase.FINISHED -> Item(m, highlights = repo.knownHighlights(m))
+                    // Its channels too: until the highlights are out, OK plays the post-match show.
+                    Phase.FINISHED -> Item(m, channels = channels[m.id].orEmpty(), highlights = repo.knownHighlights(m))
                     Phase.OFF -> Item(m, relevant = relevant(m))
                     else -> Item(m, channels = channels[m.id].orEmpty(), relevant = relevant(m))
                 }
@@ -597,7 +599,7 @@ class FootballViewModel(app: Application) : AndroidViewModel(app) {
         // After the rest is on screen: highlights not found yet (the YouTube feed; older ones may
         // need YouTube's full video list, a few seconds on a slow box).
         if (items.any { it.match.phase == Phase.FINISHED && it.highlights == null }) {
-            page = page.map { if (it.match.phase == Phase.FINISHED && it.highlights == null) finished(it.match) else it }
+            page = page.map { if (it.match.phase == Phase.FINISHED && it.highlights == null) it.copy(highlights = repo.highlightsFor(it.match)) else it }
             publish()
         }
         val todayIds = today.mapTo(HashSet()) { it.id }

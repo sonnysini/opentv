@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.65.0 — 23 November 2026
+
+- **The post-match show from a finished game.** Until its highlights are out, OK on a game just over
+  plays its best channel as during the game (the post-match on Sky or DAZN), and holding OK opens
+  the source picker. Once the highlights are there, OK plays them as before.
+
 ## 0.64.0 — 23 November 2026
 
 - **The player's heading fits the logo.** The channel and what's on always take two lines: a square
