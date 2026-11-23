@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.64.0 — 23 November 2026
+
+- **The player's heading fits the logo.** The channel and what's on always take two lines: a square
+  logo stands on the left as tall as both, the channel over the programme; a wide one (Sky's) has
+  the top line to itself, with the channel and the programme side by side under it.
+- **The fps tag straight away.** It now comes from the frames' timestamps, so it shows within half a
+  second of the picture instead of after a few seconds of counting frames.
+
 ## 0.63.0 — 16 November 2026
 
 - **The system keyboard everywhere.** The on-screen QWERTY keyboard is gone: searching

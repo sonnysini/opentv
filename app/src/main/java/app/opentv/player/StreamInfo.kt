@@ -212,7 +212,11 @@ object StreamInfo {
         private fun snapshot(stats: PlayerController.Stats): Snapshot {
             val v = stats.video
             val a = stats.audio
-            val rate = v?.frameRate?.takeIf { it > 0f }?.let { snapFrameRate(it) } ?: fps.takeIf { it > 0f }
+            // Declared by the stream, else the frames' timestamps (right within half a second), else
+            // the frames drawn over the last seconds (slow, and short on a box that drops some).
+            val rate = v?.frameRate?.takeIf { it > 0f }?.let { snapFrameRate(it) }
+                ?: stats.timestampFrameRate.takeIf { it > 0f }?.let { snapFrameRate(it) }
+                ?: fps.takeIf { it > 0f }
             return Snapshot(
                 resolution = resolutionLabel(stats.width, stats.height),
                 size = if (stats.width > 0 && stats.height > 0) "${stats.width}×${stats.height}" else null,

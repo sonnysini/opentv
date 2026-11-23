@@ -151,6 +151,7 @@ import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
 import app.opentv.ui.channels.shownLogo
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -729,8 +730,10 @@ fun PlayerScreen(
         if (!controlsVisible && !showInfo) return@LaunchedEffect
         val meter = StreamInfo.Meter()
         while (true) {
-            streamInfo = meter.sample(SystemClock.elapsedRealtime(), controller.stats())
-            delay(STREAM_INFO_SAMPLE_MILLIS)
+            val info = meter.sample(SystemClock.elapsedRealtime(), controller.stats())
+            streamInfo = info
+            // Quicker until the fps tag is in: the frames' timestamps give it within half a second.
+            delay(if (info.frameRate == null) STREAM_INFO_FIRST_SAMPLE_MILLIS else STREAM_INFO_SAMPLE_MILLIS)
         }
     }
 
@@ -1155,53 +1158,19 @@ fun PlayerScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                // Everything starts at the left edge: the logo is small, on the channel name's line, so
-                // a wide logo (Sky's) only pushes that line and the guide never moves.
+                // The channel and what's on take two lines, whatever the logo's shape; the guide below
+                // starts at the left edge.
                 val logoUrl = (variants.firstOrNull { it.id == currentId }?.shownLogo() ?: listedChannel?.shownLogo())
                     ?.takeIf { it.isNotBlank() }
                 val now = onAir?.now
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (game?.homeCrest != null) {
-                        MatchCrests(game.homeCrest, game.awayCrest, Modifier.size(LOGO_INLINE))
-                        Spacer(Modifier.width(14.dp))
-                    } else if (logoUrl != null) {
-                        AsyncImage(
-                            model = logoUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            alignment = Alignment.CenterStart,
-                            modifier = Modifier
-                                .height(LOGO_INLINE)
-                                .widthIn(max = LOGO_INLINE_MAX_WIDTH)
-                                .clip(RoundedCornerShape(5.dp)),
-                        )
-                        Spacer(Modifier.width(14.dp))
-                    }
-                    Text(
-                        channelTitle,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    streamInfo?.badges?.takeIf { it.isNotEmpty() }?.let { badges ->
-                        Spacer(Modifier.width(14.dp))
-                        StreamBadges(badges)
-                    }
-                }
-                now?.let {
-                    Spacer(Modifier.height(9.dp))
-                    Text(
-                        it.title,
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                ChannelHeading(
+                    logoUrl = logoUrl,
+                    homeCrest = game?.homeCrest,
+                    awayCrest = game?.awayCrest,
+                    name = channelTitle,
+                    badges = streamInfo?.badges.orEmpty(),
+                    title = now?.title,
+                )
                 // With the info panel open on the right, the guide stops short of it.
                 onAir?.let { OnAirLines(it, Modifier.widthIn(max = if (showInfo) EPG_WIDTH_WITH_INFO else Dp.Unspecified)) }
 
@@ -1546,6 +1515,120 @@ private fun matchOnAir(game: MatchFeeds.Game, feedNow: Programme?, source: Strin
     }
     return OnAir(slot, null, source)
 }
+
+/**
+ * The channel and what's on, always two lines tall. A square logo (or a game's crests) stands on the
+ * left as tall as both lines, the channel over the programme; a wide one (Sky's) has the top line to
+ * itself, with the channel and the programme side by side under it.
+ */
+@Composable
+private fun ChannelHeading(
+    logoUrl: String?,
+    homeCrest: String?,
+    awayCrest: String?,
+    name: String,
+    badges: List<String>,
+    title: String?,
+) {
+    // The logo's shape is known once it has loaded; until then it is treated as square.
+    var ratio by remember(logoUrl) { mutableStateOf(logoUrl?.let { logoRatios[it] }) }
+    val onLogo: (AsyncImagePainter.State.Success) -> Unit = { state ->
+        val size = state.painter.intrinsicSize
+        if (logoUrl != null && size.width > 0f && size.height > 0f) {
+            val r = size.width / size.height
+            logoRatios[logoUrl] = r
+            ratio = r
+        }
+    }
+    if (homeCrest == null && logoUrl != null && (ratio ?: 0f) > WIDE_LOGO_RATIO) {
+        Column {
+            AsyncImage(
+                model = logoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                alignment = Alignment.CenterStart,
+                onSuccess = onLogo,
+                modifier = Modifier
+                    .height(LOGO_WIDE_HEIGHT)
+                    .widthIn(max = LOGO_WIDE_MAX_WIDTH)
+                    .clip(RoundedCornerShape(5.dp)),
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelName(name, Modifier.widthIn(max = CHANNEL_NAME_MAX_WIDTH))
+                StreamBadgesAfter(badges)
+                title?.let {
+                    Spacer(Modifier.width(22.dp))
+                    ProgrammeTitle(it, Modifier.weight(1f, fill = false))
+                }
+            }
+        }
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (homeCrest != null) {
+            MatchCrests(homeCrest, awayCrest, Modifier.size(LOGO_SQUARE))
+            Spacer(Modifier.width(16.dp))
+        } else if (logoUrl != null) {
+            AsyncImage(
+                model = logoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                onSuccess = onLogo,
+                modifier = Modifier
+                    .size(LOGO_SQUARE)
+                    .clip(RoundedCornerShape(6.dp)),
+            )
+            Spacer(Modifier.width(16.dp))
+        }
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelName(name, Modifier.weight(1f, fill = false))
+                StreamBadgesAfter(badges)
+            }
+            title?.let {
+                Spacer(Modifier.height(4.dp))
+                ProgrammeTitle(it)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelName(name: String, modifier: Modifier = Modifier) {
+    Text(
+        name,
+        fontSize = 22.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color.White,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun StreamBadgesAfter(badges: List<String>) {
+    if (badges.isEmpty()) return
+    Spacer(Modifier.width(14.dp))
+    StreamBadges(badges)
+}
+
+@Composable
+private fun ProgrammeTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        title,
+        fontSize = 21.sp,
+        fontWeight = FontWeight.Medium,
+        color = Color.White,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+// Logos' width over height, kept while the app runs so a logo seen once lays out right away.
+private val logoRatios = java.util.concurrent.ConcurrentHashMap<String, Float>()
 
 /** A game's logo: the home crest in front, top left, over the away one behind it, bottom right. */
 @Composable
@@ -2237,9 +2320,14 @@ private const val FALLBACK_NOTICE_MILLIS = 3_000L
 private const val RESTART_MIN_ELAPSED_MILLIS = 60_000L
 private const val MANUAL_RETRY_MILLIS = 2_000L
 private const val STREAM_INFO_SAMPLE_MILLIS = 1_000L
-// The logo on the channel name's line: about as tall as the name and its tags.
-private val LOGO_INLINE = 36.dp
-private val LOGO_INLINE_MAX_WIDTH = 120.dp
+private const val STREAM_INFO_FIRST_SAMPLE_MILLIS = 200L
+// The channel heading's logo: a square one as tall as its two lines, a wide one on a line of its own.
+private val LOGO_SQUARE = 64.dp
+private val LOGO_WIDE_HEIGHT = 36.dp
+private val LOGO_WIDE_MAX_WIDTH = 240.dp
+// Wider than this (width over height) a logo goes on its own line.
+private const val WIDE_LOGO_RATIO = 1.6f
+private val CHANNEL_NAME_MAX_WIDTH = 420.dp
 // The guide's width while the info panel takes the right of the screen.
 private val EPG_WIDTH_WITH_INFO = 650.dp
 private val CHIP_SIZE = 52.dp

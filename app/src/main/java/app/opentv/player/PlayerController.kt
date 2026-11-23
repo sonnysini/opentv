@@ -442,10 +442,10 @@ class PlayerController(
         }
     }
 
-    /** Frames per second by the stream's timestamps (median gap), 0 until enough frames went by. */
-    fun contentFrameRate(): Float {
+    /** Frames per second by the stream's timestamps (median gap), 0 until [minSteps] frames went by. */
+    fun contentFrameRate(minSteps: Int = FRAME_STEPS_NEEDED): Float {
         val steps = frameStepsUs.toList()
-        if (steps.size < FRAME_STEPS_NEEDED) return 0f
+        if (steps.size < minSteps) return 0f
         return 1_000_000f / steps.sorted()[steps.size / 2]
     }
 
@@ -466,6 +466,8 @@ class PlayerController(
         val streamMime: String?,
         /** The film file's size in bytes, when known (VOD over HTTP, or a local file); null otherwise. */
         val fileBytes: Long? = null,
+        /** Frames per second by the frames' timestamps, ready after a few frames; 0 until then. */
+        val timestampFrameRate: Float = 0f,
     )
 
     fun stats(): Stats {
@@ -485,6 +487,7 @@ class PlayerController(
             bytesLoaded = bytesLoaded.get(),
             streamMime = player.currentMediaItem?.localConfiguration?.let { streamMimeOf(it.uri, it.mimeType) },
             fileBytes = fileBytes.takeIf { it > 0 } ?: localFileBytes(),
+            timestampFrameRate = contentFrameRate(BADGE_FRAME_STEPS),
         )
     }
 
@@ -601,6 +604,8 @@ class PlayerController(
         private const val MAX_FRAME_STEP_US = 100_000L
         private const val FRAME_STEPS_KEPT = 60
         private const val FRAME_STEPS_NEEDED = 25
+        // The fps tag only needs the gap between frames: a handful (under half a second) is enough.
+        private const val BADGE_FRAME_STEPS = 10
         const val DEFAULT_USER_AGENT = "OpenTV/0.1 (Android)"
 
         /** ExoPlayer's "do not retry" sentinel. */
