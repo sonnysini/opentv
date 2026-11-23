@@ -88,9 +88,9 @@ fun AboutScreen(onBack: () -> Unit) {
                 }
             }
         }
-        SetActionRow(stringResource(R.string.about_source_code), value = "github.com/sonnysini/opentv", icon = R.drawable.ic_set_code) { open("https://github.com/sonnysini/opentv") }
-        SetActionRow(stringResource(R.string.about_report_bug), icon = R.drawable.ic_set_warning) { open("https://github.com/sonnysini/opentv/issues") }
-        SetActionRow(stringResource(R.string.about_install_page), icon = R.drawable.ic_set_download) { open("https://github.com/sonnysini/opentv/releases") }
+        SetActionRow(stringResource(R.string.about_source_code), value = "github.com/sonnysini/mytv", icon = R.drawable.ic_set_code) { open("https://github.com/sonnysini/mytv") }
+        SetActionRow(stringResource(R.string.about_report_bug), icon = R.drawable.ic_set_warning) { open("https://github.com/sonnysini/mytv/issues") }
+        SetActionRow(stringResource(R.string.about_install_page), icon = R.drawable.ic_set_download) { open("https://github.com/sonnysini/mytv/releases") }
         SetActionRow(stringResource(R.string.about_licence_label), value = "GPL v3.0", icon = R.drawable.ic_set_info) { open("https://www.gnu.org/licenses/gpl-3.0.html") }
         SetActionRow(stringResource(R.string.about_support_title), icon = R.drawable.ic_set_heart) { supportWindow = true }
     }
