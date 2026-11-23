@@ -12,7 +12,7 @@ GitHub release.
 
 ## Signing
 
-**This fork (sonnysini/opentv) signs releases with a fixed key** (package `app.opentv.sonny`); the
+**This fork (sonnysini/mytv) signs releases with a fixed key** (package `app.opentv.sonny`); the
 keystore is in the repository secrets and, encrypted, in the maintainer's vault. Branch and main
 builds also upload a signed `opentv-release-apk` artifact that installs over a release. The notes
 below are upstream's.

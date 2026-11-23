@@ -1,6 +1,6 @@
 # What this fork changes
 
-This is **sonnysini/opentv**, a fork of [opentvproject/opentv](https://github.com/opentvproject/opentv)
+This is **sonnysini/mytv**, a fork of [opentvproject/opentv](https://github.com/opentvproject/opentv)
 taken at **v0.11.8**. It was built for a household with one large channel list watched on
 Fire TV sticks. Everything listed here is new in the fork; for the version-by-version detail see
 [CHANGELOG.md](CHANGELOG.md) from 0.12.0 on.
