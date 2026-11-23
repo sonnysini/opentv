@@ -114,6 +114,13 @@ class StreamInfoTest {
         assertThat(snap.hdr).isEqualTo("HDR10")
     }
 
+    @Test
+    fun `frame timestamps give the fps tag on the first sample`() {
+        val video = Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H264).setWidth(1920).setHeight(1080).build()
+        val snap = StreamInfo.Meter().sample(0, stats(video, null, frames = 0, bytes = 0).copy(timestampFrameRate = 24.98f))
+        assertThat(snap.badges).containsExactly("1080p", "25 fps").inOrder()
+    }
+
     private fun stats(video: Format?, audio: Format?, frames: Long, bytes: Long) = PlayerController.Stats(
         video = video,
         audio = audio,
