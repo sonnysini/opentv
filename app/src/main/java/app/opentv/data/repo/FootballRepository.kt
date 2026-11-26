@@ -276,8 +276,8 @@ class FootballRepository(
      */
     suspend fun channelsFor(matches: List<Match>): Map<Long, List<MatchChannel>> = withContext(Dispatchers.IO) {
         val stamp = runCatching { channelDao.guideStamp() }.getOrElse { "" }
-        // "#6": entries from before teams went by their Italian names are looked up again.
-        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#6"
+        // "#7": entries from before the Champions games on Prime Video are looked up again.
+        fun key(m: Match) = "${m.id}@${m.kickoffUtcMillis}#7"
         val kept = lock.withLock { disk().let { if (it.stamp == stamp) it.channels else emptyMap() } }
         // A cup's goal show is on the guide like a game, under its own title.
         val missing = matches.filter { key(it) !in kept && (!it.goals || it.league != SERIE_A) }
@@ -288,6 +288,9 @@ class FootballRepository(
             val guide = guideIdsFor(missing)
             // Two passes over the channels for all the matches, not two per match.
             val named = namedAny(missing.filter { !it.goals }.flatMap { listOf(keyword(it.home.name), keyword(it.away.name)) })
+            // Prime Video's Champions game: no guide names it on the Prime channels.
+            val prime = if (missing.none { it.league == CHAMPIONS && !it.goals }) emptyList()
+            else namedAny(listOf("prime", "amazon", "champions"))
             val allIds = guide.values.flatten().distinct()
             val guided = if (allIds.isEmpty()) emptyList()
             else runCatching { channelDao.withGuideIds(allIds) }.getOrElse { emptyList() }
@@ -301,7 +304,7 @@ class FootballRepository(
             (missing.associate { m ->
                 val ids = guide[m.id].orEmpty()
                 val keys = ids.flatMapTo(HashSet()) { keysById[it].orEmpty() }
-                key(m) to lookUp(m, ids, keys, named, guided + byKey.filter { it.groupKey in keys })
+                key(m) to lookUp(m, ids, keys, named, guided + byKey.filter { it.groupKey in keys }, prime)
             } +
                 goalShows.associate { key(it) to goalChannels })
                 .also { Log.i(TAG, "channels for ${missing.size} matches in ${System.currentTimeMillis() - started} ms") }
@@ -371,6 +374,7 @@ class FootballRepository(
         guideKeys: Set<String>,
         named: List<Channel>,
         guidedAll: List<Channel>,
+        primeAll: List<Channel> = emptyList(),
     ): List<MatchChannel> {
         val a = keyword(match.home.name)
         val b = keyword(match.away.name)
@@ -399,7 +403,32 @@ class FootballRepository(
             .mapNotNull { (_, variants) -> logical(variants) }
             // The channel with the most feeds first: more ways to get a picture if one is down.
             .sortedWith(compareByDescending<MatchChannel> { it.variants }.thenBy { it.name })
-        return (listOfNotNull(home, away) + guided).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+        // A Champions game no guide finds on Sky is Prime Video's: the provider's "Champions <team>"
+        // first, then its Prime channels. The scan drops the ones with no picture.
+        val prime = if (match.league != CHAMPIONS || match.goals || guided.isNotEmpty()) emptyList()
+        else primeAll
+            .distinctBy { it.id }
+            .filter { c -> c.isLive() && "--" !in c.name && "==" !in c.name }
+            .mapNotNull { c -> primeRank(c.name, a, b)?.let { it to c } }
+            .groupBy({ it.first to it.second.groupKey.ifEmpty { "#${it.second.id}" } }, { it.second })
+            .toSortedMap(compareBy<Pair<Int, String>> { it.first }.thenBy { it.second })
+            .values.mapNotNull { logical(it) }
+        return (listOfNotNull(home, away) + guided + prime).distinctBy { it.channel.groupKey.ifEmpty { "#${it.channel.id}" } }
+    }
+
+    /**
+     * Where a provider channel stands among Prime Video's Champions feeds: 0 "Champions Roma" (the
+     * game's team), 1 the Prime channels ("Amazon Prime Video FHD", "PRIMEVIDEO_BLUESPORT 1",
+     * "IT| AMAZON PRIME 1 (only events)"); null for the rest ("Prime Video 4": other events).
+     */
+    private fun primeRank(name: String, a: String, b: String): Int? {
+        val n = fold(name).lowercase()
+        val team = Regex("^champions (${Regex.escape(a)}|${Regex.escape(b)})\\b")
+        return when {
+            team.containsMatchIn(n) -> 0
+            PRIME_FEED.containsMatchIn(n) -> 1
+            else -> null
+        }
     }
 
     /** Channel keys of guide channel [id]: its display names', and the id's own ("DAZN.1.it" → `dazn1`). */
@@ -776,6 +805,10 @@ class FootballRepository(
         private val GOAL_WORDS = listOf("diretta gol", "diretta goal")
         private val GOAL_CHANNEL = Regex("\\bdiretta go(a)?l\\b")
         private val UCL = Regex("\\b(ucl|champions)\\b")
+        /** Prime Video's main channels, not its numbered event ones past the first. */
+        private val PRIME_FEED = Regex(
+            "^(it\\s*[|:]\\s*)?(amazon prime( video)?|prime ?video(_bluesport [12]| 1)?|amazon prime 1)\\b(?!\\s*\\d)"
+        )
         private val UEL = Regex("\\b(uel|uecl|europa|conference)\\b")
         /** A goal channel of another competition: "DAZN DIRETTA GOL SERIE B / EUROPA LEAGUE". */
         private val OTHER_COMPETITION =
