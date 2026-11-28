@@ -154,6 +154,7 @@ internal fun FootballCalendar(onOpen: (Match) -> Unit, onClose: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun CalendarTabs(
     team: FavoriteTeam?,
