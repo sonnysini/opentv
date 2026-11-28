@@ -994,9 +994,39 @@ internal fun PlaybackRows() {
         if (pickedCount > 0) {
             SetRow(stringResource(R.string.settings_remember_picks_reset, pickedCount), onClick = settings::clearPickedVariants)
         }
+        FavoriteTeamRow(settings)
         // Last: on Fire TV a text field opens the keyboard as soon as it takes focus.
         Spacer(Modifier.height(8.dp))
         ScanServerRow(settings)
+    }
+}
+
+/** Settings › Playback › Your team: the football calendar's first tab, picked from the Serie A crests. */
+@Composable
+private fun FavoriteTeamRow(settings: AppSettings) {
+    val context = LocalContext.current
+    val team by settings.favoriteTeam.collectAsStateWithLifecycle()
+    var picking by remember { mutableStateOf(false) }
+    SetValueRow(
+        stringResource(R.string.settings_favorite_team_title),
+        stringResource(R.string.settings_favorite_team_subtitle),
+        team?.name ?: stringResource(R.string.settings_favorite_team_none),
+    ) { picking = true }
+    if (picking) {
+        val teams by androidx.compose.runtime.produceState(emptyList<app.opentv.data.repo.FootballRepository.Team>()) {
+            value = runCatching { app.opentv.core.ServiceLocator.get(context).footballRepository.serieATeams() }.getOrElse { emptyList() }
+        }
+        SetDialog(stringResource(R.string.settings_favorite_team_title), onDismiss = { picking = false }, wide = true) {
+            SetRow(stringResource(R.string.settings_favorite_team_none), onClick = {
+                settings.setFavoriteTeam(null)
+                picking = false
+            })
+            Spacer(Modifier.height(8.dp))
+            app.opentv.ui.football.FavoriteTeamList(teams, team?.id) { t ->
+                settings.setFavoriteTeam(t?.let { app.opentv.core.FavoriteTeam(it.id, it.name) })
+                picking = false
+            }
+        }
     }
 }
 

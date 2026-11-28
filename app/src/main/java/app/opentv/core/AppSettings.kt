@@ -117,6 +117,18 @@ class AppSettings private constructor(context: Context) {
         _scanServerUrl.value = clean
     }
 
+    /**
+     * The team the football calendar's first tab follows (FotMob id and name), null until picked.
+     * Stored as "id|name".
+     */
+    private val _favoriteTeam = pref { parseFavoriteTeam(prefs.getString(KEY_FAVORITE_TEAM, "").orEmpty()) }
+    val favoriteTeam: StateFlow<FavoriteTeam?> = _favoriteTeam.asStateFlow()
+
+    fun setFavoriteTeam(team: FavoriteTeam?) {
+        prefs.edit().putString(KEY_FAVORITE_TEAM, team?.let { "${it.id}|${it.name}" }.orEmpty()).apply()
+        _favoriteTeam.value = team
+    }
+
     /** Where the user's logo pack lives (its `index.json`); blank = none. See [LogoPack]. */
     private val _logoPackUrl = pref { prefs.getString(KEY_LOGO_PACK_URL, "").orEmpty() }
     val logoPackUrl: StateFlow<String> = _logoPackUrl.asStateFlow()
@@ -1169,6 +1181,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_CATEGORY_MERGES = "category_merges"
         private const val KEY_LOGO_PACK_URL = "logo_pack_url"
         private const val KEY_SCAN_SERVER_URL = "scan_server_url"
+        private const val KEY_FAVORITE_TEAM = "favorite_team"
         private const val KEY_LOGO_PACK = "logo_pack"
         private const val KEY_CUSTOM_LOGOS = "custom_logos"
         private const val KEY_CRESTS = "team_crests"
@@ -1191,7 +1204,7 @@ class AppSettings private constructor(context: Context) {
             ).forEach { put(it, SettingsBackup.Kind.INT) }
             listOf(
                 KEY_THEME, KEY_APP_STYLE, KEY_CHANNEL_LAYOUT, KEY_PIN_HASH, KEY_LANGUAGE, KEY_PREFERRED_QUALITY,
-                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_SCAN_SERVER_URL, KEY_LOGO_SOURCE,
+                KEY_LIVE_GROUP_ORDER, KEY_LIVE_CHANNEL_ORDER, KEY_CATEGORY_MERGES, KEY_LOGO_PACK_URL, KEY_SCAN_SERVER_URL, KEY_FAVORITE_TEAM, KEY_LOGO_SOURCE,
                 KEY_CUSTOM_LOGOS, KEY_MANUAL_SOURCE_MODE, KEY_PREFERRED_SOURCES, KEY_PICKED_VARIANTS,
                 KEY_VOD_AUDIO_LANG, KEY_VOD_SUBTITLE_LANG, KEY_HOME_COUNTRY,
             ).forEach { put(it, SettingsBackup.Kind.STRING) }
@@ -1239,3 +1252,12 @@ class AppSettings private constructor(context: Context) {
  * single freeze, but still leaves if it keeps stuttering; [AUTO] treats it like any other.
  */
 enum class ManualSourceMode { STAY, STUTTER_ONLY, AUTO }
+
+/** The football calendar's own team: FotMob's id (its crest, its games) and name. */
+data class FavoriteTeam(val id: Long, val name: String)
+
+internal fun parseFavoriteTeam(raw: String): FavoriteTeam? {
+    val id = raw.substringBefore('|').toLongOrNull() ?: return null
+    val name = raw.substringAfter('|', "").ifBlank { return null }
+    return FavoriteTeam(id, name)
+}

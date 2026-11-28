@@ -14,6 +14,7 @@ import android.view.WindowManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.runtime.produceState
@@ -432,8 +433,24 @@ fun FootballScreen(
         }
     }
 
+    // The calendar takes the whole page while open; the home comes back under it when it closes.
+    var calendarOpen by rememberSaveable { mutableStateOf(false) }
+    val notYet = stringResource(R.string.football_calendar_not_yet)
+
     Box(Modifier.fillMaxSize()) {
         when {
+            calendarOpen -> FootballCalendar(
+                onOpen = { m ->
+                    if (ui.all.any { it.match.id == m.id }) {
+                        calendarOpen = false
+                        refocus = m.id
+                    } else Toast.makeText(context, notYet, Toast.LENGTH_SHORT).show()
+                },
+                onClose = {
+                    calendarOpen = false
+                    refocusTop++
+                },
+            )
             ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             ui.failed -> Message(stringResource(R.string.football_unavailable))
             ui.hero == null && ui.rows.isEmpty() -> Message(stringResource(R.string.football_none))
@@ -505,6 +522,9 @@ fun FootballScreen(
                     }
                 }
                 }
+                // Top right, over the top of the page only: UP from "Watch" lands on it.
+                val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+                if (atTop) CalendarPill(Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 40.dp)) { calendarOpen = true }
             }
         }
         scan?.let { ScanOverlay(it, onCancel = viewModel::cancelScan) }
@@ -834,6 +854,30 @@ private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClic
         }
     }
 }
+
+/** The way into the calendar: a dark pill so it reads over a game playing behind it. */
+@Composable
+private fun CalendarPill(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val fg = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
+    Row(
+        modifier
+            .lift(focused, 1.06f)
+            .padding(3.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (focused) focusVeil(CALENDAR_GROUND) else CALENDAR_GROUND)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(start = 14.dp, end = 18.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        androidx.compose.material3.Icon(Icons.Rounded.CalendarMonth, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+        Text(stringResource(R.string.football_calendar), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = fg, maxLines = 1)
+    }
+}
+
+private val CALENDAR_GROUND = Color(0xCC0E1513)
 
 /** "20:30", in the box's own time. */
 private fun clock(millis: Long): String =

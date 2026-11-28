@@ -983,4 +983,16 @@
     <string name="set_rec_usb">USB</string>
     <string name="set_rec_nas_setup">To set up</string>
     <string name="set_pin_set">Set PIN</string>
+    <string name="football_calendar">Calendar</string>
+    <string name="football_calendar_all">All</string>
+    <string name="football_calendar_my_team">Your team</string>
+    <string name="football_calendar_pick_team">Pick your team</string>
+    <string name="football_calendar_pick_team_note">Its games in every competition get a tab of their own. Change it in Settings › Playback.</string>
+    <string name="football_calendar_tomorrow">Tomorrow</string>
+    <string name="football_calendar_empty">No games in the next four weeks</string>
+    <string name="football_calendar_not_yet">This game shows up in Football closer to the day</string>
+    <string name="football_calendar_loading_failed">The calendar couldn\'t be loaded</string>
+    <string name="settings_favorite_team_title">Your team</string>
+    <string name="settings_favorite_team_subtitle">The first tab of the football calendar</string>
+    <string name="settings_favorite_team_none">None</string>
 </resources>
