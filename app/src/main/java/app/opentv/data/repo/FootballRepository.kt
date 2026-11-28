@@ -175,6 +175,24 @@ class FootballRepository(
         return out.take(limit)
     }
 
+    /**
+     * The calendar: every game of the four competitions from today to [CALENDAR_DAYS] ahead,
+     * kick-off order (the goal channel left out). The days come from disk as the home's do.
+     */
+    suspend fun calendar(): List<Match> {
+        val today = LocalDate.now(zone)
+        return days((0..CALENDAR_DAYS).map { today.plusDays(it) }).flatten()
+            .filter { !it.goals && it.phase != Phase.OFF }
+            .distinctBy { it.id }
+            .sortedBy { it.kickoffUtcMillis }
+    }
+
+    /** The teams in the Serie A games on disk, by name: the calendar's own team is picked from them. */
+    suspend fun serieATeams(): List<Team> = withContext(Dispatchers.IO) { lock.withLock {
+        disk().days.values.flatMap { it.matches }.filter { it.league == SERIE_A && !it.goals }
+            .flatMap { listOf(it.home, it.away) }.distinctBy { it.id }.sortedBy { it.name }
+    } }
+
     /** The ids of the teams playing Serie A: a cup game with one of them goes first. */
     suspend fun italianTeams(): Set<Long> = lock.withLock { disk().italian }
 
@@ -779,6 +797,7 @@ class FootballRepository(
         private const val KEEP_DAYS = 14L
         /** How far [upcoming] reads: past an international break and a cup's gap between matchdays. */
         private const val AHEAD_DAYS = 35L
+        private const val CALENDAR_DAYS = 28L
         private const val WEEK = 7L
         /** The days a matchday spans at most (Friday to Monday; a cup's Tuesday to Thursday). */
         private const val MATCHDAY_DAYS = 4L

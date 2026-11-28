@@ -933,4 +933,16 @@
     <string name="set_rec_usb">USB</string>
     <string name="set_rec_nas_setup">Da configurare</string>
     <string name="set_pin_set">Imposta PIN</string>
+    <string name="football_calendar">Calendario</string>
+    <string name="football_calendar_all">Tutto</string>
+    <string name="football_calendar_my_team">La tua squadra</string>
+    <string name="football_calendar_pick_team">Scegli la tua squadra</string>
+    <string name="football_calendar_pick_team_note">Le sue partite di tutte le competizioni avranno una scheda tutta loro. Si cambia in Impostazioni › Riproduzione.</string>
+    <string name="football_calendar_tomorrow">Domani</string>
+    <string name="football_calendar_empty">Nessuna partita nelle prossime quattro settimane</string>
+    <string name="football_calendar_not_yet">Questa partita arriva in Calcio nei giorni prima</string>
+    <string name="football_calendar_loading_failed">Impossibile caricare il calendario</string>
+    <string name="settings_favorite_team_title">Squadra del cuore</string>
+    <string name="settings_favorite_team_subtitle">La prima scheda del calendario Calcio</string>
+    <string name="settings_favorite_team_none">Nessuna</string>
 </resources>

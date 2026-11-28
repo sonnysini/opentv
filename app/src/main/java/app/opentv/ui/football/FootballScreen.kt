@@ -14,6 +14,7 @@ import android.view.WindowManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.runtime.produceState
@@ -432,8 +433,31 @@ fun FootballScreen(
         }
     }
 
+    // The calendar takes the whole page while open; the home comes back under it when it closes.
+    var calendarOpen by rememberSaveable { mutableStateOf(false) }
+    // A game asked for in a row below the fold: that row scrolled into view first.
+    LaunchedEffect(refocus, calendarOpen) {
+        val id = refocus ?: return@LaunchedEffect
+        if (calendarOpen) return@LaunchedEffect
+        val at = ui.rows.indexOfFirst { r -> r.items.any { it.match.id == id } }
+        if (at >= 0) runCatching { listState.scrollToItem(at + if (heroItem != null) 1 else 0) }
+    }
+    val notYet = stringResource(R.string.football_calendar_not_yet)
+
     Box(Modifier.fillMaxSize()) {
         when {
+            calendarOpen -> FootballCalendar(
+                onOpen = { m ->
+                    if (ui.all.any { it.match.id == m.id }) {
+                        calendarOpen = false
+                        refocus = m.id
+                    } else Toast.makeText(context, notYet, Toast.LENGTH_SHORT).show()
+                },
+                onClose = {
+                    calendarOpen = false
+                    refocusTop++
+                },
+            )
             ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             ui.failed -> Message(stringResource(R.string.football_unavailable))
             ui.hero == null && ui.rows.isEmpty() -> Message(stringResource(R.string.football_none))
@@ -505,6 +529,9 @@ fun FootballScreen(
                     }
                 }
                 }
+                // Top right, over the top of the page only: UP from "Watch" lands on it.
+                val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+                if (atTop) CalendarPill(Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 40.dp)) { calendarOpen = true }
             }
         }
         scan?.let { ScanOverlay(it, onCancel = viewModel::cancelScan) }
@@ -834,6 +861,30 @@ private fun WatchButton(state: WatchState, modifier: Modifier = Modifier, onClic
         }
     }
 }
+
+/** The way into the calendar: a dark pill so it reads over a game playing behind it. */
+@Composable
+private fun CalendarPill(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val fg = if (focused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f)
+    Row(
+        modifier
+            .lift(focused, 1.06f)
+            .padding(3.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (focused) focusVeil(CALENDAR_GROUND) else CALENDAR_GROUND)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(start = 14.dp, end = 18.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        androidx.compose.material3.Icon(Icons.Rounded.CalendarMonth, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+        Text(stringResource(R.string.football_calendar), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = fg, maxLines = 1)
+    }
+}
+
+private val CALENDAR_GROUND = Color(0xCC0E1513)
 
 /** "20:30", in the box's own time. */
 private fun clock(millis: Long): String =
@@ -1458,7 +1509,15 @@ private fun MatchRow(
         // Five games to a screen, whole, with the page's margin on both sides.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
         val tileWidth = cardWidth(TILES_PER_ROW, ROW_MARGIN)
+        // A game past the screen's edge (asked for from the calendar): scrolled to, so its card is
+        // composed and its own effect below can take the focus.
+        val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(refocus) {
+            val at = row.items.indexOfFirst { it.match.id == refocus }
+            if (at >= 0) rowState.scrollToItem(at)
+        }
         LazyRow(
+            state = rowState,
             modifier = Modifier.wholeCardsWindow(ROW_MARGIN),
             contentPadding = PaddingValues(vertical = 8.dp, horizontal = ROW_MARGIN),
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP),

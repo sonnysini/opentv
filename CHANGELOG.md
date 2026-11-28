@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.66.0 — 28 November 2026
+
+- **Football calendar.** A "Calendar" pill top right on the football home (UP from "Watch") opens
+  the games of the next four weeks, a day at a time, with tabs for your team, all of them and each
+  competition (Serie A, Champions, Europa, Conference). OK on a game brings its card into focus on
+  the football home. Your team is picked from the Serie A crests the first time its tab opens, and
+  changed in Settings › Playback › Your team.
+
 ## 0.65.1 — 26 November 2026
 
 - **Champions games on Prime Video get their sources.** No guide names Prime's game on its channels,
