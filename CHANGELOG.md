@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.65.1 — 26 November 2026
+
+- **Champions games on Prime Video get their sources.** No guide names Prime's game on its channels,
+  so a Champions game no guide finds on Sky now lists the provider's "Champions <team>" channel and
+  the Prime Video ones; the scan keeps the ones with a picture.
+
 ## 0.65.0 — 23 November 2026
 
 - **The post-match show from a finished game.** Until its highlights are out, OK on a game just over
