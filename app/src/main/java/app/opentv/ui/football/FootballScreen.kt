@@ -435,6 +435,13 @@ fun FootballScreen(
 
     // The calendar takes the whole page while open; the home comes back under it when it closes.
     var calendarOpen by rememberSaveable { mutableStateOf(false) }
+    // A game asked for in a row below the fold: that row scrolled into view first.
+    LaunchedEffect(refocus, calendarOpen) {
+        val id = refocus ?: return@LaunchedEffect
+        if (calendarOpen) return@LaunchedEffect
+        val at = ui.rows.indexOfFirst { r -> r.items.any { it.match.id == id } }
+        if (at >= 0) runCatching { listState.scrollToItem(at + if (heroItem != null) 1 else 0) }
+    }
     val notYet = stringResource(R.string.football_calendar_not_yet)
 
     Box(Modifier.fillMaxSize()) {
@@ -1502,7 +1509,15 @@ private fun MatchRow(
         // Five games to a screen, whole, with the page's margin on both sides.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
         val tileWidth = cardWidth(TILES_PER_ROW, ROW_MARGIN)
+        // A game past the screen's edge (asked for from the calendar): scrolled to, so its card is
+        // composed and its own effect below can take the focus.
+        val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(refocus) {
+            val at = row.items.indexOfFirst { it.match.id == refocus }
+            if (at >= 0) rowState.scrollToItem(at)
+        }
         LazyRow(
+            state = rowState,
             modifier = Modifier.wholeCardsWindow(ROW_MARGIN),
             contentPadding = PaddingValues(vertical = 8.dp, horizontal = ROW_MARGIN),
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP),

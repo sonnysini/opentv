@@ -129,7 +129,11 @@ internal fun FootballCalendar(onOpen: (Match) -> Unit, onClose: () -> Unit) {
             val all = games
             when {
                 all == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                tab == TAB_TEAM && team == null -> TeamPicker(teams, listFocus) { settings.setFavoriteTeam(FavoriteTeam(it.id, it.name)) }
+                tab == TAB_TEAM && team == null -> TeamPicker(teams, listFocus) {
+                    settings.setFavoriteTeam(FavoriteTeam(it.id, it.name))
+                    // The picker goes with the pick: the focus back on the team's tab, not to the menu.
+                    runCatching { tabsFocus.requestFocus() }
+                }
                 else -> {
                     val shown = remember(all, tab, team) {
                         when (tab) {
@@ -231,7 +235,7 @@ private fun CalendarTabs(
 
 @Composable
 private fun tabLabel(key: Int, team: FavoriteTeam?): String = when (key) {
-    TAB_TEAM -> "★ " + (team?.name ?: stringResource(R.string.football_calendar_my_team))
+    TAB_TEAM -> team?.name ?: ("★ " + stringResource(R.string.football_calendar_my_team))
     TAB_ALL -> stringResource(R.string.football_calendar_all)
     FootballRepository.CHAMPIONS -> "Champions"
     FootballRepository.CONFERENCE -> "Conference"
